@@ -1,0 +1,3 @@
+{
+  "/api/campaigns/[id]/leads/[leadId]/landing-page/modify/route": "app/api/campaigns/[id]/leads/[leadId]/landing-page/modify/route.js"
+}

@@ -1,0 +1,84 @@
+{
+  "name": "leadmax",
+  "version": "0.1.0",
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "postbuild": "node -e \"require('fs').cpSync('.next/static','.next/standalone/.next/static',{recursive:true,force:true})\"",
+    "publish-update": "node scripts/publish-update.mjs",
+    "electron:build": "npm run build && npm run postbuild && electron-builder --win portable",
+    "electron:build:mac": "npm run build && npm run postbuild && electron-builder --mac"
+  },
+  "build": {
+    "appId": "com.leadmax.app",
+    "productName": "LeadMax",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".next/standalone",
+        "to": "app",
+        "filter": [
+          "**/*",
+          "!data/**",
+          "!build/**"
+        ]
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "icon": null,
+      "signAndEditExecutable": false,
+      "forceCodeSigning": false
+    },
+    "portable": {
+      "artifactName": "LeadMax.exe"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": null,
+      "identity": null,
+      "artifactName": "LeadMax-${version}-mac.${ext}"
+    },
+    "dmg": {
+      "title": "LeadMax",
+      "artifactName": "LeadMax-${version}.dmg"
+    },
+    "asar": false
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.100.14",
+    "i18next": "^26.3.1",
+    "next": "16.2.6",
+    "puppeteer": "^25.0.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-i18next": "^17.0.8",
+    "sharp": "^0.34.5",
+    "uuid": "^14.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "electron": "^42.3.0",
+    "electron-builder": "^26.8.1",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

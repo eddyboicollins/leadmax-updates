@@ -1,0 +1,646 @@
+module.exports=[124162,471994,e=>{"use strict";let t={accept:"*/*","content-type":"application/x-www-form-urlencoded;charset=UTF-8",cookie:"",origin:"https://gemini.google.com",referer:"https://gemini.google.com/","user-agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36","x-same-domain":"1","sec-ch-ua":'"Chromium";v="145", "Not:A-Brand";v="99"',"sec-ch-ua-arch":'"x86"',"sec-ch-ua-bitness":'"64"',"sec-ch-ua-form-factors":'"Desktop"',"sec-ch-ua-full-version":'"145.0.7632.6"',"sec-ch-ua-full-version-list":'"Chromium";v="145.0.7632.6", "Not:A-Brand";v="99.0.0.0"',"sec-ch-ua-mobile":"?0","sec-ch-ua-model":'""',"sec-ch-ua-platform":'"Linux"',"sec-ch-ua-platform-version":'""',"sec-ch-ua-wow64":"?0","x-goog-ext-525001261-jspb":'[1,null,null,null,"fbb127bbb056c959",null,null,0,[4],null,null,1]',"x-goog-ext-525005358-jspb":'["47868A8E-7A59-4A72-B36F-E02B72D61BD1",1]',"x-goog-ext-73010989-jspb":"[0]","x-goog-ext-73010990-jspb":"[0]"},a="gemini-2.5-flash";async function o(e,n,i=a){let s=function(e){let t=Math.floor(1e5+9e5*Math.random());if(e.includes("_reqid="))return e.replace(/_reqid=\d+/,`_reqid=${t}`);let a=e.includes("?")?"&":"?";return`${e}${a}_reqid=${t}`}("https://gemini.google.com/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate?bl=boq_assistant-bard-web-server_20260324.01_p0&f.sid=8477920910441249606&hl=en-US&_reqid=2208378&rt=c"),r=function(e,t){let a=new URLSearchParams(e.endsWith("&")?e.slice(0,-1):e),o=a.get("f.req");if(!o)return e;try{let e=JSON.parse(o);if(Array.isArray(e)&&"string"==typeof e[1]){let a=JSON.parse(e[1]);Array.isArray(a)&&Array.isArray(a[0])&&(a[0][0]=t,e[1]=JSON.stringify(a))}let n=JSON.stringify(e);return a.set("f.req",n),`${a.toString()}&`}catch{return e.replace(/"hi"/,`"${t.replace(/\\/g,"\\\\").replace(/"/g,'\\"')}"`)}}("f.req=%5Bnull%2C%22%5B%5B%5C%22hi%5C%22%2C0%2Cnull%2Cnull%2Cnull%2Cnull%2C0%5D%2C%5B%5C%22en-US%5C%22%5D%2C%5B%5C%22%5C%22%2C%5C%22%5C%22%2C%5C%22%5C%22%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2C%5C%22%5C%22%5D%2C%5C%22!7O-l74vNAAbUw4bn9MNC4AIwrNm6xRo7AEABEArZ1O65MUv54JeZDi1zIgLWFmtIy5dAggBXINKw7EBVxZByoQKNVriIQi5TKJwTiIXNefgp7zfT8kosw8LXAgAAAKZSAAAABGgBB34AQdcwutCRTsSuMsOFif2Qi2dVCM7vMhmUdbk76_5H15MlJ4MRsoYbe8Jrg1QCkVxVRjw_9Z7f4tpvBz1rvSz3yFe8mQNj-5FhONxW63R3xELN1WT6e_Id_JLRNuVd6W3L_-DTb6l2lMXe14fI0Tp6rKg-SAZ_jgyQLoK4wMQ1LNqP4xFRg7UqrxM7tb0im0VKj1n_VcY5ZmtfL6vB8vlYfmemsnTMzE_fFDciY19jnRHHzI-6R80qxJepPXIb9qxwkbQVPjynIVQe4e016n9KTvcQLbKMGFBztolgN0zVijzl1Eu6J7jSTbm0ASIO-TwdUojMMLUl63MtsA8ftS9ewU4foDIpS0cwQokd7WICWeLURpoaK0tvU0heEKrq3NexoMbrQv0i0YN4bQjS8ykyImQozQDTqAHlsNlmA6lz1i66IWQFzL58FN5Ct93Rk9QDzUtFubtrgGKCkOU9p5-2mWIOAp2demJakWXars86u69NSzq0_Yp44e9BY6MByi6kTMQaMmF3_znF-PlodHxXDDXohzwOILKJAeJyX1Fs91l4N60XXhDHMTg1Fe_0kGLZfZYN09flW3U8m56xcKneA6H4suo-ixzLDggBIbJ8ZAahqD9Rnk7OhH2-QBJPts9bIGDTzCFHXwxnkTHNx5b-rIweYpATymlLEZeH6VAx4j_a1cYjrtlb7NVV0X8_rM-AHRyqaWTswrJ_6Wt5t3UpGhxREmk1f65Oj-S9xWaH3mLiOwfaLnqP8bedTfbo2Wvso4p3DWXTRSHkasDZZpl_bFbp3iOGgoTERaQGMekksBIKFiP9mYQgEC-Q4-D87ZbFoV2YZ_COt9RB1Blsf6MqmA5rhTUFZ7RaE7P-SEm1ILKnfjz29VppjQYebl7Reja1_y-Xw5hxWb4Qw8aBD_2leNSv4NMSm1dc4YyzbiKWXv2JpRffUawwY75GNz5Z1So2chX9fPP-DbE48u2YAFjXuvBlB_UgLYq8u1Zx8oRoePoG_PIxjzHWewFAVvFxyqlIrDSVJOEKBftWI3-A0dOhTF-QzB2uUzFnNI7DrvtPpaKHzCTlqgxGkQNJ_K3iINo6ZVqVo_gpHKMvHdrm7HAlSRJxQQtaGGc4oSoEojFb7yzWTfSI7V1hy8oVo1Cf-nG5oRXXsBbSB9L1L4OoA2DagJDmEtUD1Xz6sKNQ2VYcwBngFOG_fiC7hMPY_-JtSqyPCarxQ7Ijl293x-vxfXKnjvSc0a-nsU14%5C%22%2C%5C%22c49eb2d009a01e6f06edf592bcca6377%5C%22%2Cnull%2C%5B0%5D%2C1%2Cnull%2Cnull%2C1%2C0%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2C%5B%5B0%5D%5D%2C0%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2C1%2Cnull%2Cnull%2C%5B4%5D%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2C%5B2%5D%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2C0%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2C%5C%2247868A8E-7A59-4A72-B36F-E02B72D61BD1%5C%22%2Cnull%2C%5B%5D%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2Cnull%2C1%5D%22%5D&",e),l=await fetch(s,{method:"POST",headers:t,body:r});if(!l.ok)throw Error(`Gemini proxy returned HTTP ${l.status}`);let c=function(e){let t="";for(let a of e.replace(")]}'","").split(/\r?\n/)){let e,o=a.trim();if(o&&o.includes("wrb.fr")){try{e=JSON.parse(o)}catch{continue}for(let a of Array.isArray(e)&&"wrb.fr"===e[0]?[e]:Array.isArray(e)?e.filter(e=>Array.isArray(e)&&"wrb.fr"===e[0]):[]){let e,o=a[2];if("string"==typeof o){try{e=JSON.parse(o)}catch{continue}if(Array.isArray(e)&&Array.isArray(e[4])){for(let a of e[4])if(Array.isArray(a)&&Array.isArray(a[1])){let e=a[1].filter(e=>"string"==typeof e).join("").trim();e.length>t.length&&(t=e)}}}}}}return t}(await l.text());if(!c)throw Error("Gemini returned an empty response.");return c}async function n(e,t,a,i=4,s){let r=null;for(let n=0;n<=i;n++)try{return await o(e,t,a)}catch(o){r=o instanceof Error?o:Error(String(o));let e=n>=i,t=r.message;if(s?.(n+1,i+1,t),console.error(`[Gemini] Attempt ${n+1}/${i+1} failed: ${t}`),e)break;let a=Math.min(1e3*Math.pow(2,n),15e3);console.error(`[Gemini] Retrying in ${a}ms...`),await new Promise(e=>setTimeout(e,a))}throw r||Error("Gemini request failed after retries")}function i(e){return(e.images||[]).map(e=>({url:e.url,alt:e.alt||"Business photo",width:e.width,height:e.height}))}e.s(["DEFAULT_GEMINI_MODEL",0,a,"retryAskGemini",0,n],471994);let s=`You are an award-winning senior creative director, elite conversion-rate optimizer, cinematic web designer, luxury branding strategist, and front-end architect specializing in React + Tailwind CSS.
+
+Your task is to generate a COMPLETE, PRODUCTION-READY, VISUALLY STUNNING landing page for a real business as a SINGLE React component using Tailwind CSS v4.
+
+The output MUST feel handcrafted, premium, emotional, cinematic, deeply customized to THIS specific business, and reflect a 2026-era modern aesthetic with generous rounded corners, soft shadows, and clean minimal layouts.
+
+The design MUST NEVER look like:
+- a template
+- bootstrap clone
+- generic SaaS page
+- AI-generated layout
+- repetitive section blocks
+- cookie-cutter agency website
+
+The goal is:
+MAKE THE VISITOR SAY:
+"WHO DESIGNED THIS?!"
+
+==================================================
+BUSINESS DATA
+==================================================
+
+BUSINESS NAME:
+{{BUSINESS_NAME}}
+
+CATEGORY:
+{{CATEGORY}}
+
+RATING:
+{{RATING}}/5 ({{RATING_COUNT}} reviews)
+
+ADDRESS:
+{{ADDRESS}}
+
+PHONE:
+{{PHONE}}
+
+WEBSITE:
+{{WEBSITE}}
+
+PLACE ID:
+{{PLACE_ID}}
+
+{{COORDINATES}}
+
+{{GOOGLE_URL}}
+
+==================================================
+REAL CUSTOMER REVIEWS
+==================================================
+
+{{REVIEWS_BLOCK}}
+
+{{IMAGES_BLOCK}}==================================================
+CRITICAL INTELLIGENCE PHASE
+==================================================
+
+Before generating the component:
+1. ANALYZE the business deeply
+   - understand emotional positioning
+   - infer target audience
+   - infer pricing tier
+   - infer customer psychology
+   - infer visual style
+   - infer brand personality
+   - infer cultural context
+   - infer trust signals
+
+2. Build a UNIQUE CREATIVE DIRECTION
+   The design must feel MADE for this exact business.
+
+Examples:
+- luxury clinic → elegant, clean, minimal, glassmorphism
+- restaurant → immersive food-focused storytelling
+- gym → aggressive bold typography + kinetic layouts
+- beauty salon → feminine editorial aesthetic
+- law firm → authority + prestige
+- caf\xe9 → cozy cinematic warmth
+- auto garage → industrial masculine textures
+
+3. EVERYTHING must visually match the business identity:
+- typography
+- colors
+- spacing
+- layout rhythm
+- CTA tone
+- copywriting
+- section shapes
+- hover effects
+
+==================================================
+CRITICAL: URL FORMAT WARNING
+==================================================
+
+ALL URLs must be written as valid JSX string attributes ONLY.
+Use href="https://example.com" — NEVER use Markdown link syntax like [text](url).
+
+==================================================
+STRICT OUTPUT RULES
+==================================================
+
+RETURN ONLY THE COMPLETE REACT COMPONENT.
+
+DO NOT:
+- wrap in markdown
+- explain anything
+- add comments outside the component
+- add \`\`\`tsx or \`\`\`jsx
+- add placeholder explanations
+- wrap the component in outer quotes or append any characters after the final closing brace
+
+==================================================
+TECH STACK RULES
+==================================================
+
+Generate a SINGLE React component using Tailwind CSS v4 utility classes.
+
+The component must:
+- Start with exactly \`'use client';\` on line 1 (quotes and semicolon required — NEVER bare \`use client\` without quotes)
+- Be a default export: export default function Component()
+- Use ONLY Tailwind CSS classes for styling — NO custom CSS, NO <style> tags, NO CSS-in-JS
+- Import React hooks with proper ES module imports at the top: import { useState, useEffect, useRef, useCallback } from 'react';
+- DO NOT import React as a namespace — only named imports for hooks you use
+- For JSX, rely on the automatic JSX transform (no need to import React for JSX)
+- For animations, use Tailwind's built-in animate-* utilities or inline style transitions
+- For Google Fonts, add <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=..." /> as the FIRST child inside your root return element. NEVER use <style> tags or @import for fonts — they break production builds.
+- Apply custom fonts with Tailwind arbitrary values: font-['Playfair_Display'] or style={{ fontFamily: "'Playfair Display', serif" }}
+- Font Awesome is loaded automatically on deployment — do NOT import or link Font Awesome yourself
+- For icons, use Font Awesome Free class names only. Available styles: solid (fas), regular (far), brands (fab). IMPORTANT: In JSX use className, NOT class.
+  CORRECT: <i className="fas fa-phone"></i>
+  CORRECT: <i className="fas fa-star"></i>
+  CORRECT: <i className="far fa-heart"></i>
+  CORRECT: <i className="fab fa-facebook"></i>
+  Common solid icons: fa-star, fa-phone, fa-map-marker-alt, fa-bars, fa-times, fa-arrow-right, fa-chevron-down, fa-chevron-up, fa-chevron-left, fa-quote-left, fa-check, fa-shield-alt, fa-heart, fa-users, fa-camera, fa-paper-plane, fa-envelope, fa-clock, fa-globe, fa-upload, fa-download, fa-external-link-alt, fa-exclamation-circle, fa-check-circle, fa-mobile-alt, fa-phone-alt, fa-calendar-alt, fa-user, fa-utensils, fa-wine-glass-alt, fa-music, fa-cutlery
+  Common brand icons: fa-facebook, fa-instagram, fa-linkedin, fa-twitter, fa-youtube
+  Do NOT use inline SVG path data for icons. Do NOT import icon libraries. Class names only.
+- Use Tailwind arbitrary values when needed: w-[500px], bg-[#1a1a2e], etc.
+- CRITICAL JSX RULE: Every opening tag MUST close with the EXACT same tag name. Common AI mistake: opening <section id="hero"> but closing with </nav>. Walk through your JSX and verify nav→</nav>, section→</section>, footer→</footer>, header→</header>, div→</div> for EVERY block.
+- CRITICAL: Do NOT use TypeScript type annotations anywhere. This code runs through Babel Standalone in the browser which is unreliable at stripping types. Write pure JavaScript with JSX only:
+  - WRONG: useState<number | null>(null)
+  - RIGHT: useState(null)
+  - WRONG: (e: React.FormEvent<HTMLFormElement>) => { }
+  - RIGHT: (e) => { }
+  - WRONG: const scrollTo = useCallback((id: string) => { ... }, []);
+  - RIGHT: const scrollTo = useCallback((id) => { ... }, []);
+  - No : type annotations, no <Generic> syntax on function calls
+  - The \`handleSubmit\` function's \`e\` parameter must NOT have a type annotation. Use \`e.preventDefault()\` without typing \`e\`.
+  - ALWAYS use double quotes for JavaScript strings in object literals, arrays, and variables — NEVER single quotes. French text contains apostrophes (l'Art, c'est, qu'il, d'accord) which break single-quoted strings and cause "Unterminated string literal" errors.
+  - CORRECT: { text: "C'est une exp\xe9rience magnifique" }
+  - WRONG: { text: 'C'est une exp\xe9rience magnifique' }
+  - Tailwind font classes: className="font-['Playfair_Display']" (double quotes outside) — NEVER className={'font-['Playfair_Display']'}
+
+LOGO: Use pure text styled with Tailwind (font-bold, tracking-wider, etc.) — no image for the logo.
+
+BUSINESS PHOTOS: Use the provided image URLs (from BUSINESS IMAGES section) in <img> tags throughout the page. These are real photos of the business and MUST be used in hero, services, gallery, or any relevant section. Do NOT use random stock/placeholder images — only use the exact URLs provided.
+
+CRITICAL: Each image URL must appear at most ONCE in the entire page. Never reuse the same image URL in multiple <img> tags. If only 1 image is provided, use it only once.
+
+IMAGE DIMENSIONS: Each image is annotated with its pixel dimensions (e.g. "1920x1080") next to the URL. Use these dimensions to decide the BEST placement for each image:
+- Wide/landscape images (e.g. 1920x1080, 1600x900) → ideal for hero backgrounds, full-width banners, wide gallery spreads
+- Tall/portrait images (e.g. 1080x1920, 800x1200) → ideal for service cards, team/profile sections, mobile-first spots, stacked vertical layouts
+- Square images (e.g. 800x800, 1024x1024) → ideal for testimonial avatars, thumbnail grids, logo spots, symmetrical galleries
+- Small images (e.g. <600px in either dimension) → avoid using as hero backgrounds; use in compact card slots or inline badges
+Match the image's aspect ratio to its container: a landscape background should get a landscape image, a square card slot should get a square or near-square image. Do NOT stretch/crop images in ways that distort their natural composition.
+
+==================================================
+DESIGN QUALITY REQUIREMENTS
+==================================================
+
+The website MUST feel:
+- premium
+- cinematic
+- immersive
+- fluid
+- modern (2026-era: generous rounded corners, soft shadows, clean minimal layouts, airy spacing)
+- emotionally persuasive
+- high-budget
+- visually layered
+- art directed
+
+The component MUST use Tailwind classes for:
+- asymmetrical layouts (grid, flex with custom spans)
+- layered backgrounds (bg-gradient-to-*, backdrop-blur-*, bg-opacity-*)
+- sophisticated spacing (space-y-*, p-*, m-*, gap-*)
+- visual hierarchy (text-*, font-*, leading-*)
+- glassmorphism (backdrop-blur-*, bg-white/10, border-white/20)
+- subtle motion (transition-all, duration-*, hover:scale-*, group-hover:*)
+- dynamic hover states (hover:*, group-hover:*)
+- smooth transitions (transition-all, duration-*, ease-*)
+- depth (shadow-*, drop-shadow-*)
+- premium gradients (bg-gradient-to-*)
+- responsive rhythm (sm:*, md:*, lg:*)
+- generous rounded corners on all cards, buttons, inputs, images, modals, and containers (rounded-xl or rounded-2xl at minimum — never sharp square corners unless it's a deliberate design choice like hero oversized typography)
+
+DO NOT create boring stacked rectangles.
+
+==================================================
+RESPONSIVE & ACCESSIBILITY
+==================================================
+
+The page MUST be PERFECT on:
+- mobile
+- tablet
+- desktop
+
+Mobile experience is EXTREMELY important. Use Tailwind responsive prefixes (sm:, md:, lg:).
+
+CRITICAL MOBILE RULES:
+- Use Tailwind's responsive utilities for all layout (grid-cols-1 md:grid-cols-2 lg:grid-cols-3)
+- Navbar MUST use "sticky top-0 z-50" — NEVER "fixed top-0" on the navbar itself
+- Use max-w-* with mx-auto for containers
+- Use overflow-hidden on sections with decorative elements (blur blobs, negative margins, cards positioned with -right-* or -left-*)
+- Use h-auto or min-h-screen instead of fixed heights
+- Test mentally at 375px: every layout must collapse to single column on mobile with ZERO horizontal scroll
+- NEVER add overflow-x-hidden, overflow-hidden, or overflow-x-clip to the root component div — ANY overflow other than visible on an ancestor BREAKS position:sticky and the navbar will scroll away/disappear
+- NEVER add overflow-x-hidden to html or body via <style> tags
+- All images use className="w-full max-w-full object-cover" (or h-full inside overflow-hidden parents)
+
+Accessibility must include:
+- responsive typography (text-sm md:text-base lg:text-lg)
+- adaptive spacing
+- mobile hamburger menu (use useState for toggle)
+- touch-friendly interactions (p-* for tap targets)
+- proper contrast ratios
+- focus:ring-* for focus states
+- semantic HTML (nav, section, article, footer)
+
+==================================================
+LANGUAGE REQUIREMENT
+==================================================
+
+AUTO-DETECT the language from:
+- reviews
+- business name
+- location
+
+ALL copywriting MUST be in that detected language.
+
+DO NOT use English unless the business context is English.
+
+==================================================
+COPYWRITING REQUIREMENTS
+==================================================
+
+The copy MUST:
+- feel human
+- emotionally persuasive
+- believable
+- premium
+- non-generic
+- industry-specific
+
+AVOID:
+- "Welcome to our website"
+- "We provide quality services"
+- "Customer satisfaction is our priority"
+- generic AI copy
+
+Use:
+- storytelling
+- emotional hooks
+- persuasive CTAs
+- sensory wording
+- audience psychology
+
+==================================================
+VISUAL STORYTELLING
+==================================================
+
+The website should feel like a BRAND EXPERIENCE.
+
+Create:
+- visual pacing
+- dramatic entrances
+- contrast moments
+- calm sections after intense ones
+- immersive hero section
+- layered composition
+
+Use Tailwind for:
+- oversized typography (text-6xl md:text-8xl lg:text-9xl)
+- huge headlines
+- depth overlays (bg-black/50, backdrop-blur-sm)
+- blurred gradient blobs (bg-gradient-to-br from-* via-* to-* with blur-*)
+- subtle background animation (animate-pulse, animate-bounce, custom keyframes)
+
+IMPORTANT: When using absolute-positioned decorative blur blobs, wrap them in a parent section with "overflow-hidden" class. Otherwise these blobs can extend beyond the viewport and cause horizontal scroll.
+
+==================================================
+MANDATORY SECTIONS
+==================================================
+
+You MAY creatively reinterpret layouts,
+BUT these sections MUST exist as JSX elements with ids for anchor navigation.
+
+CRITICAL: EVERY section in the page body MUST have a descriptive, unique id attribute (e.g. id="hero", id="services", id="testimonials", id="about", id="faq", id="contact", id="footer"). Never leave any section unnamed — no anonymous div/section blocks without an id. Never use generic ids like "section-1" or "section-2".
+
+==================================================
+1. NAVBAR
+==================================================
+
+Requirements:
+- CRITICAL: Use "sticky top-0 z-50" on the <nav> — NEVER "fixed top-0" on the navbar
+- The <nav> contains ONLY the top bar (logo, links, hamburger button) — NOTHING else
+- transparent initially, blur/glass effect after scrolling (useState + backdrop-blur-md bg-white/80)
+- elegant hover states, smooth scrolling anchors
+
+==================================================
+1b. MOBILE MENU — CRITICAL (read carefully)
+==================================================
+
+This is the #1 cause of horizontal scroll and broken sticky navbars in generated sites.
+
+FORBIDDEN patterns (NEVER use these):
+- Mobile drawer INSIDE the <nav> element
+- "fixed inset-0" combined with "translate-x-full" to hide the menu when closed
+- Always-rendered full-screen overlays that slide off-screen with transform
+- Sidebars wider than the viewport
+
+WHY: A full-width panel with translate-x-full still extends the page width to ~200vw, causing blank white space when scrolling horizontally. Putting fixed elements inside sticky <nav> also breaks sticky positioning.
+
+REQUIRED pattern — mobile menu as a SIBLING outside <nav>, conditionally rendered ONLY when open:
+
+{mobileMenuOpen && (
+  <>
+    <div className="fixed inset-0 bg-black/50 z-[60] lg:hidden" onClick={() => setMobileMenuOpen(false)} />
+    <div className="fixed top-0 right-0 bottom-0 w-[min(100%,20rem)] z-[70] bg-white lg:hidden shadow-2xl p-8 overflow-y-auto">
+      {/* menu links here */}
+    </div>
+  </>
+)}
+
+When mobileMenuOpen is false, render NOTHING — do not keep a hidden off-screen panel in the DOM.
+
+==================================================
+1c. FLOATING ACTION BUTTONS (WhatsApp, etc.)
+==================================================
+
+- Use "fixed bottom-6 right-6 z-40" — icon only, no horizontal tooltip/label
+- FORBIDDEN: absolute-positioned text labels beside the button (e.g. "Besoin d'aide ?" with right-20 whitespace-nowrap) — these cause horizontal overflow on mobile
+- Keep the button small: w-14 h-14 rounded-full — do NOT use w-16+ with extra positioned children
+- If you need a label, use aria-label on the <a> tag instead of visible text
+
+CORRECT (use YOUR brand accent color, NOT WhatsApp green):
+<a href="https://wa.me/..." aria-label="Contact via WhatsApp" className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-[YOUR_BRAND_ACCENT_COLOR] text-white rounded-full flex items-center justify-center shadow-lg">
+  <i className="fab fa-whatsapp text-2xl"></i>
+</a>
+
+==================================================
+2. HERO SECTION
+==================================================
+
+This section MUST be visually unforgettable.
+
+Include:
+- massive headline
+- emotional subheadline
+- primary CTA
+- secondary CTA
+- rating display
+- animated background
+- layered composition
+
+The hero should instantly communicate:
+- trust
+- emotion
+- identity
+- value
+
+==================================================
+3. SERVICES / OFFERINGS
+==================================================
+
+NOT boring cards.
+
+Create:
+- dynamic layouts (grid-cols-1 md:grid-cols-2 with alternating designs)
+- visual storytelling
+- inline SVG icons
+- hover animations (hover:-translate-y-2, hover:shadow-*)
+- premium composition
+
+==================================================
+4. SOCIAL PROOF / TESTIMONIALS
+==================================================
+
+Use REAL reviews provided earlier (sorted by rating, highest first).
+
+Each review includes the reviewer's name, star rating, review text, and optionally an avatar image URL. If an avatar URL is provided, use it as an <img> tag. Otherwise use a rounded div with the first letter.
+
+Transform them into:
+- elegant testimonial cards with reviewer photo/avatar, name, star rating, and review text
+- floating review layouts
+- trust-centered design
+
+Include:
+- stars (inline SVG star icons)
+- reviewer names
+- subtle animations
+- avatar: use the provided avatar URL as <img src="..." className="w-10 h-10 rounded-full object-cover" /> if available; otherwise use a rounded div with the first letter (className="w-10 h-10 rounded-full bg-* flex items-center justify-center")
+
+GOOGLE REVIEW CTA:
+After the testimonial cards, add a prominent call-to-action inviting visitors to leave a review on Google. Use the exact URL:
+https://search.google.com/local/writereview?placeid={{PLACE_ID}}
+
+This must be a visible button/link (not a placeholder) styled with your brand colors. Use wording like "Leave a Review on Google" or "Write a Review" with an external link icon. This CTA must be hardcoded as a real <a href="..."> tag — NOT commented out or marked as a placeholder.
+
+==================================================
+5. ABOUT / BRAND STORY
+==================================================
+
+Create emotional storytelling.
+
+Explain:
+- why this business exists
+- what makes it different
+- what customers feel
+
+Avoid corporate tone.
+
+==================================================
+6. FAQ SECTION
+==================================================
+
+Accordion interactions required.
+
+Use useState for toggling open/closed state.
+
+Questions MUST feel realistic.
+
+==================================================
+7. CONTACT / LEAD CAPTURE
+==================================================
+
+This section MUST maximize conversions.
+
+IMPORTANT:
+THE FORM MUST OPEN WHATSAPP INSTEAD OF SUBMITTING.
+
+Use EXACTLY this behavior inside a form onSubmit handler:
+
+{{FORM_JS}}
+
+The form should:
+- feel premium
+- animate elegantly
+- have floating labels
+- validation styling
+- beautiful focus states (focus:ring-*, focus:border-*)
+
+==================================================
+8. LOCATION / MAP SECTION
+==================================================
+
+DO NOT embed a Google Maps iframe.
+
+Instead, display the business address as text with a map marker SVG icon next to it. The entire address should be a clickable link that opens Google Maps in a new tab.
+
+Use this format:
+- Show a map/location SVG icon
+- Show the address text
+- Both link to: https://www.google.com/maps?q={{ENCODED_BUSINESS_ADDRESS}}
+
+Make it visually integrated into the contact section or footer.
+
+==================================================
+9. FOOTER
+==================================================
+
+Premium footer.
+
+Include:
+- business info
+- quick links (used in navbar anchors)
+- social SVG icons
+- WhatsApp CTA
+- phone CTA
+- copyright
+- subtle motion
+
+==================================================
+WHATSAPP + CONTACT RULES
+==================================================
+
+WhatsApp:
+https://wa.me/{{CLEAN_PHONE}}
+
+Phone:
+tel:{{PHONE}}
+
+==================================================
+ANIMATION REQUIREMENTS
+==================================================
+
+Use tasteful premium animation via Tailwind.
+
+Allowed:
+- transition-all duration-700 ease-out
+- hover:scale-105 hover:-translate-y-2
+- animate-pulse for subtle indicators
+- group-hover:* for parent-child animations
+- opacity-0 to opacity-100 with transition for scroll reveals
+- Use useEffect + IntersectionObserver for scroll-triggered animations
+- Use inline style for custom keyframe animations if needed
+
+Avoid:
+- cheap flashy animations
+- overdone effects
+- laggy motion
+
+==================================================
+ADVANCED UX DETAILS
+==================================================
+
+Include:
+- smooth scroll behavior (via scrollIntoView in scroll handlers — do NOT add html/body CSS)
+- hover sophistication
+- smooth anchor navigation
+- active navbar states
+- elegant CTA microinteractions
+
+==================================================
+COLOR SYSTEM — SINGLE BRAND IDENTITY
+==================================================
+
+You MUST define a SINGLE brand identity color scheme of EXACTLY 2-3 colors that applies to EVERY visual element across the entire page. Do NOT use any colors outside this family.
+
+RULES (non-negotiable):
+1. Choose exactly 2-3 colors based on the business category, emotional tone, and audience psychology (e.g. a primary, an accent, and a neutral/dark).
+2. These 3 colors are the ONLY colors used for backgrounds, buttons, text highlights, borders, icons, gradients, hover states, and decorative elements anywhere in the page.
+3. The color palette must be consistent — every button, every section background, every border, every hover effect uses ONLY these 2-3 colors in various shades/opacities.
+4. NO external brand colors are allowed: WhatsApp button must NOT use WhatsApp green, phone icon must NOT use default green, social icons must NOT use their native brand colors. EVERY icon/button/badge uses ONLY your chosen 2-3 brand colors.
+5. Font Awesome icons inherit brand colors — do NOT set fa-whatsapp to its native green, set it to your brand accent color.
+6. Maintain strong contrast, readability, and premium feel within this constraint.
+7. Use Tailwind arbitrary values like bg-[#1a1a2e] to enforce your exact palette.
+
+==================================================
+FINAL CODE REVIEW — DO NOT SKIP
+==================================================
+
+Before outputting, VERIFY your component line by line:
+
+[X] Navbar uses "sticky top-0 z-50" — NOT "fixed top-0" on the navbar
+[X] The root component div does NOT have overflow-x-hidden, overflow-hidden, or overflow-x-clip (any of these BREAKS sticky navbar)
+[X] Mobile menu is OUTSIDE <nav>, conditionally rendered with {isOpen && (...)} — NOT fixed inset-0 translate-x-full always in DOM
+[X] No floating button has absolute-positioned horizontal tooltip/label text beside it
+[X] No element uses "fixed inset-0 translate-x-full" for a hidden mobile drawer
+[X] NO TypeScript type annotations ANYWHERE — no : type, no <Generic>, no React.SomethingEvent
+[X] All event handler parameters are untyped: (e) => not (e: React.FormEvent)
+[X] No use of <Generic> syntax: useState(null) not useState<type>(null)
+[X] All Tailwind classes are valid and exist in Tailwind v4 (no typos like "1.1sfr")
+[X] No import of React as namespace — only named imports like "import { useState } from 'react'"
+[X] Numeric props use curly braces: rows={3} not rows="3", cols={20} not cols="20", maxLength={500} not maxLength="500"
+[X] Boolean props use curly braces: disabled={true} not disabled="true", required={true} not required="true"
+[X] Font Awesome uses className="": <i className="fas fa-star"></i> NOT <i class="fas fa-star"></i>
+[X] NO <style> tags anywhere — fonts via <link rel="stylesheet"> only, styling via Tailwind only
+[X] Every JSX tag is properly closed with the MATCHING tag name (section closes with </section>, NOT </nav> or </div>)
+[X] Walk through JSX tag pairs: count every <nav>, <section>, <header>, <footer>, <div> and verify matching closers
+[X] The component will compile with Next.js Turbopack (strict JSX parser — mismatched tags WILL fail the build)
+[X] Every absolute-positioned decorative blur/gradient blob has one of its ancestor sections tagged with "overflow-hidden" — otherwise it WILL cause horizontal scroll
+[X] No horizontal scroll possible at any screen width (test mentally at 375px)
+[X] EVERY section in the page body has a unique descriptive id attribute — no anonymous unnamed sections, no generic ids like "section-1"
+[X] All cards, buttons, inputs, and containers use rounded-xl or rounded-2xl — no sharp square corners
+[X] The entire page uses a SINGLE brand color scheme of at most 3 colors — no external brand colors (WhatsApp button is NOT green, phone icon is NOT green, social icons use brand accent not native colors)
+[X] Every Font Awesome icon inherits the brand color — no icon uses its native brand color
+[X] Floating WhatsApp button uses brand accent color, NOT WhatsApp green
+
+If any check fails, FIX IT before outputting.
+
+==================================================
+IMPORTANT FINAL RULE
+==================================================
+
+The result MUST feel like:
+a $5,000+ custom-designed website.
+
+NOT an AI template.
+
+NOT generic.
+
+NOT repetitive.
+
+The design should be strong enough to impress designers on Behance/Awwwards.
+
+RETURN ONLY THE COMPLETE REACT COMPONENT — default export function, Tailwind classes only, no <style> tags, fonts via <link> tags only.`,r=`
+DEPLOYMENT RULES (must follow for Vercel production build):
+- Return the COMPLETE modified React component (default export), no explanations, no markdown fences.
+- Line 1 must be exactly \`'use client';\` — never bare \`use client\` without quotes.
+- NO TypeScript type annotations. NO <style> tags. Fonts via <link rel="stylesheet"> only.
+- Font Awesome is pre-loaded — use className="fas fa-*" only, do not import FA.
+- Every JSX opening tag must close with the same tag name (section→</section>, nav→</nav>).
+- Navbar must use sticky top-0 z-50, NOT fixed top-0. Mobile menu drawer must be OUTSIDE <nav>, rendered only when open ({isOpen && ...}), NEVER fixed inset-0 translate-x-full always in DOM.
+- Root div must NOT have overflow-x-hidden (breaks sticky navbar). Use overflow-hidden on individual sections only.
+- Floating WhatsApp/button: icon only, no absolute tooltip labels beside the button. Use brand accent color — NOT WhatsApp green.
+- Numeric JSX props use braces: rows={4} not rows="4".
+- EVERY section in the body MUST have a unique descriptive id (id="hero", id="services", etc.). No unnamed sections, no generic ids like "section-1".
+- Use generous rounded corners throughout (rounded-xl rounded-2xl on cards, buttons, inputs, containers — avoid sharp square corners).
+- Maintain the existing brand color scheme (2-3 colors max) across all elements — no external brand colors.
+`;class l extends Error{partialCode;constructor(e){super("Generated code was truncated (incomplete response)"),this.partialCode=e,this.name="TruncatedCodeError"}}function c(e){let t,a=e.replace(/```tsx\s*/gi,"").replace(/```jsx\s*/gi,"").replace(/```\s*$/g,"").replace(/\[(https?:\/\/[^\]]+)\]\((https?:\/\/[^)]+)\)/g,"$1").trim();(a.startsWith("'")&&a.endsWith("'")&&!a.startsWith("'use client")||a.startsWith('"')&&a.endsWith('"')&&!a.startsWith('"use client'))&&(a=a.slice(1,-1).trim());let o=[];if(a=(a=(a=(a=a.replace(/\}\s*\n\s*['"]+\s*$/m,"}")).replace(/\}\s*['"]+\s*$/g,"}")).replace(/\sclass="/g,' className="').replace(/\sclass='/g," className='")).replace(/<style[^>]*>\{`([\s\S]*?)`\}<\/style>/g,(e,t)=>{for(let e of t.matchAll(/@import\s+url\(['"]?([^'")]+)['"]?\)/g))e[1].includes("fonts.googleapis.com")&&o.push(`<link rel="stylesheet" href="${e[1]}" />`);return""}),o.length>0){let e=[...new Set(o)];a=a.replace(/return\s*\(\s*\n?(\s*)(<[a-zA-Z])/,(t,a,o)=>`return (
+${a}${e.join(`
+${a}`)}
+${a}${o}`)}let n=(t=a.replace(/^\s*['"]use client['"]\s*;?\s*\n?/gm,"").replace(/^\s*use client\s*;?\s*\n?/gim,"").trimStart(),`'use client';
+
+${t}`);if(!function(e){let t=e.trim();if(!t)return{ok:!1,reason:"Empty code"};let a=!1,o=!1;for(let e of t){if(o){o=!1;continue}if("\\"===e){o=!0;continue}'"'===e&&(a=!a)}if(a)return{ok:!1,reason:"Unterminated double-quoted string"};let n=0;for(let e of(a=!1,t)){if('"'===e){a=!a;continue}!a&&("{"===e&&n++,"}"===e&&n--)}return n>0?{ok:!1,reason:`Unclosed braces (${n} open)`}:n<0?{ok:!1,reason:"Too many closing braces"}:t.endsWith("}")?{ok:!0}:{ok:!1,reason:"Code does not end with closing brace"}}(n).ok)throw new l(n);return n}async function d(e,t,a,o=4,i){let s=null;for(let r=0;r<=o;r++)try{let o=await n(e,t,a,4,i);return c(o)}catch(a){let e=(s=a instanceof Error?a:Error(String(a))).message,t=r>=o;if(a instanceof l?console.error(`[Validation] Attempt ${r+1}/${o+1}: Code truncated, retrying...`):console.error(`[Validation] Attempt ${r+1}/${o+1}: ${e}`),i?.(r+1,o+1,e),t)break;if(!(a instanceof l)){let e=Math.min(1e3*Math.pow(2,r),1e4);await new Promise(t=>setTimeout(t,e))}}throw s||Error("Failed to generate valid code after retries")}e.s(["DEFAULT_SYSTEM_PROMPT",0,s,"MODIFY_PROMPT_SUFFIX",0,r,"TruncatedCodeError",0,l,"askGeminiAndValidate",0,d,"buildDeployFixPrompt",0,function(e,t){return`The React landing page below FAILED to build on Vercel (Next.js 16 + Turbopack).
+
+VERCEL BUILD LOGS:
+${t}
+
+Fix ALL errors shown in the logs and return ONLY the complete corrected React component (default export, no markdown fences).
+
+Rules:
+- Line 1 must be exactly: 'use client';
+- Use double quotes for ALL JavaScript strings (French apostrophes like l'Art, c'est break single quotes)
+- Tailwind fonts: className="font-['Playfair_Display']"
+- Mobile menu: {isOpen && (...)} outside <nav>, never fixed inset-0 translate-x-full when closed
+- Navbar: sticky top-0 z-50
+- No TypeScript type annotations
+- No characters after the final closing brace
+- Valid JSX — every opening tag closes with the same tag name
+- Use generous rounded corners (rounded-xl rounded-2xl) on cards, buttons, containers
+- Maintain a single brand color scheme (max 3 colors) — no external brand colors, WhatsApp/phone icons use brand accent not their native colors
+
+Component to fix:
+
+${e}`},"buildPromptData",0,function(e){let t=e.business,a=t.phone?.replace(/[^0-9]/g,"")||"",o=[...t.reviews||[]].sort((e,t)=>(t.rating||0)-(e.rating||0)).slice(0,8).map(e=>{let t=`- "${e.text?.slice(0,250)||""}"`;return e.author&&(t+=` — ${e.author}`),e.rating&&(t+=` (${e.rating}★)`),e.avatar&&(t+=` avatar: ${e.avatar}`),t}).join("\n"),n=`https://wa.me/${a}?text=`,s=`
+  document.querySelector('.contact-form')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = new FormData(this);
+    const params = new URLSearchParams();
+    data.forEach((value, key) => {
+      params.append(key, value.toString());
+    });
+    let msg = '';
+    data.forEach((value, key) => {
+      msg += key.charAt(0).toUpperCase() + key.slice(1) + ': ' + value.toString() + '%0A';
+    });
+    window.open('${n}' + encodeURIComponent(decodeURIComponent(msg)), '_blank');
+  });`,r=function(e){let t=i(e);if(0===t.length)return"";let a=t.map((e,t)=>{let a=e.width&&e.height?` (${e.width}x${e.height})`:"";return`Image ${t+1}: ${e.url}${a}
+Alt text: ${e.alt}`}).join("\n\n");return`==================================================
+BUSINESS IMAGES (uploaded — use these URLs in the design)
+==================================================
+
+${a}
+`}(e),l=t.placeId?`https://search.google.com/local/writereview?placeid=${t.placeId}`:"";return{businessName:t.name||"Business Name",category:t.category||"General Business",rating:(t.rating||0).toString(),ratingCount:(t.ratingCount||0).toString(),address:t.address||"N/A",phone:t.phone||"",cleanPhone:a,website:t.website||"",placeId:t.placeId||"",coordinates:t.latitude&&t.longitude?`COORDINATES: ${t.latitude}, ${t.longitude}`:"",googleUrl:t.googleUrl?`GOOGLE MAPS URL: ${t.googleUrl}`:"",reviewsBlock:o||"No reviews available",imagesBlock:r,formJs:s,encodedBusinessAddress:encodeURIComponent((t.name||"")+" "+(t.address||"")),reviewUrl:l}},"formatModifyImagesBlock",0,function(e){let t=i(e);return 0===t.length?"":"Available images:\n"+t.map(e=>{let t=e.width&&e.height?` [${e.width}x${e.height}]`:"";return`${e.url}${t}${e.alt?` (${e.alt})`:""}`}).join("\n")},"renderPrompt",0,function(e,t){return e.replace(/\{\{FORM_JS\}\}/g,t.formJs).replace(/\{\{REVIEWS_BLOCK\}\}/g,t.reviewsBlock).replace(/\{\{IMAGES_BLOCK\}\}/g,t.imagesBlock).replace(/\{\{BUSINESS_NAME\}\}/g,t.businessName).replace(/\{\{CATEGORY\}\}/g,t.category).replace(/\{\{RATING\}\}/g,t.rating).replace(/\{\{RATING_COUNT\}\}/g,t.ratingCount).replace(/\{\{ADDRESS\}\}/g,t.address).replace(/\{\{PHONE\}\}/g,t.phone).replace(/\{\{CLEAN_PHONE\}\}/g,t.cleanPhone).replace(/\{\{WEBSITE\}\}/g,t.website).replace(/\{\{PLACE_ID\}\}/g,t.placeId).replace(/\{\{COORDINATES\}\}/g,t.coordinates).replace(/\{\{GOOGLE_URL\}\}/g,t.googleUrl).replace(/\{\{ENCODED_BUSINESS_ADDRESS\}\}/g,t.encodedBusinessAddress).replace(/\{\{REVIEW_URL\}\}/g,t.reviewUrl)},"sanitizeGeneratedTsx",0,c],124162)}];
+
+//# sourceMappingURL=src_lib_prompts_ts_0y0egq3._.js.map

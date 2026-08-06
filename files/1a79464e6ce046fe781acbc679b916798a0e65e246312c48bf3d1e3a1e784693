@@ -1,0 +1,3 @@
+{
+  "/api/campaigns/[id]/leads/[leadId]/deploy/set-main/route": "app/api/campaigns/[id]/leads/[leadId]/deploy/set-main/route.js"
+}

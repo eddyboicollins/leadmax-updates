@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "functions": {
+    "/api/campaigns/[id]/leads/[leadId]/deploy": {
+      "maxDuration": 300
+    },
+    "/api/campaigns/[id]/leads/[leadId]/landing-page": {
+      "maxDuration": 120
+    },
+    "/api/campaigns/[id]/leads/[leadId]/landing-page/modify": {
+      "maxDuration": 120
+    },
+    "/api/scrape": {
+      "maxDuration": 300
+    },
+    "/api/scrape/batch": {
+      "maxDuration": 300
+    }
+  }
+}

@@ -1,0 +1,3 @@
+{
+  "/api/scraped-images/[file]/route": "app/api/scraped-images/[file]/route.js"
+}

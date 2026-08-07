@@ -1,4 +1,4 @@
-globalThis.__BUILD_MANIFEST = {
+{
   "pages": {
     "/_app": []
   },
@@ -7,9 +7,9 @@ globalThis.__BUILD_MANIFEST = {
     "static/chunks/03~yq9q893hmn.js"
   ],
   "lowPriorityFiles": [
-    "static/znKdnukKx90wfHewwMRYn/_buildManifest.js",
-    "static/znKdnukKx90wfHewwMRYn/_ssgManifest.js",
-    "static/znKdnukKx90wfHewwMRYn/_clientMiddlewareManifest.js"
+    "static/s2dVigM0bW0XR5w42ihtG/_buildManifest.js",
+    "static/s2dVigM0bW0XR5w42ihtG/_ssgManifest.js",
+    "static/s2dVigM0bW0XR5w42ihtG/_clientMiddlewareManifest.js"
   ],
   "rootMainFiles": [
     "static/chunks/01s196s.07bz9.js",
@@ -18,4 +18,4 @@ globalThis.__BUILD_MANIFEST = {
     "static/chunks/1220shqwqshar.js",
     "static/chunks/turbopack-0ibnhj63ezi5i.js"
   ]
-};
+}

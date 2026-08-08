@@ -1,8 +1,0 @@
-var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/scrape/batch/route.js")
-R.c("server/chunks/[root-of-the-server]__0z4buuz._.js")
-R.c("server/chunks/[root-of-the-server]__128ho_~._.js")
-R.c("server/chunks/[root-of-the-server]__11j~5mn._.js")
-R.c("server/chunks/node_modules_next_04~_e52._.js")
-R.c("server/chunks/_next-internal_server_app_api_scrape_batch_route_actions_0ue3jji.js")
-R.m(10648)
-module.exports=R.m(10648).exports

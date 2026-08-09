@@ -1,8 +1,0 @@
-var R=require("../../../chunks/[turbopack]_runtime.js")("server/app/api/chats/route.js")
-R.c("server/chunks/[root-of-the-server]__11q8086._.js")
-R.c("server/chunks/[root-of-the-server]__128ho_~._.js")
-R.c("server/chunks/[root-of-the-server]__11j~5mn._.js")
-R.c("server/chunks/node_modules_next_04~_e52._.js")
-R.c("server/chunks/_next-internal_server_app_api_chats_route_actions_0-k9kz..js")
-R.m(53548)
-module.exports=R.m(53548).exports

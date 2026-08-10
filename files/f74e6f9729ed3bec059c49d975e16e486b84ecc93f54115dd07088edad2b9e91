@@ -1,5 +1,0 @@
-module.exports = {
-  owner: process.env.LEADMAX_UPDATE_OWNER || 'eddyboicollins',
-  repo: process.env.LEADMAX_UPDATE_REPO || 'leadmax-updates',
-  branch: process.env.LEADMAX_UPDATE_BRANCH || 'release',
-};

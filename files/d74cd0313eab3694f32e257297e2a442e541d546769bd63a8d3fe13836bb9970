@@ -1,0 +1,52 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { DATA_DIR, readJSON } from '@/lib/store';
+import { summarizeDataDir } from '@/lib/migrate';
+import type { Campaign, GlobalSettings } from '@/lib/types';
+
+/**
+ * Receives files picked from the old LeadMax data folder (via a native
+ * directory picker in the renderer) and reconstructs them into DATA_DIR.
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const files = body?.files;
+    if (!Array.isArray(files)) {
+      return NextResponse.json({ ok: false, error: 'Expected a files array' }, { status: 400 });
+    }
+
+    const root = path.resolve(DATA_DIR);
+    await fs.mkdir(root, { recursive: true });
+    let written = 0;
+    for (const f of files) {
+      if (!f || typeof f.path !== 'string' || typeof f.data !== 'string') continue;
+      const rel = f.path.replace(/\\/g, '/').replace(/^\/+/, '');
+      if (!rel || rel.includes('..')) continue;
+      const dest = path.resolve(root, rel);
+      if (dest !== root && !dest.startsWith(root + path.sep)) continue;
+      await fs.mkdir(path.dirname(dest), { recursive: true });
+      await fs.writeFile(dest, Buffer.from(f.data, 'base64'));
+      written += 1;
+    }
+
+    return NextResponse.json({ ok: true, written });
+  } catch (err) {
+    return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : 'Upload failed' }, { status: 500 });
+  }
+}
+
+/** Reports what is currently in DATA_DIR + whether imported settings include keys. */
+export async function GET() {
+  const summary = await summarizeDataDir(DATA_DIR);
+  const settings = await readJSON<GlobalSettings>(path.join(DATA_DIR, 'settings.json'), {} as GlobalSettings);
+  const campaigns = await readJSON<Campaign[]>(path.join(DATA_DIR, 'campaigns.json'), []);
+  return NextResponse.json({
+    ok: true,
+    summary,
+    hasVercelToken: !!(settings?.vercelToken),
+    hasImgbbKey: !!(settings?.imgbbKey),
+    campaignCount: Array.isArray(campaigns) ? campaigns.length : 0,
+  });
+}

@@ -1,0 +1,337 @@
+const { app, BrowserWindow, ipcMain, Notification, Menu, shell, dialog } = require('electron');
+const { spawn } = require('child_process');
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const updater = require('./updater');
+
+const PORT = 3456;
+const HOST = 'localhost';
+
+let serverProcess = null;
+let mainWindow = null;
+let intentionalRestart = false;
+let applying = false;
+let lastStatus = null;
+
+function serverPidPath() {
+  return path.join(app.getPath('userData'), 'server.pid');
+}
+
+function killPid(pid) {
+  return new Promise((resolve) => {
+    if (!pid) return resolve();
+    try {
+      const res = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true });
+      res.on('exit', () => resolve());
+      res.on('error', () => resolve());
+      setTimeout(resolve, 2000);
+    } catch {
+      resolve();
+    }
+  });
+}
+
+function cleanupStaleServer() {
+  try {
+    const pid = Number(fs.readFileSync(serverPidPath(), 'utf8'));
+    if (pid) {
+      log('killing stale server pid ' + pid);
+      killPid(pid);
+    }
+  } catch {}
+  try {
+    fs.unlinkSync(serverPidPath());
+  } catch {}
+}
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+}
+
+Menu.setApplicationMenu(null);
+
+function log(...args) {
+  try {
+    const dir = app.isPackaged ? app.getPath('userData') : __dirname;
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(
+      path.join(dir, 'updater.log'),
+      new Date().toISOString() + ' [main] ' + args.map(String).join(' ') + '\n',
+    );
+  } catch {}
+  console.log('[main]', ...args);
+}
+
+function getServerDir() {
+  return updater.serverDir();
+}
+
+function killServer(proc) {
+  return new Promise((resolve) => {
+    if (!proc) return resolve();
+    let done = false;
+    proc.once('exit', () => {
+      done = true;
+      resolve();
+    });
+    try {
+      proc.kill();
+    } catch {
+      if (!done) resolve();
+    }
+    setTimeout(() => {
+      if (!done) resolve();
+    }, 3000);
+  });
+}
+
+function waitForPort(timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const attempt = () => {
+      const req = http.get({ host: HOST, port: PORT, path: '/', timeout: 2000 }, (res) => {
+        res.destroy();
+        resolve();
+      });
+      req.on('error', () => {
+        if (Date.now() - started > timeoutMs) reject(new Error('server did not become reachable'));
+        else setTimeout(attempt, 250);
+      });
+      req.on('timeout', () => req.destroy());
+    };
+    attempt();
+  });
+}
+
+function startServer({ restart = false } = {}) {
+  return new Promise((resolve, reject) => {
+    const doStart = async () => {
+      if (restart && serverProcess) {
+        intentionalRestart = true;
+        await killServer(serverProcess);
+        intentionalRestart = false;
+        serverProcess = null;
+      }
+
+      const serverDir = getServerDir();
+      const serverScript = path.join(serverDir, 'server.js');
+      let settled = false;
+
+      serverProcess = spawn(process.execPath, [serverScript], {
+        env: {
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: '1',
+          NODE_PATH: updater.nodeModulesDir(),
+          PORT: String(PORT),
+          HOSTNAME: HOST,
+        },
+        cwd: serverDir,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+      });
+
+      try {
+        fs.writeFileSync(serverPidPath(), String(serverProcess.pid));
+      } catch {}
+
+      const timeout = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          resolve();
+        }
+      }, 15000);
+
+      const onData = (data) => {
+        const text = data.toString();
+        console.log('[server]', text.replace(/\n$/, ''));
+        log('server:', text.replace(/\n$/, ''));
+        if (/ready|started|listening/i.test(text) || text.includes(':' + PORT)) {
+          if (!settled) {
+            settled = true;
+            clearTimeout(timeout);
+            resolve();
+          }
+        }
+      };
+
+      serverProcess.stdout.on('data', onData);
+      serverProcess.stderr.on('data', onData);
+
+      serverProcess.on('error', (err) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timeout);
+          reject(err);
+        }
+      });
+
+      serverProcess.on('exit', (code) => {
+        console.log('[server] exited with code ' + code);
+        if (!settled && !mainWindow && !intentionalRestart) {
+          settled = true;
+          clearTimeout(timeout);
+          reject(new Error('Server exited with code ' + code));
+        }
+      });
+
+      waitForPort(20000)
+        .then(() => {
+          if (!settled) {
+            settled = true;
+            clearTimeout(timeout);
+            resolve();
+          }
+        })
+        .catch(() => {});
+    };
+    doStart();
+  });
+}
+
+app.whenReady().then(async () => {
+  if (!gotLock) return;
+  try {
+    log('Preparing app files...');
+    cleanupStaleServer();
+    updater.ensureSeed();
+    log('Starting Next.js server...');
+    await startServer();
+    log('Server ready, opening window...');
+
+    mainWindow = new BrowserWindow({
+      width: 1280,
+      height: 800,
+      minWidth: 900,
+      minHeight: 600,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(__dirname, 'preload.js'),
+      },
+    });
+
+    mainWindow.loadURL('http://' + HOST + ':' + PORT);
+
+    const APP_ORIGIN = 'http://' + HOST + ':' + PORT;
+    const isAppUrl = (url) => url.startsWith(APP_ORIGIN);
+
+    // Open every external link (target="_blank", window.open) in the system browser,
+    // never inside the Electron window. App routes stay internal.
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+      if (!isAppUrl(url)) shell.openExternal(url);
+      return { action: 'deny' };
+    });
+
+    // Same for plain navigation: if the window tries to leave the app, bounce it to the browser.
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+      if (!isAppUrl(url)) {
+        event.preventDefault();
+        shell.openExternal(url);
+      }
+    });
+
+    mainWindow.on('closed', () => {
+      mainWindow = null;
+    });
+
+    const send = (payload) => {
+      lastStatus = payload;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-status', payload);
+      }
+    };
+
+    updater.checkForUpdates((status) => send(status));
+
+    mainWindow.webContents.on('did-finish-load', () => {
+      if (lastStatus) send(lastStatus);
+    });
+
+    ipcMain.on('update:get-status', () => {
+      if (lastStatus) send(lastStatus);
+    });
+
+    ipcMain.on('update:apply', async () => {
+      if (applying) return;
+      applying = true;
+      log('apply requested by user');
+      send({ type: 'downloading', index: 0, total: 0, cumulativeBytes: 0, bytesTotal: null });
+      try {
+        const chk = await updater.checkForUpdates(() => {});
+        if (!chk || chk.status !== 'available' || !chk.remote) {
+          log('apply aborted: no update available');
+          send({ type: 'error', message: 'No update available' });
+          return;
+        }
+        const onProgress = (p) => send({ type: 'downloading', ...p, bytesTotal: chk.size });
+        const result = await updater.applyUpdate(chk.remote, onProgress);
+        log(`update applied: ${result.changed} new/changed, ${result.deleted} removed`);
+        send({ type: 'applied', count: result.changed });
+        try {
+          new Notification({
+            title: 'LeadMax',
+            body: `Update installed (${result.changed} file${result.changed === 1 ? '' : 's'}).`,
+          }).show();
+        } catch {}
+        setTimeout(async () => {
+          try {
+            log('restarting server with new build...');
+            await startServer({ restart: true });
+            if (mainWindow && !mainWindow.isDestroyed()) mainWindow.reload();
+            lastStatus = null;
+            log('server restarted and window reloaded');
+          } catch (err) {
+            log('restart failed: ' + (err && err.message));
+            send({ type: 'error', message: err.message });
+          }
+        }, 900);
+      } catch (err) {
+        log('apply failed: ' + (err && err.message));
+        send({ type: 'error', message: err.message });
+      } finally {
+        applying = false;
+      }
+    });
+
+    ipcMain.on('update:dismiss', () => {
+      send({ type: 'up-to-date' });
+    });
+
+    // Native folder picker used by the first-run wizard / data migration.
+    ipcMain.handle('dialog:select-folder', async () => {
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Select your previous LeadMax folder',
+        properties: ['openDirectory'],
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      return result.filePaths[0];
+    });
+  } catch (err) {
+    console.error('Startup failed:', err);
+    app.quit();
+  }
+});
+
+app.on('second-instance', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.focus();
+});
+
+app.on('before-quit', () => {
+  if (serverProcess) {
+    serverProcess.kill();
+    serverProcess = null;
+  }
+  try {
+    fs.unlinkSync(serverPidPath());
+  } catch {}
+});
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});

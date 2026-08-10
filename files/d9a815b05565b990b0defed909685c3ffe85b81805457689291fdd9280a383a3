@@ -1,0 +1,67 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaign, getLead, updateLeadLandingPage, getSettings } from '@/lib/store';
+import { askGeminiAndValidate, MODIFY_PROMPT_SUFFIX, formatModifyImagesBlock } from '@/lib/prompts';
+import type { GeminiModel } from '@/lib/gemini';
+
+export const maxDuration = 120;
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { id, leadId } = await params;
+
+    const body = await request.json();
+    const { userPrompt } = body;
+
+    if (!userPrompt || typeof userPrompt !== 'string') {
+      return NextResponse.json({ error: 'userPrompt is required' }, { status: 400 });
+    }
+
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    const settings = await getSettings();
+
+    const existingTsx = lead.landingPage?.tsx || lead.deploymentHistory?.find(e => e.isMain)?.tsx;
+    if (!existingTsx) {
+      return NextResponse.json({ error: 'No landing page to modify. Generate one first.' }, { status: 400 });
+    }
+
+    const imagesBlock = formatModifyImagesBlock(lead);
+
+    const prompt = [
+      'Here is the React component to modify:',
+      existingTsx,
+      '',
+      "User's change request:",
+      userPrompt,
+      imagesBlock ? '' : null,
+      imagesBlock || null,
+      '',
+      'Return the COMPLETE modified React component (default export), no explanations.',
+      MODIFY_PROMPT_SUFFIX,
+    ].filter(Boolean).join('\n');
+
+    const cleanTsx = await askGeminiAndValidate(prompt, settings.geminiApiKey || '', settings.geminiModel as GeminiModel, 4, undefined, settings.geminiSource || 'proxy');
+
+    const lp = lead.landingPage || { generatedAt: new Date().toISOString(), version: 0, sections: [] };
+    const landingPage = {
+      tsx: cleanTsx,
+      generatedAt: lp.generatedAt,
+      version: (lp.version || 0) + 1,
+      sections: lp.sections || [],
+    };
+
+    await updateLeadLandingPage(leadId, landingPage);
+
+    return NextResponse.json({ success: true, version: landingPage.version });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to modify landing page';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

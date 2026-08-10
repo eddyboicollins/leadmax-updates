@@ -1,0 +1,173 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+type UpdateType = 'checking' | 'up-to-date' | 'error' | 'available' | 'downloading' | 'applied';
+
+interface UpdateStatusData {
+  type: UpdateType;
+  message?: string;
+  totals?: { changed: number; deleted: number; total: number };
+  size?: number | null;
+  index?: number;
+  total?: number;
+  cumulativeBytes?: number;
+  bytesTotal?: number | null;
+  count?: number;
+}
+
+interface LeadmaxApi {
+  onUpdateStatus?: (cb: (s: UpdateStatusData) => void) => void;
+  applyUpdate?: () => void;
+  dismissUpdate?: () => void;
+  getUpdateStatus?: () => void;
+}
+
+function leadmax(): LeadmaxApi {
+  return (window as unknown as { leadmax?: LeadmaxApi }).leadmax ?? {};
+}
+
+function formatBytes(bytes?: number | null): string | null {
+  if (bytes == null || Number.isNaN(bytes) || bytes <= 0) return null;
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1) return mb.toFixed(1) + ' MB';
+  return Math.max(1, Math.round(bytes / 1024)) + ' KB';
+}
+
+export default function UpdateStatus() {
+  const { t } = useTranslation();
+  const [status, setStatus] = useState<UpdateStatusData | null>(null);
+  const [visible, setVisible] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const api = leadmax();
+    if (typeof api.onUpdateStatus !== 'function') return;
+    api.onUpdateStatus((s) => {
+      if (s.type === 'available' || s.type === 'downloading' || s.type === 'applied') {
+        if (hideTimer.current) clearTimeout(hideTimer.current);
+        setStatus(s);
+        setVisible(true);
+      } else {
+        if (hideTimer.current) clearTimeout(hideTimer.current);
+        setStatus(s);
+        setVisible(true);
+        if (s.type !== 'checking') {
+          hideTimer.current = setTimeout(() => setVisible(false), 6000);
+        }
+      }
+    });
+    api.getUpdateStatus?.();
+    return () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
+  }, []);
+
+  if (!visible || !status) return null;
+
+  const isModal = status.type === 'available' || status.type === 'downloading' || status.type === 'applied';
+
+  if (!isModal) {
+    const label =
+      status.type === 'checking'
+        ? t('update.checking')
+        : status.type === 'up-to-date'
+          ? t('update.upToDate')
+          : t('update.error');
+    return (
+      <div className="fixed bottom-20 right-5 z-[130]">
+        <div
+          className={`flex items-center gap-2.5 rounded-full pl-4 pr-5 py-2.5 text-sm shadow-2xl backdrop-blur-md border ${
+            status.type === 'error'
+              ? 'bg-red-900/90 border-red-500/40 text-red-100'
+              : 'bg-zinc-800/90 border-zinc-600/40 text-zinc-200'
+          }`}
+        >
+          {status.type === 'checking' ? (
+            <span className="animate-spin w-4 h-4 rounded-full border-2 border-emerald-400 border-t-transparent" />
+          ) : status.type === 'error' ? (
+            <span className="w-4 h-4 rounded-full bg-red-400" />
+          ) : (
+            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+          )}
+          <span className="text-xs font-medium">{label}</span>
+          {status.message ? (
+            <span className="text-[11px] opacity-80 truncate max-w-[260px]" title={status.message}>
+              {status.message}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  const dismiss = () => {
+    setVisible(false);
+    leadmax().dismissUpdate?.();
+  };
+  const download = () => {
+    leadmax().applyUpdate?.();
+  };
+
+  const size = formatBytes(status.type === 'downloading' ? status.bytesTotal : status.size);
+  const filePct =
+    status.type === 'downloading' && (status.total ?? 0) > 0
+      ? Math.min(100, Math.round(((status.index ?? 0) / (status.total ?? 1)) * 100))
+      : 0;
+  const downloaded = formatBytes(status.type === 'downloading' ? status.cumulativeBytes : null);
+
+  return (
+    <div className="fixed bottom-6 right-6 z-[300] w-80">
+      <div className="rounded-2xl border border-zinc-700 bg-zinc-900/95 text-zinc-100 shadow-2xl backdrop-blur-md p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="text-sm font-semibold leading-snug">
+            {status.type === 'available'
+              ? t('update.available', {
+                  count: status.totals?.total ?? 0,
+                  size: size ?? t('update.unknownSize'),
+                })
+              : status.type === 'downloading'
+                ? t('update.downloading', { percent: filePct })
+                : t('update.installed')}
+          </div>
+          {status.type === 'available' ? (
+            <button
+              onClick={dismiss}
+              aria-label={t('update.dismiss')}
+              className="text-zinc-400 hover:text-zinc-100 transition-colors leading-none"
+            >
+              <i className="fa-solid fa-xmark" />
+            </button>
+          ) : null}
+        </div>
+
+        {status.type === 'available' ? (
+          <button
+            onClick={download}
+            className="mt-3 w-full rounded-lg bg-emerald-500 hover:bg-emerald-400 text-emerald-950 text-sm font-semibold py-2 transition-colors"
+          >
+            {t('update.download')}
+          </button>
+        ) : status.type === 'downloading' ? (
+          <div className="mt-3">
+            <div className="h-2 rounded-full bg-zinc-700 overflow-hidden">
+              <div
+                className={`h-full rounded-full bg-emerald-400 transition-all ${
+                  filePct === 0 ? 'animate-pulse w-1/3' : ''
+                }`}
+                style={filePct > 0 ? { width: filePct + '%' } : undefined}
+              />
+            </div>
+            <p className="mt-2 text-[11px] text-zinc-400">
+              {t('update.fileProgress', { index: status.index ?? 0, total: status.total ?? 0 })}
+              {downloaded ? ` · ${downloaded}` : ''}
+            </p>
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-zinc-400">{t('update.reloading')}</p>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,58 @@
+'use client';
+
+let pendingId: string | null = null;
+
+export function requestGenerationFocus(id: string) {
+  pendingId = id;
+  window.dispatchEvent(new CustomEvent('lm-focus-generation', { detail: { id } }));
+}
+
+export function onGenerationFocus(handler: (id: string) => void): () => void {
+  const h = (e: Event) => handler((e as CustomEvent<{ id: string }>).detail.id);
+  window.addEventListener('lm-focus-generation', h);
+  return () => window.removeEventListener('lm-focus-generation', h);
+}
+
+export function consumePendingGenerationFocus(): string | null {
+  const id = pendingId;
+  pendingId = null;
+  return id;
+}
+
+let pendingGenerationsScroll = false;
+
+export function requestGenerationsScroll() {
+  pendingGenerationsScroll = true;
+  window.dispatchEvent(new CustomEvent('lm-focus-generations'));
+}
+
+export function onGenerationsScroll(handler: () => void): () => void {
+  const h = () => handler();
+  window.addEventListener('lm-focus-generations', h);
+  return () => window.removeEventListener('lm-focus-generations', h);
+}
+
+export function consumePendingGenerationsScroll(): boolean {
+  const pending = pendingGenerationsScroll;
+  pendingGenerationsScroll = false;
+  return pending;
+}
+
+let pendingCampaignsScroll = false;
+
+export function requestCampaignsScroll() {
+  pendingCampaignsScroll = true;
+  window.dispatchEvent(new CustomEvent('lm-focus-campaigns'));
+}
+
+export function onCampaignsScroll(handler: () => void): () => void {
+  const h = () => handler();
+  window.addEventListener('lm-focus-campaigns', h);
+  return () => window.removeEventListener('lm-focus-campaigns', h);
+}
+
+export function consumePendingCampaignsScroll(): boolean {
+  const pending = pendingCampaignsScroll;
+  pendingCampaignsScroll = false;
+  return pending;
+}

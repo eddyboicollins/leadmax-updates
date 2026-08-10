@@ -1,0 +1,311 @@
+'use client';
+
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+
+export interface ScrapeRegionConfig {
+  keyword: string;
+  location: string;
+  minRating?: number;
+  maxRating?: number;
+  minReviews?: number;
+}
+
+export interface ScrapeLead {
+  id: string;
+  business: any;
+}
+
+export interface ScrapeCurrentLead {
+  name?: string;
+  rating?: number;
+  ratingCount?: number;
+  address?: string;
+  phone?: string;
+}
+
+interface ScrapeContextValue {
+  running: boolean;
+  campaignId: string | null;
+  campaignKeyword: string;
+  campaignLocation: string;
+  regions: ScrapeRegionConfig[];
+  regionIndex: number;
+  logs: string[];
+  scrapedCount: number;
+  opProgress: number;
+  totalLeads: number | null;
+  globalProgress: number;
+  globalTotal: number;
+  etaSeconds: number | null;
+  currentLead: ScrapeCurrentLead | null;
+  streamedLeads: ScrapeLead[];
+  error: string | null;
+  minimized: boolean;
+  expanded: boolean;
+  startScrape: (config: { campaignId: string; keyword: string; location: string; regions?: ScrapeRegionConfig[] }) => void;
+  cancelScrape: () => void;
+  clearError: () => void;
+  minimize: () => void;
+  expand: () => void;
+}
+
+const ScrapeContext = createContext<ScrapeContextValue | null>(null);
+
+export function useScrape() {
+  const ctx = useContext(ScrapeContext);
+  if (!ctx) throw new Error('useScrape must be used within ScrapeProvider');
+  return ctx;
+}
+
+export default function ScrapeProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
+
+  const [running, setRunning] = useState(false);
+  const [campaignId, setCampaignId] = useState<string | null>(null);
+  const [campaignKeyword, setCampaignKeyword] = useState('');
+  const [campaignLocation, setCampaignLocation] = useState('');
+  const [regions, setRegions] = useState<ScrapeRegionConfig[]>([]);
+  const [regionIndex, setRegionIndex] = useState(0);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [scrapedCount, setScrapedCount] = useState(0);
+  const [opProgress, setOpProgress] = useState(0);
+  const [totalLeads, setTotalLeads] = useState<number | null>(null);
+  const [globalProgress, setGlobalProgress] = useState(0);
+  const [globalTotal, setGlobalTotal] = useState(0);
+  const [etaSeconds, setEtaSeconds] = useState<number | null>(null);
+  const globalTotalRef = useRef(0);
+  const globalDoneRef = useRef(0);
+  const [currentLead, setCurrentLead] = useState<ScrapeCurrentLead | null>(null);
+  const [streamedLeads, setStreamedLeads] = useState<ScrapeLead[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const runningRef = useRef(false);
+
+  const minimized = running && !expanded;
+
+  // No modal anymore: scrape progress is shown inline on the campaign page.
+  // (Body scroll lock removed — nothing full-screen to lock for.)
+
+  const resetRun = useCallback(() => {
+    setLogs([]);
+    setScrapedCount(0);
+    setOpProgress(0);
+    setTotalLeads(null);
+    setGlobalProgress(0);
+    setGlobalTotal(0);
+    setEtaSeconds(null);
+    setCurrentLead(null);
+    setStreamedLeads([]);
+    setError(null);
+    setRegionIndex(0);
+    globalTotalRef.current = 0;
+    globalDoneRef.current = 0;
+  }, []);
+
+  const startScrape = useCallback((config: { campaignId: string; keyword: string; location: string; regions?: ScrapeRegionConfig[] }) => {
+    if (runningRef.current) return;
+    const regionList: ScrapeRegionConfig[] =
+      config.regions && config.regions.length > 0
+        ? config.regions
+        : [{ keyword: config.keyword, location: config.location }];
+
+    setCampaignId(config.campaignId);
+    setCampaignKeyword(config.keyword);
+    setCampaignLocation(config.location);
+    setRegions(regionList);
+    setRunning(true);
+    runningRef.current = true;
+    setExpanded(false);
+    resetRun();
+
+    const abortController = new AbortController();
+    abortRef.current = abortController;
+
+    (async () => {
+      const scrapeRegion = async (region: ScrapeRegionConfig, regionNum: number) => {
+        setRegionIndex(regionNum);
+        setTotalLeads(null);
+        setOpProgress(0);
+        setEtaSeconds(null);
+        setCurrentLead(null);
+
+        const accumulatedLeads: ScrapeLead[] = [];
+        const savedIds = new Set<string>();
+        let processedCount = 0;
+        let totalCount: number | null = null;
+        let phase2Start: number | null = null;
+        let firstLeadMs: number | null = null;
+
+        const saveLead = (lead: ScrapeLead) => {
+          if (savedIds.has(lead.id)) return;
+          savedIds.add(lead.id);
+          fetch(`/api/campaigns/${config.campaignId}/leads/batch`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ leads: [{ leadId: lead.id, business: lead.business }] }),
+          }).then(res => {
+            if (!res.ok) throw new Error('save lead failed');
+            queryClient.invalidateQueries({ queryKey: ['campaign', config.campaignId] });
+            queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+          }).catch(err => {
+            savedIds.delete(lead.id);
+            setLogs(prev => [...prev, `Failed to save "${lead.business.name}": ${err.message || err}`]);
+          });
+        };
+
+        const matches = (b: any, f?: { minRating?: number; maxRating?: number; minReviews?: number }): boolean => {
+          const minRating = f?.minRating;
+          const maxRating = f?.maxRating;
+          const minReviews = f?.minReviews;
+          if (typeof minRating === 'number' && b.rating > 0 && b.rating < minRating) return false;
+          if (typeof maxRating === 'number' && b.rating > 0 && b.rating > maxRating) return false;
+          if (typeof minReviews === 'number' && b.ratingCount > 0 && b.ratingCount < minReviews) return false;
+          return true;
+        };
+
+        const response = await fetch('/api/scrape', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword: region.keyword, location: region.location }),
+          signal: abortController.signal,
+        });
+        if (!response.body) throw new Error('No response body');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let done = false;
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
+          if (!value) continue;
+          const chunk = decoder.decode(value, { stream: true });
+          for (const line of chunk.split('\n').filter(l => l.trim())) {
+            try {
+              const data = JSON.parse(line);
+              if (data.type === 'log') {
+                setLogs(prev => [...prev, data.message]);
+              } else if (data.type === 'total') {
+                totalCount = data.total;
+                setTotalLeads(data.total);
+                globalTotalRef.current += data.total;
+                setGlobalTotal(globalTotalRef.current);
+                setEtaSeconds(null);
+                phase2Start = performance.now();
+                firstLeadMs = null;
+              } else if (data.type === 'progress') {
+                setOpProgress(data.processed);
+                setGlobalProgress(globalDoneRef.current + data.processed);
+                totalCount = data.total;
+                setCurrentLead(data.current || null);
+              } else if (data.type === 'lead') {
+                if (phase2Start === null) phase2Start = performance.now();
+                if (firstLeadMs === null) firstLeadMs = performance.now() - phase2Start;
+                if (totalCount && firstLeadMs) {
+                  const totalEstimateMs = firstLeadMs * totalCount;
+                  const remainingMs = totalEstimateMs - (performance.now() - phase2Start);
+                  setEtaSeconds(Math.max(0, Math.round(remainingMs / 1000)));
+                }
+                if (!matches(data.lead, region)) continue;
+                processedCount++;
+                setScrapedCount(processedCount);
+                const leadEntry: ScrapeLead = {
+                  id: data.leadId,
+                  business: data.lead,
+                };
+                accumulatedLeads.push(leadEntry);
+                setStreamedLeads(prev => [...prev, leadEntry]);
+                saveLead(leadEntry);
+              } else if (data.type === 'done') {
+                setScrapedCount(data.count);
+                setOpProgress(totalCount ?? data.count);
+                setEtaSeconds(0);
+                if (totalCount) globalDoneRef.current += totalCount;
+                setGlobalProgress(globalDoneRef.current);
+                const unsaved = accumulatedLeads.filter(l => !savedIds.has(l.id));
+                if (unsaved.length > 0) {
+                  try {
+                    const res = await fetch(`/api/campaigns/${config.campaignId}/leads/batch`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ leads: unsaved.map(l => ({ leadId: l.id, business: l.business })) }),
+                    });
+                    if (!res.ok) throw new Error((await res.json()).error || 'Failed to save');
+                  } catch { /* ignore */ }
+                }
+                setStreamedLeads([]);
+                queryClient.invalidateQueries({ queryKey: ['campaign', config.campaignId] });
+                queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+              } else if (data.type === 'error') {
+                setLogs(prev => [...prev, data.error]);
+              }
+            } catch { /* skip */ }
+          }
+        }
+      };
+
+      let failed = false;
+      try {
+        for (let ri = 0; ri < regionList.length; ri++) {
+          await scrapeRegion(regionList[ri], ri);
+        }
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          failed = true;
+          setError(err.message || String(err));
+          setLogs(prev => [...prev, err.message || String(err)]);
+        }
+      }
+      setRunning(false);
+      runningRef.current = false;
+      if (!failed) setExpanded(false);
+      queryClient.invalidateQueries({ queryKey: ['campaign', config.campaignId] });
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    })();
+  }, [queryClient, resetRun]);
+
+  const cancelScrape = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
+  const clearError = useCallback(() => {
+    setError(null);
+    setExpanded(false);
+  }, []);
+
+  const minimize = useCallback(() => {
+    if (running) setExpanded(false);
+  }, [running]);
+
+  const expand = useCallback(() => {
+    if (running) setExpanded(true);
+  }, [running]);
+
+  const value: ScrapeContextValue = {
+    running,
+    campaignId,
+    campaignKeyword,
+    campaignLocation,
+    regions,
+    regionIndex,
+    logs,
+    scrapedCount,
+    opProgress,
+    totalLeads,
+    globalProgress,
+    globalTotal,
+    etaSeconds,
+    currentLead,
+    streamedLeads,
+    error,
+    minimized,
+    expanded,
+    startScrape,
+    cancelScrape,
+    clearError,
+    minimize,
+    expand,
+  };
+
+  return <ScrapeContext.Provider value={value}>{children}</ScrapeContext.Provider>;
+}

@@ -1,0 +1,25 @@
+// Ultra-minimal placeholder page deployed when a lead's website is unpublished.
+// Renders exactly: black background, centered white "Coming Soon". No other content.
+
+export const COMING_SOON_TSX = `'use client';
+
+export default function ComingSoon() {
+  return (
+    <main style={{
+      width: '100vw',
+      height: '100vh',
+      margin: 0,
+      padding: 0,
+      overflow: 'hidden',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      background: '#000000',
+      color: '#ffffff',
+      fontFamily: 'Arial, sans-serif',
+    }}>
+      Coming Soon
+    </main>
+  );
+}
+`;

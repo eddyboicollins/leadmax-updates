@@ -1,0 +1,28 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { detectDataFolder, migrateDataFolder } from '@/lib/migrate';
+
+export async function GET(request: NextRequest) {
+  const source = request.nextUrl.searchParams.get('path');
+  if (!source) {
+    return NextResponse.json({ error: 'Missing path parameter' }, { status: 400 });
+  }
+  const detection = await detectDataFolder(source);
+  return NextResponse.json(detection);
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { source, dataDir } = body;
+    if (!source) {
+      return NextResponse.json({ error: 'Missing source path' }, { status: 400 });
+    }
+    const result = await migrateDataFolder(source, dataDir);
+    if (!result.ok) {
+      return NextResponse.json(result, { status: 400 });
+    }
+    return NextResponse.json(result);
+  } catch (err) {
+    return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : 'Migration failed' }, { status: 500 });
+  }
+}

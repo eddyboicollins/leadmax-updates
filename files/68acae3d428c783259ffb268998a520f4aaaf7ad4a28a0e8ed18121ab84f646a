@@ -1,0 +1,96 @@
+import { NextRequest } from 'next/server';
+import { getLead, getSettings, addDeploymentEntry } from '@/lib/store';
+import { deployLandingPageWithAutoFix, type DeployProgressEvent } from '@/lib/deploy-with-fix';
+import { slugifyProjectName } from '@/lib/vercel-deploy';
+import { COMING_SOON_TSX } from '@/lib/comingSoon';
+import type { GeminiModel } from '@/lib/gemini';
+import { v4 as uuidv4 } from 'uuid';
+
+export const maxDuration = 300;
+
+function sseEncode(event: DeployProgressEvent | Record<string, unknown>): string {
+  return `data: ${JSON.stringify(event)}\n\n`;
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  const { id, leadId } = await params;
+
+  const lead = await getLead(leadId);
+  if (!lead) {
+    return new Response(sseEncode({ step: 'error', message: 'Lead not found' }), { status: 404 });
+  }
+
+  if (!lead.deployment) {
+    return new Response(sseEncode({ step: 'error', message: 'No live website to unpublish.' }), { status: 400 });
+  }
+
+  const settings = await getSettings();
+  const vercelToken = settings.vercelToken || '';
+  if (!vercelToken) {
+    return new Response(sseEncode({ step: 'error', message: 'No Vercel token configured. Go to Settings to add your token.' }), { status: 400 });
+  }
+
+  const projectName = lead.deploymentName || slugifyProjectName(lead.business.name);
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: DeployProgressEvent | Record<string, unknown>) => {
+        try { controller.enqueue(encoder.encode(sseEncode(event))); } catch { /* client disconnected */ }
+      };
+
+      try {
+        const result = await deployLandingPageWithAutoFix({
+          vercelToken,
+          geminiApiKey: settings.geminiApiKey || '',
+          geminiModel: settings.geminiModel as GeminiModel,
+          geminiSource: settings.geminiSource || 'proxy',
+          projectName,
+          tsx: COMING_SOON_TSX,
+          onProgress: send,
+        });
+
+        if (result.success && result.url) {
+          await addDeploymentEntry(leadId, {
+            id: uuidv4(),
+            vercelDeploymentId: result.deploymentId || '',
+            url: result.deploymentUrl || result.url,
+            aliasUrl: result.url,
+            deployedAt: new Date().toISOString(),
+            userPrompt: 'Unpublish website (Coming Soon)',
+            isMain: true,
+            comingSoon: true,
+            tsx: result.tsx,
+          });
+        }
+
+        send({
+          step: 'complete',
+          message: result.success ? 'Website unpublished' : (result.error || 'Could not unpublish the website'),
+          success: result.success,
+          url: result.url,
+          attempts: result.attempts,
+          error: result.error,
+          lastLogs: result.lastLogs,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unpublish failed';
+        send({ step: 'error', message, error: message });
+        send({ step: 'complete', message, success: false, error: message });
+      } finally {
+        try { controller.close(); } catch { /* client disconnected */ }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
+}

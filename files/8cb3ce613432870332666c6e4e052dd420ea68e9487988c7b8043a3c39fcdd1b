@@ -1,0 +1,127 @@
+'use client';
+
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+
+type ToastType = 'info' | 'success' | 'error';
+
+interface ToastItem {
+  id: number;
+  message: string;
+  type: ToastType;
+}
+
+interface ConfirmOptions {
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+}
+
+interface ToastContextValue {
+  toast: (message: string, type?: ToastType) => void;
+  confirm: (options: ConfirmOptions) => Promise<boolean>;
+}
+
+const ToastContext = createContext<ToastContextValue | null>(null);
+
+export function useToast(): ToastContextValue {
+  const ctx = useContext(ToastContext);
+  if (!ctx) throw new Error('useToast must be used within ToastProvider');
+  return ctx;
+}
+
+let nextId = 1;
+
+const typeStyles: Record<ToastType, string> = {
+  info: 'bg-zinc-800/95 border-zinc-600/40 text-zinc-200',
+  success: 'bg-emerald-900/95 border-emerald-500/40 text-emerald-100',
+  error: 'bg-red-900/95 border-red-500/40 text-red-100',
+};
+
+const dotStyles: Record<ToastType, string> = {
+  info: 'bg-zinc-400',
+  success: 'bg-emerald-400',
+  error: 'bg-red-400',
+};
+
+export default function ToastProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [confirmState, setConfirmState] = useState<ConfirmOptions & { resolve: (v: boolean) => void } | null>(null);
+  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(item => item.id !== id));
+    if (timers.current[id]) {
+      clearTimeout(timers.current[id]);
+      delete timers.current[id];
+    }
+  }, []);
+
+  const toast = useCallback((message: string, type: ToastType = 'info') => {
+    const id = nextId++;
+    setToasts(prev => [...prev, { id, message, type }]);
+    timers.current[id] = setTimeout(() => dismissToast(id), 6000);
+  }, [dismissToast]);
+
+  const confirm = useCallback((options: ConfirmOptions) => {
+    return new Promise<boolean>(resolve => {
+      setConfirmState({ ...options, resolve });
+    });
+  }, []);
+
+  const answerConfirm = useCallback((value: boolean) => {
+    if (confirmState) confirmState.resolve(value);
+    setConfirmState(null);
+  }, [confirmState]);
+
+  return (
+    <ToastContext.Provider value={{ toast, confirm }}>
+      {children}
+
+      {/* Toast stack */}
+      <div className="fixed top-4 end-4 z-[300] flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)]">
+        {toasts.map(item => (
+          <div
+            key={item.id}
+            className={`flex items-start gap-2.5 rounded-xl pl-4 pr-3 py-3 text-sm shadow-2xl backdrop-blur-md border ${typeStyles[item.type]}`}
+          >
+            <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${dotStyles[item.type]}`} />
+            <span className="text-xs font-medium leading-relaxed break-words flex-1">{item.message}</span>
+            <button
+              onClick={() => dismissToast(item.id)}
+              aria-label={t('update.dismiss')}
+              className="text-zinc-400 hover:text-zinc-100 transition-colors leading-none shrink-0"
+            >
+              <i className="fa-solid fa-xmark" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Confirm dialog */}
+      {confirmState && (
+        <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => answerConfirm(false)} />
+          <div className="relative w-full max-w-sm rounded-2xl border border-zinc-700 bg-zinc-900/95 text-zinc-100 shadow-2xl backdrop-blur-md p-5">
+            <p className="text-sm text-zinc-200 leading-relaxed">{confirmState.message}</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => answerConfirm(false)}
+                className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm font-medium text-zinc-200 transition-colors"
+              >
+                {confirmState.cancelLabel || t('update.cancel')}
+              </button>
+              <button
+                onClick={() => answerConfirm(true)}
+                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-400 text-white text-sm font-semibold transition-colors"
+              >
+                {confirmState.confirmLabel || t('update.confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </ToastContext.Provider>
+  );
+}

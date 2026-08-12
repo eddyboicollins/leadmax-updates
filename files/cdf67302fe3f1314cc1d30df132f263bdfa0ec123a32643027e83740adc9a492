@@ -1,0 +1,31 @@
+import i18n from 'i18next';
+import { initReactI18next } from 'react-i18next';
+
+import en from '../../public/locales/en/common.json';
+import fr from '../../public/locales/fr/common.json';
+import ar from '../../public/locales/ar/common.json';
+
+/**
+ * Sync the document direction with the active language. Arabic renders
+ * right-to-left; every other language falls back to left-to-right.
+ */
+function syncDocumentDir(lng: string | undefined) {
+  if (typeof document !== 'undefined') {
+    document.documentElement.dir = lng?.toLowerCase().startsWith('ar') ? 'rtl' : 'ltr';
+  }
+}
+
+i18n
+  .use(initReactI18next)
+  .init({
+    resources: { en: { common: en }, fr: { common: fr }, ar: { common: ar } },
+    lng: 'fr',
+    fallbackLng: 'fr',
+    defaultNS: 'common',
+    interpolation: { escapeValue: false },
+  });
+
+i18n.on('languageChanged', syncDocumentDir);
+syncDocumentDir(i18n.language);
+
+export default i18n;

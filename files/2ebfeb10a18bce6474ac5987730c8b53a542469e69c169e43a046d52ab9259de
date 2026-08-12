@@ -1,0 +1,243 @@
+'use client';
+
+import { createContext, useContext, useCallback, useRef, useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { v4 as uuidv4 } from 'uuid';
+
+export type GenerationPhase = 'checking' | 'generating' | 'deploying' | 'fixing' | 'done' | 'error';
+
+export interface GenerationJob {
+  id: string;
+  campaignId: string;
+  leadId: string;
+  leadName: string;
+  kind: 'generate' | 'modify' | 'unpublish';
+  userPrompt?: string;
+  phase: GenerationPhase;
+  message: string;
+  error?: string;
+  url?: string;
+}
+
+interface GenerationContextValue {
+  jobs: GenerationJob[];
+  activeJobs: GenerationJob[];
+  expanded: boolean;
+  setExpanded: (v: boolean) => void;
+  startJob: (input: {
+    campaignId: string;
+    leadId: string;
+    leadName: string;
+    kind: 'generate' | 'modify' | 'unpublish';
+    userPrompt?: string;
+    domain?: string;
+    hasDeployment?: boolean;
+  }) => void;
+  dismissJob: (jobId: string) => void;
+}
+
+const GenerationContext = createContext<GenerationContextValue | null>(null);
+
+export function useGeneration() {
+  const ctx = useContext(GenerationContext);
+  if (!ctx) throw new Error('useGeneration must be used within GenerationProvider');
+  return ctx;
+}
+
+async function findAvailableDomain(base: string): Promise<string | null> {
+  const slug = (s: string) =>
+    (s || '').toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').slice(0, 30).replace(/^-|-$/g, '');
+  const candidates = [slug(base)];
+  if (!candidates[0]) candidates[0] = 'lp-lead';
+  for (let i = 1; i <= 6; i++) candidates.push(`${candidates[0]}-${i}`);
+  for (const name of candidates) {
+    try {
+      const res = await fetch(`/api/check-name?name=${encodeURIComponent(name)}`);
+      const data = await res.json();
+      if (res.ok && data.available) return name;
+    } catch { /* keep trying */ }
+  }
+  return null;
+}
+
+export default function GenerationProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
+  const [jobs, setJobs] = useState<GenerationJob[]>([]);
+  const [expanded, setExpanded] = useState(false);
+  const aborters = useRef<Record<string, AbortController>>({});
+  const autoClearTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  useEffect(() => {
+    for (const j of jobs) {
+      if (j.phase === 'done' && !autoClearTimers.current[j.id]) {
+        autoClearTimers.current[j.id] = setTimeout(() => {
+          delete autoClearTimers.current[j.id];
+          setJobs(prev => prev.filter(x => x.id !== j.id));
+        }, 6000);
+      }
+    }
+  }, [jobs]);
+
+  useEffect(() => {
+    return () => {
+      for (const t of Object.values(autoClearTimers.current)) clearTimeout(t);
+      autoClearTimers.current = {};
+    };
+  }, []);
+
+  const updateJob = useCallback((id: string, patch: Partial<GenerationJob>) => {
+    setJobs(prev => prev.map(j => (j.id === id ? { ...j, ...patch } : j)));
+  }, []);
+
+  const invalidate = useCallback((campaignId: string) => {
+    queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] });
+    queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    queryClient.invalidateQueries({ queryKey: ['generations'] });
+  }, [queryClient]);
+
+  const startJob = useCallback((input: {
+    campaignId: string;
+    leadId: string;
+    leadName: string;
+    kind: 'generate' | 'modify' | 'unpublish';
+    userPrompt?: string;
+    domain?: string;
+    hasDeployment?: boolean;
+  }) => {
+    const jobId = uuidv4();
+    const job: GenerationJob = {
+      id: jobId,
+      campaignId: input.campaignId,
+      leadId: input.leadId,
+      leadName: input.leadName,
+      kind: input.kind,
+      userPrompt: input.userPrompt,
+      phase: 'checking',
+      message: '',
+    };
+    setJobs(prev => [job, ...prev]);
+    setExpanded(false);
+
+    const ac = new AbortController();
+    aborters.current[jobId] = ac;
+
+    (async () => {
+      try {
+        let deploymentName: string | undefined = input.domain;
+
+        // Phase 1: check name availability (fresh generates only)
+        if (input.kind === 'generate' && !input.hasDeployment) {
+          updateJob(jobId, { phase: 'checking', message: 'Checking name' });
+          const available = await findAvailableDomain(deploymentName || 'lp-lead');
+          if (!available) {
+            updateJob(jobId, { phase: 'error', message: 'All suggested domain names are taken. Pick a custom domain and try again.' });
+            return;
+          }
+          deploymentName = available;
+          if (available !== input.domain) {
+            await fetch(`/api/campaigns/${input.campaignId}/leads/${input.leadId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ deploymentName: available }),
+            }).catch(() => {});
+          }
+        }
+
+        // Phase 2: AI code generation (skipped for unpublish)
+        if (input.kind !== 'unpublish') {
+          updateJob(jobId, { phase: 'generating', message: input.kind === 'modify' ? 'Updating your website' : 'Generating' });
+          const genUrl = input.kind === 'modify'
+            ? `/api/campaigns/${input.campaignId}/leads/${input.leadId}/landing-page/modify`
+            : `/api/campaigns/${input.campaignId}/leads/${input.leadId}/landing-page`;
+          const genBody = input.kind === 'modify'
+            ? { userPrompt: input.userPrompt }
+            : { extraInstructions: input.userPrompt };
+          const genRes = await fetch(genUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(genBody),
+            signal: ac.signal,
+          });
+          if (!genRes.ok) {
+            const e = await genRes.json().catch(() => ({ error: 'Generation failed' }));
+            throw new Error(e.error || 'Generation failed');
+          }
+          invalidate(input.campaignId);
+        }
+
+        // Phase 3: deploy with auto-fix (streams progress)
+        updateJob(jobId, { phase: 'deploying', message: input.kind === 'unpublish' ? 'Unpublishing website' : 'Putting your website online' });
+        const depUrl = input.kind === 'unpublish'
+          ? `/api/campaigns/${input.campaignId}/leads/${input.leadId}/unpublish`
+          : `/api/campaigns/${input.campaignId}/leads/${input.leadId}/deploy`;
+        const depBody = input.kind === 'unpublish' ? {} : { userPrompt: input.userPrompt };
+        const depRes = await fetch(depUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(depBody),
+          signal: ac.signal,
+        });
+        if (!depRes.body) throw new Error('No response from deploy');
+        const reader = depRes.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let result: { success: boolean; error?: string; url?: string } = { success: false };
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const blocks = buffer.split('\n\n');
+          buffer = blocks.pop() || '';
+          for (const block of blocks) {
+            const line = block.trim();
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.message) updateJob(jobId, { message: data.message });
+              if (data.step === 'deploying') updateJob(jobId, { phase: 'deploying' });
+              if (data.step === 'fixing' || data.step === 'build_failed') updateJob(jobId, { phase: 'fixing' });
+              if (data.step === 'complete') result = { success: !!data.success, error: data.error, url: data.url };
+            } catch { /* ignore */ }
+          }
+        }
+        if (result.success) {
+          updateJob(jobId, { phase: 'done', message: 'Deployed!', url: result.url });
+        } else {
+          updateJob(jobId, { phase: 'error', message: result.error || 'Deploy failed' });
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          updateJob(jobId, { phase: 'error', message: 'Cancelled' });
+        } else {
+          updateJob(jobId, { phase: 'error', message: err instanceof Error ? err.message : 'Generation failed' });
+        }
+      } finally {
+        invalidate(input.campaignId);
+        delete aborters.current[jobId];
+      }
+    })();
+  }, [updateJob, invalidate]);
+
+  const dismissJob = useCallback((jobId: string) => {
+    aborters.current[jobId]?.abort();
+    delete aborters.current[jobId];
+    if (autoClearTimers.current[jobId]) {
+      clearTimeout(autoClearTimers.current[jobId]);
+      delete autoClearTimers.current[jobId];
+    }
+    setJobs(prev => prev.filter(j => j.id !== jobId));
+  }, []);
+
+  const activeJobs = jobs.filter(j => j.phase !== 'done' && j.phase !== 'error');
+
+  const value: GenerationContextValue = {
+    jobs,
+    activeJobs,
+    expanded,
+    setExpanded,
+    startJob,
+    dismissJob,
+  };
+
+  return <GenerationContext.Provider value={value}>{children}</GenerationContext.Provider>;
+}

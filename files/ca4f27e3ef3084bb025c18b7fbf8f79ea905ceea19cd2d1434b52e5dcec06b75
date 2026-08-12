@@ -1,0 +1,10 @@
+// Strips leading non-ASCII garbage (e.g. mis-decoded glyphs like U+00EE U+0192 U+02C6)
+// and any newlines/control chars that some scrapes prepend to the address.
+export function cleanAddress(raw: string | undefined | null): string {
+  if (!raw) return '';
+  return raw
+    .replace(/^[\s\S]*?\n/, '')           // drop everything up to and including the first newline
+    .replace(/^[^\x20-\x7E]+/, '')        // strip leading non-ASCII junk
+    .replace(/\s+/g, ' ')
+    .trim();
+}

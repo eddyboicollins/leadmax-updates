@@ -1,0 +1,13 @@
+import { NextRequest } from 'next/server';
+import { getGenerationCountsForCampaign } from '@/lib/store';
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const campaignId = searchParams.get('campaignId');
+  if (campaignId) {
+    const counts = await getGenerationCountsForCampaign(campaignId);
+    return Response.json(counts);
+  }
+
+  return Response.json({ error: 'campaignId is required' }, { status: 400 });
+}

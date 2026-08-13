@@ -1,0 +1,25 @@
+import type { NextConfig } from 'next';
+import fs from 'node:fs';
+
+function appVersion(): string {
+  try {
+    return (JSON.parse(fs.readFileSync('package.json', 'utf-8')).version as string) ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
+const nextConfig: NextConfig = {
+  output: 'standalone',
+  generateBuildId: () => Promise.resolve(`build-${appVersion()}`),
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '10mb',
+    },
+  },
+  outputFileTracingExcludes: {
+    '/**': ['./data/**', './build/**', './release/**', './.env', './.env.*'],
+  },
+};
+
+export default nextConfig;

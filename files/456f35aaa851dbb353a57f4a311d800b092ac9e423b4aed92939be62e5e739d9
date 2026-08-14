@@ -1,0 +1,11 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { restoreCampaign } from '@/lib/store';
+
+export async function POST(request: NextRequest) {
+  const { id } = await request.json();
+  if (!id) {
+    return NextResponse.json({ error: 'id required' }, { status: 400 });
+  }
+  await restoreCampaign(id);
+  return NextResponse.json({ success: true });
+}

@@ -1,0 +1,176 @@
+const http = require('http');
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
+
+const PORT = process.env.PORT || 3001;
+const API_KEY = process.env.IMGBB_KEY || process.argv[3] || '';
+
+const IMGBB_API = 'https://api.imgbb.com/1/upload';
+
+/* ------------------------------------------------------------------ */
+/*  Help                                                               */
+/* ------------------------------------------------------------------ */
+function printHelp() {
+  console.log(`
+  imgbb-uploader.js – upload images to imgbb.com, get back a URL
+
+  USAGE
+    node imgbb-uploader.js <filePath> [apiKey]
+        Upload a local image and print the URL, then exit.
+
+    node imgbb-uploader.js [--port <n>] [apiKey]
+        Start HTTP proxy server.
+        POST /  { "path": "C:/photo.jpg" }  →  { "url": "...", "delete_url": "..." }
+
+  ENV
+    IMGBB_KEY    your imgbb API key (get one free at https://api.imgbb.com)
+
+  EXAMPLES
+    node imgbb-uploader.js screenshot.png
+    node imgbb-uploader.js screenshot.png abc123def456
+    set IMGBB_KEY=abc123def456 && node imgbb-uploader.js --port 4000
+`.trim());
+}
+
+/* ------------------------------------------------------------------ */
+/*  Upload to imgbb                                                    */
+/* ------------------------------------------------------------------ */
+function uploadToImgbb(base64Image) {
+  return new Promise((resolve, reject) => {
+    const params = new URLSearchParams();
+    params.append('key', API_KEY);
+    params.append('image', base64Image);
+
+    const body = params.toString();
+    const url = new URL(IMGBB_API);
+
+    const options = {
+      hostname: url.hostname,
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.success) {
+            resolve({
+              url: json.data.url,
+              delete_url: json.data.delete_url,
+              display_url: json.data.display_url,
+            });
+          } else {
+            reject(new Error(json.error?.message || json.error || 'Upload rejected by imgbb'));
+          }
+        } catch (e) {
+          reject(new Error('Failed to parse imgbb response: ' + data.slice(0, 200)));
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/*  CLI mode                                                           */
+/* ------------------------------------------------------------------ */
+async function cliMode(filePath) {
+  if (!fs.existsSync(filePath)) {
+    console.error('File not found:', filePath);
+    process.exit(1);
+  }
+  const buf = fs.readFileSync(filePath);
+  const b64 = buf.toString('base64');
+  const result = await uploadToImgbb(b64);
+  console.log(result.url);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Server mode                                                        */
+/* ------------------------------------------------------------------ */
+function serverMode() {
+  const server = http.createServer((req, res) => {
+    function json(status, data) {
+      res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(data));
+    }
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      });
+      return res.end();
+    }
+
+    if (req.method !== 'POST') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      return res.end(`<form method="POST" action="/"><input name="path" size="60" placeholder="C:/full/path/to/image.jpg"/><button>Upload</button></form><p>Or send POST with JSON: { "path": "..." }</p>`);
+    }
+
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', async () => {
+      try {
+        let filePath;
+        const ct = req.headers['content-type'] || '';
+        if (ct.includes('application/json')) {
+          const parsed = JSON.parse(body);
+          filePath = parsed.path;
+        } else if (ct.includes('application/x-www-form-urlencoded')) {
+          filePath = new URLSearchParams(body).get('path');
+        } else {
+          return json(400, { error: 'Send JSON with { "path": "..." }' });
+        }
+
+        if (!filePath) return json(400, { error: 'Missing "path" in request body' });
+
+        if (!fs.existsSync(filePath)) return json(404, { error: 'File not found: ' + filePath });
+
+        const buf = fs.readFileSync(filePath);
+        const b64 = buf.toString('base64');
+        const result = await uploadToImgbb(b64);
+        json(200, result);
+      } catch (err) {
+        json(500, { error: err.message });
+      }
+    });
+  });
+
+  server.listen(PORT, () => {
+    console.log(`imgbb proxy running on http://localhost:${PORT}`);
+    if (!API_KEY) console.log('WARNING: Set IMGBB_KEY env var or pass apiKey as argument. Get one at https://api.imgbb.com');
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/*  Entry                                                              */
+/* ------------------------------------------------------------------ */
+const first = process.argv[2];
+if (!first || first === '--help' || first === '-h') {
+  printHelp();
+  process.exit(0);
+}
+
+if (first === '--port') {
+  const p = parseInt(process.argv[3], 10);
+  if (p) process.env.PORT = String(p);
+  serverMode();
+} else if (fs.existsSync(first)) {
+  if (!API_KEY) { console.error('ERROR: No API key. Set IMGBB_KEY env or pass as 2nd arg.'); process.exit(1); }
+  cliMode(first).catch((e) => { console.error(e.message); process.exit(1); });
+} else {
+  serverMode();
+}

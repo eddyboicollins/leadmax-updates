@@ -1,0 +1,122 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getChat, getMessages, addMessage, renameChat, endChat } from '@/lib/store';
+import { getSettings } from '@/lib/store';
+import { askAssistant, cleanReply } from '@/lib/assistant';
+import { DEFAULT_GEMINI_MODEL, type GeminiModel } from '@/lib/gemini';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
+
+const encoder = new TextEncoder();
+
+function ndjson(controller: ReadableStreamDefaultController, data: unknown) {
+  controller.enqueue(encoder.encode(JSON.stringify(data) + '\n'));
+}
+
+function chunkWords(text: string, chunkSize = 5): string[] {
+  const words = text.split(/\s+/);
+  const chunks: string[] = [];
+  for (let i = 0; i < words.length; i += chunkSize) {
+    chunks.push(words.slice(i, i + chunkSize).join(' '));
+  }
+  return chunks.filter(Boolean);
+}
+
+function sleep(ms: number) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+function truncateTitle(content: string): string {
+  const clean = content.trim().replace(/\s+/g, ' ');
+  return clean.length > 48 ? clean.slice(0, 48).trimEnd() + '…' : clean;
+}
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const [chat, messages] = await Promise.all([getChat(id), getMessages(id)]);
+  if (!chat) return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
+  return NextResponse.json({
+    chat: {
+      id: chat.id,
+      title: chat.title,
+      profile: chat.profile,
+      ended: !!chat.ended,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+    },
+    messages,
+  });
+}
+
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  let content = '';
+  try {
+    const body = await request.json();
+    content = typeof body?.content === 'string' ? body.content.trim() : '';
+  } catch {
+    return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
+  }
+  if (!content) return NextResponse.json({ error: 'content required' }, { status: 400 });
+
+  const chat = await getChat(id);
+  if (!chat) return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
+  if (chat.ended) {
+    return NextResponse.json({ error: 'Call ended' }, { status: 400 });
+  }
+
+  if (chat.title === 'New conversation') {
+    await renameChat(id, truncateTitle(content));
+  }
+  await addMessage(id, { role: 'user', content });
+
+  const settings = await getSettings();
+  const model: GeminiModel = (settings.geminiModel as GeminiModel) || DEFAULT_GEMINI_MODEL;
+
+  const history = await getMessages(id);
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        ndjson(controller, { type: 'start' });
+        const rawReply = await askAssistant(
+          id,
+          history.map(m => ({ role: m.role, content: m.content })),
+          settings.geminiApiKey || '',
+          model,
+          (attempt, max, err) => ndjson(controller, { type: 'retry', attempt, max, error: err }),
+          settings.geminiSource || 'proxy',
+        );
+        const { content: reply, ended } = cleanReply(rawReply || '');
+        if (!reply) throw new Error('Empty reply');
+
+        await addMessage(id, { role: 'assistant', content: reply });
+        if (ended) {
+          await endChat(id);
+        }
+
+        const chunks = chunkWords(reply);
+        for (const chunk of chunks) {
+          ndjson(controller, { type: 'chunk', content: chunk });
+          await sleep(18);
+        }
+        ndjson(controller, { type: 'done', ended });
+        controller.close();
+      } catch (err: unknown) {
+        ndjson(controller, {
+          type: 'error',
+          error: err instanceof Error ? err.message : 'Assistant call failed',
+        });
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/x-ndjson',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    },
+  });
+}

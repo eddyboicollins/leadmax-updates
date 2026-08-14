@@ -1,0 +1,102 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaign, getLead, updateLeadImages, getSettings } from '@/lib/store';
+import sharp from 'sharp';
+import { uploadToImgbb } from '@/lib/imgbb';
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { id, leadId } = await params;
+    const settings = await getSettings();
+    const imgbbKey = settings.imgbbKey;
+    if (!imgbbKey) {
+      return NextResponse.json({ error: 'ImgBB API key not configured. Set it in Settings.' }, { status: 400 });
+    }
+
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    const currentImages = lead.images || [];
+    if (currentImages.length >= 10) {
+      return NextResponse.json({ error: 'Maximum 10 images allowed' }, { status: 400 });
+    }
+
+    const formData = await request.formData();
+    const file = formData.get('file') as File | null;
+    if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+
+    const alt = (formData.get('alt') as string) || '';
+
+    const arrayBuffer = await file.arrayBuffer();
+    const inputBuffer = Buffer.from(arrayBuffer);
+
+    const transformer = sharp(inputBuffer);
+    const metadata = await transformer.metadata();
+    const webpBuffer = await transformer
+      .webp({ quality: 80 })
+      .toBuffer();
+
+    const b64 = webpBuffer.toString('base64');
+    const { url, delete_url } = await uploadToImgbb(b64, imgbbKey);
+
+    const image = { id: crypto.randomUUID(), url, alt, width: metadata.width, height: metadata.height, deleteUrl: delete_url };
+    const newImages = [...currentImages, image];
+    await updateLeadImages(leadId, newImages);
+
+    return NextResponse.json(image);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Upload failed' }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { id, leadId } = await params;
+
+    const { imageId } = await request.json();
+
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    const newImages = (lead.images || []).filter((i) => i.id !== imageId);
+    await updateLeadImages(leadId, newImages);
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Delete failed' }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { id, leadId } = await params;
+    const { imageId, alt } = await request.json();
+
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    const newImages = (lead.images || []).map((i) => i.id === imageId ? { ...i, alt } : i);
+    await updateLeadImages(leadId, newImages);
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Update failed' }, { status: 500 });
+  }
+}

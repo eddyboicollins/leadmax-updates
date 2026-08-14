@@ -1,0 +1,3 @@
+{
+  "/api/campaigns/restore/route": "app/api/campaigns/restore/route.js"
+}

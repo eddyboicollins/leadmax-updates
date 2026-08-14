@@ -46,6 +46,9 @@ html[dir="rtl"] body.lm-sidebar-open {
 }
 
 /* Almarai self-hosted (no build-time fetch to Google Fonts) */
+:root {
+  --font-almarai: 'Almarai';
+}
 @font-face {
   font-family: 'Almarai';
   font-style: normal;

@@ -1,0 +1,113 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaign, getLead, updateLeadLandingPage, getSettings } from '@/lib/store';
+import { buildPromptData, renderPrompt, DEFAULT_SYSTEM_PROMPT, askGeminiAndValidate } from '@/lib/prompts';
+import type { GeminiModel } from '@/lib/gemini';
+
+export const maxDuration = 120;
+
+const DEFAULT_SECTIONS = [
+  { id: 'navbar', type: 'navbar', sortOrder: 0, content: {}, styles: {} },
+  { id: 'hero', type: 'hero', sortOrder: 1, content: {}, styles: {} },
+  { id: 'services', type: 'services', sortOrder: 2, content: {}, styles: {} },
+  { id: 'testimonials', type: 'testimonials', sortOrder: 3, content: {}, styles: {} },
+  { id: 'faq', type: 'faq', sortOrder: 4, content: {}, styles: {} },
+  { id: 'contact', type: 'contact', sortOrder: 5, content: {}, styles: {} },
+  { id: 'map', type: 'map', sortOrder: 6, content: {}, styles: {} },
+  { id: 'footer', type: 'footer', sortOrder: 7, content: {}, styles: {} },
+];
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { id, leadId } = await params;
+
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    const body = await request.json().catch(() => ({}));
+    const extraInstructions = body.extraInstructions || '';
+
+    const settings = await getSettings();
+    const data = buildPromptData(lead);
+    const template = settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+    const finalTemplate = extraInstructions
+      ? `EXTRA INSTRUCTIONS FROM USER (these take priority over everything):\n${extraInstructions}\n\n${template}`
+      : template;
+    const prompt = renderPrompt(finalTemplate, data);
+    const cleanTsx = await askGeminiAndValidate(prompt, settings.geminiApiKey || '', settings.geminiModel as GeminiModel, 4, undefined, settings.geminiSource || 'proxy');
+
+    const landingPage = {
+      tsx: cleanTsx,
+      generatedAt: new Date().toISOString(),
+      version: 1,
+      sections: DEFAULT_SECTIONS,
+    };
+
+    await updateLeadLandingPage(leadId, landingPage);
+
+    return NextResponse.json({ success: true, version: 1 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to generate landing page';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { id, leadId } = await params;
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    if (!lead.landingPage) {
+      return NextResponse.json({ error: 'No landing page generated yet' }, { status: 404 });
+    }
+
+    return NextResponse.json(lead.landingPage);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Request failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { id, leadId } = await params;
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    const body = await request.json();
+    const existingLp = lead.landingPage;
+    const tx = body.tsx || existingLp?.tsx;
+
+    const landingPage = {
+      tsx: tx,
+      generatedAt: existingLp?.generatedAt || new Date().toISOString(),
+      version: (existingLp?.version || 0) + 1,
+      sections: body.sections || existingLp?.sections || [],
+    };
+
+    await updateLeadLandingPage(leadId, landingPage);
+
+    return NextResponse.json({ success: true, version: landingPage.version });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Request failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

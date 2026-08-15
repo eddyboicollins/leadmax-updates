@@ -1,0 +1,24 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { scrapeLog } from '@/lib/scrapeLog';
+
+export const dynamic = 'force-dynamic';
+
+// Client-side hook: the single-scrape flow filters leads in the browser, so
+// server logs alone can't show why a lead was dropped. The ScrapeProvider POSTs
+// filter decisions and per-lead save outcomes here, and they land in the same
+// scrape_session.txt as the server-side scrape logs.
+export async function POST(request: NextRequest) {
+  try {
+    const { message } = await request.json();
+    if (typeof message === 'string' && message) {
+      scrapeLog('[client] ' + message);
+      return NextResponse.json({ ok: true });
+    }
+    return NextResponse.json({ ok: false, error: 'message required' }, { status: 400 });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      { ok: false, error: err instanceof Error ? err.message : 'failed' },
+      { status: 500 },
+    );
+  }
+}

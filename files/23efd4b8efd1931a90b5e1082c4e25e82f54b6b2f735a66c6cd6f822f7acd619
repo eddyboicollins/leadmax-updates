@@ -1,0 +1,27 @@
+import fs from 'fs';
+import path from 'path';
+
+// Debug logger for the scraping pipeline. Appends timestamped lines to
+// scrape_session.txt in the project directory so the user can inspect what
+// was found, whether it matched the filters, and whether it was saved.
+// Failures to write must never break the scrape itself.
+const LOG_FILE = process.env.SCRAPE_LOG_FILE
+  ? process.env.SCRAPE_LOG_FILE
+  : path.join(process.cwd(), 'scrape_session.txt');
+
+export function scrapeLog(...parts: unknown[]): void {
+  const line = `[${new Date().toISOString()}] ${parts
+    .map((p) => (typeof p === 'string' ? p : safeJson(p)))
+    .join(' ')}`;
+  try {
+    fs.appendFileSync(LOG_FILE, line + '\n');
+  } catch { /* non-fatal */ }
+}
+
+function safeJson(v: unknown): string {
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}

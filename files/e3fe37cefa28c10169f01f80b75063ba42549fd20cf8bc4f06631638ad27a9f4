@@ -1,0 +1,15 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { purgeCampaign } from '@/lib/store';
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const id = request.nextUrl.searchParams.get('id');
+    if (!id) {
+      return NextResponse.json({ error: 'id required' }, { status: 400 });
+    }
+    await purgeCampaign(id);
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 400 });
+  }
+}

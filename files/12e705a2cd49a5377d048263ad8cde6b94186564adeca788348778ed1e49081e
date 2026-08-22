@@ -1,0 +1,23 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaign, getLead, removeLeadScrapedImage } from '@/lib/store';
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string; scrapedImageId: string }> },
+) {
+  try {
+    const { id, leadId, scrapedImageId } = await params;
+
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    await removeLeadScrapedImage(leadId, scrapedImageId);
+
+    return NextResponse.json({ success: true });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Delete failed' }, { status: 500 });
+  }
+}

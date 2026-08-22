@@ -1,6 +1,6 @@
 {
   "version": "aa3dd19",
-  "updatedAt": "2026-08-22T12:51:47.086Z",
+  "updatedAt": "2026-08-22T13:30:43.960Z",
   "files": {
     ".next/app-path-routes-manifest.json": "48b4b68da973615a0e0225af50f01fa9cf45e16d3df841e784a23129841a551d",
     ".next/build-manifest.json": "b5960f119175021a04654e5b21dba87dba7cbb3d8e9ea09ba0cb3363b2913556",
@@ -592,5 +592,5 @@
     "tsconfig.json": "a31fd2fdc0f877d25496cf4f847b01acf59238ca834134d0036f6448b0ea549c",
     "tsconfig.tsbuildinfo": "ff97d350dd472b2bcd95f535ea8a561fa0e4197839b4082e7008ef0fad5d6f12"
   },
-  "signature": "lkXUr0KFw4SEwSSEar0O/ZN0d76urFSRNJvae6Lc01HcYCxJ/Jjmupc/p4ONs6l5+bWPxLyj8ZZvv0xWKfd0Bw=="
+  "signature": "vSGT8/i7nFykIVG0TVZxpsluSmHm6Eyb1sSYj4YJ8o6xjP1KfPfSQystNfRbkK2pjylaODBsE0Ponl7DP+gVCg=="
 }

@@ -1,0 +1,624 @@
+[2026-08-15T11:26:48.436Z] ===== SCRAPE SESSION START ===== {"query":"coffee shop sfax","at":"2026-08-15T11:26:48.436Z"}
+[2026-08-15T11:26:48.437Z] [scrape] launching browser from C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+[2026-08-15T11:26:48.456Z] [client] REGION 1/1 "coffee shop sfax" filters minRating=0 maxRating=5 minReviews=0
+[2026-08-15T11:26:48.943Z] [scrape] FOUND lead {"name":"ROBUSTA COFFEE LOUNGE","rating":4.3,"ratingCount":73,"phone":"25828222","website":"https://www.instagram.com/robustacoffee2024?igsh=MTIwY3d3djJoczJzNQ==","address":"28 Av. 5 août, Sfax","placeId":"ChIJbcsSTe7TARMRFdqjTkIB-HI","category":"Coffee shop"}
+[2026-08-15T11:26:55.138Z] [scrape] FOUND lead {"name":"Café Diwan","rating":4.1,"ratingCount":62,"phone":"","website":"","address":"PQM6+JC9, Rue de La Kasbah, Sfax","placeId":"ChIJl_SUeiwtABMRV1X1xIBDyj8","category":"Coffee shop"}
+[2026-08-15T11:26:59.681Z] [scrape] FOUND lead {"name":"Acacia coffee shop","rating":4.8,"ratingCount":17,"phone":"44534312","website":"","address":"RQG4+X94, Sfax","placeId":"ChIJe7yMIgDRARMR5SnA7EcEgec","category":"Coffee shop"}
+[2026-08-15T11:27:04.056Z] [scrape] FOUND lead {"name":"Opti Coffee Shop","rating":5,"ratingCount":14,"phone":"44391850","website":"https://www.instagram.com/opticoffeeshop/","address":"QP7V+R6G, Sfax","placeId":"ChIJ00M7TgDTARMR5gdhX3AFgmA","category":"Coffee shop"}
+[2026-08-15T11:27:08.753Z] [scrape] FOUND lead {"name":"Tito's Coffee Shop","rating":3.9,"ratingCount":39,"phone":"54400046","website":"","address":"PQQ3+CQ3, شارع 14 جانفي, Sfax 3027","placeId":"ChIJBWI4pSrTARMRa-MY_tcfVE4","category":"Cafe"}
+[2026-08-15T11:27:12.948Z] [scrape] phase1 total results = 112
+[2026-08-15T11:27:13.265Z] [scrape] FOUND lead {"name":"Café Moulin Rouge","rating":4.1,"ratingCount":67,"phone":"52957000","website":"","address":"PQW8+C9X, Sfax","placeId":"ChIJV784IdDSARMR7yKDelSzHw0","category":"Cafe"}
+[2026-08-15T11:27:17.174Z] [scrape] FOUND lead {"name":"Scatola coffee shop","rating":4.4,"ratingCount":32,"phone":"26258843","website":"","address":"Rte de la Soukra, Sfax","placeId":"ChIJQTpN9CAtABMRT0tYnbKYjs0","category":"Cafe"}
+[2026-08-15T11:27:17.193Z] [client] FILTER PASS "Scatola coffee shop" rating=4.4 ratingCount=32
+[2026-08-15T11:27:17.220Z] [save] SAVED lead {"leadId":"7dcba355-27b6-4e39-b475-1d4f0926a9f7","name":"Scatola coffee shop","rating":4.4,"ratingCount":32,"phone":"26258843","placeId":"ChIJQTpN9CAtABMRT0tYnbKYjs0"}
+[2026-08-15T11:27:17.257Z] [client] SAVE ok "Scatola coffee shop" leadId=7dcba355-27b6-4e39-b475-1d4f0926a9f7
+[2026-08-15T11:27:18.101Z] [scrape] FOUND lead {"name":"Café Atlas","rating":4.1,"ratingCount":42,"phone":"","website":"","address":"QPJW+CW6, Sfax","placeId":"ChIJQ5lNQynTARMR4WEs-rfXZK0","category":"Cafe"}
+[2026-08-15T11:27:20.458Z] [scrape] FOUND lead {"name":"Beanup coffee","rating":4.9,"ratingCount":55,"phone":"50624146","website":"http://beanup.coffee/","address":"km 5, Sfax, 5 Rte Gremda, Gremda 3022","placeId":"ChIJO95so13TARMRqpIwhgpED4w","category":"Coffee shop"}
+[2026-08-15T11:27:20.474Z] [client] FILTER PASS "Beanup coffee" rating=4.9 ratingCount=55
+[2026-08-15T11:27:20.495Z] [save] SAVED lead {"leadId":"0903c1b5-c7b5-47e9-abcf-f141fcabdd23","name":"Beanup coffee","rating":4.9,"ratingCount":55,"phone":"50624146","placeId":"ChIJO95so13TARMRqpIwhgpED4w"}
+[2026-08-15T11:27:20.515Z] [client] SAVE ok "Beanup coffee" leadId=0903c1b5-c7b5-47e9-abcf-f141fcabdd23
+[2026-08-15T11:27:21.816Z] [scrape] FOUND lead {"name":"Salon de Thé Shine Up","rating":3.9,"ratingCount":80,"phone":"21871239","website":"https://www.facebook.com/SHINEUPSFAX/?ref=bookmarks","address":"QQ52+V3Q, Sfax 3031","placeId":"ChIJX44M5CHTARMRSlFVJaR45Tc","category":"Cafe"}
+[2026-08-15T11:27:24.541Z] [scrape] FOUND lead {"name":"GoodNess","rating":5,"ratingCount":16,"phone":"","website":"","address":"PPXP+J42، طريق العين, Sfax","placeId":"ChIJWbyCnfTTARMRzKvj6_TzVNg","category":"Coffee shop"}
+[2026-08-15T11:27:24.560Z] [client] FILTER PASS "GoodNess" rating=5 ratingCount=16
+[2026-08-15T11:27:24.587Z] [save] SAVED lead {"leadId":"10c172bb-e9a5-4f60-a0c6-018df7218336","name":"GoodNess","rating":5,"ratingCount":16,"phone":"","placeId":"ChIJWbyCnfTTARMRzKvj6_TzVNg"}
+[2026-08-15T11:27:24.608Z] [client] SAVE ok "GoodNess" leadId=10c172bb-e9a5-4f60-a0c6-018df7218336
+[2026-08-15T11:27:27.074Z] [scrape] FOUND lead {"name":"SOCOTRA COFFEE LOUNGE","rating":3.3,"ratingCount":49,"phone":"","website":"","address":"QPHV+3VM, Sfax","placeId":"ChIJBVoPMADTARMRoNhdEiiSQ3g","category":"Coffee shop"}
+[2026-08-15T11:27:27.285Z] [scrape] FOUND lead {"name":"Square coffee shop","rating":5,"ratingCount":2,"phone":"28087235","website":"https://www.instagram.com/square_coffee_shop","address":"PPXG+4WW, Ceinture Bourguiba, Sfax","placeId":"ChIJ0aN5VADTARMRH5C1kdD54gA","category":"Coffee shop"}
+[2026-08-15T11:27:27.301Z] [client] FILTER PASS "Square coffee shop" rating=5 ratingCount=2
+[2026-08-15T11:27:27.325Z] [save] SAVED lead {"leadId":"895f4c95-f94c-4dae-a49e-c19d40f8e08b","name":"Square coffee shop","rating":5,"ratingCount":2,"phone":"28087235","placeId":"ChIJ0aN5VADTARMRH5C1kdD54gA"}
+[2026-08-15T11:27:27.349Z] [client] SAVE ok "Square coffee shop" leadId=895f4c95-f94c-4dae-a49e-c19d40f8e08b
+[2026-08-15T11:27:34.466Z] [scrape] FOUND lead {"name":"Linea Verda","rating":4.5,"ratingCount":11,"phone":"28738585","website":"","address":"Linea Verda, Route Lafrane, km 0 5, Sfax 3003","placeId":"ChIJlfKdCU3TARMRmEeCHJpqm1Y","category":"Cafe"}
+[2026-08-15T11:27:36.994Z] [scrape] FOUND lead {"name":"ROBUSTA COFFEE LOUNGE","rating":4.3,"ratingCount":73,"phone":"25828222","website":"https://www.instagram.com/robustacoffee2024?igsh=MTIwY3d3djJoczJzNQ==","address":"28 Av. 5 août, Sfax","placeId":"ChIJbcsSTe7TARMRFdqjTkIB-HI","category":"Coffee shop"}
+[2026-08-15T11:27:37.010Z] [client] FILTER PASS "ROBUSTA COFFEE LOUNGE" rating=4.3 ratingCount=73
+[2026-08-15T11:27:37.044Z] [save] SAVED lead {"leadId":"1eb2d231-b6cc-4bbd-b794-1039f7d77959","name":"ROBUSTA COFFEE LOUNGE","rating":4.3,"ratingCount":73,"phone":"25828222","placeId":"ChIJbcsSTe7TARMRFdqjTkIB-HI"}
+[2026-08-15T11:27:37.065Z] [client] SAVE ok "ROBUSTA COFFEE LOUNGE" leadId=1eb2d231-b6cc-4bbd-b794-1039f7d77959
+[2026-08-15T11:27:38.977Z] [scrape] FOUND lead {"name":"Camello Coffee Shop","rating":4.4,"ratingCount":18,"phone":"98762633","website":"","address":"QQ73+PQ7, طريق, Sfax","placeId":"ChIJh2q-Gx7TARMRnPsBl5jKOfM","category":"Cafe"}
+[2026-08-15T11:27:43.202Z] [scrape] FOUND lead {"name":"Café Diwan","rating":4.1,"ratingCount":62,"phone":"","website":"","address":"PQM6+JC9, Rue de La Kasbah, Sfax","placeId":"ChIJl_SUeiwtABMRV1X1xIBDyj8","category":"Coffee shop"}
+[2026-08-15T11:27:43.215Z] [client] FILTER PASS "Café Diwan" rating=4.1 ratingCount=62
+[2026-08-15T11:27:43.233Z] [save] SAVED lead {"leadId":"b1e928de-a7f1-49ca-904e-0b9d3bf919bf","name":"Café Diwan","rating":4.1,"ratingCount":62,"phone":"","placeId":"ChIJl_SUeiwtABMRV1X1xIBDyj8"}
+[2026-08-15T11:27:43.249Z] [client] SAVE ok "Café Diwan" leadId=b1e928de-a7f1-49ca-904e-0b9d3bf919bf
+[2026-08-15T11:27:45.397Z] [scrape] FOUND lead {"name":"Coffee lab","rating":3.6,"ratingCount":41,"phone":"20738380","website":"https://instagram.com/coffeelab.tn?igshid=YmMyMTA2M2Y=","address":"Av. Habib Bourguiba, Sfax 3029","placeId":"ChIJlXRRxIzTARMR_W9CcWF1MZk","category":"Coffee shop"}
+[2026-08-15T11:27:46.213Z] [scrape] FOUND lead {"name":"Acacia coffee shop","rating":4.8,"ratingCount":17,"phone":"44534312","website":"","address":"RQG4+X94, Sfax","placeId":"ChIJe7yMIgDRARMR5SnA7EcEgec","category":"Coffee shop"}
+[2026-08-15T11:27:46.231Z] [client] FILTER PASS "Acacia coffee shop" rating=4.8 ratingCount=17
+[2026-08-15T11:27:46.256Z] [save] SAVED lead {"leadId":"9242d1cd-1314-422b-906c-b0521d1134ce","name":"Acacia coffee shop","rating":4.8,"ratingCount":17,"phone":"44534312","placeId":"ChIJe7yMIgDRARMR5SnA7EcEgec"}
+[2026-08-15T11:27:46.282Z] [client] SAVE ok "Acacia coffee shop" leadId=9242d1cd-1314-422b-906c-b0521d1134ce
+[2026-08-15T11:27:48.438Z] [scrape] FOUND lead {"name":"Hola Coffee Shop","rating":3.4,"ratingCount":44,"phone":"29420166","website":"","address":"Ceinture Bourguiba, Sfax 3000","placeId":"ChIJf0eXOCXTARMRG1yS5b1XzwM","category":"Cafe"}
+[2026-08-15T11:27:49.949Z] [scrape] FOUND lead {"name":"Opti Coffee Shop","rating":5,"ratingCount":14,"phone":"44391850","website":"https://www.instagram.com/opticoffeeshop/","address":"QP7V+R6G, Sfax","placeId":"ChIJ00M7TgDTARMR5gdhX3AFgmA","category":"Coffee shop"}
+[2026-08-15T11:27:49.967Z] [client] FILTER PASS "Opti Coffee Shop" rating=5 ratingCount=14
+[2026-08-15T11:27:50.005Z] [save] SAVED lead {"leadId":"516d3696-3402-4c40-88d6-a76ef3b08017","name":"Opti Coffee Shop","rating":5,"ratingCount":14,"phone":"44391850","placeId":"ChIJ00M7TgDTARMR5gdhX3AFgmA"}
+[2026-08-15T11:27:50.030Z] [client] SAVE ok "Opti Coffee Shop" leadId=516d3696-3402-4c40-88d6-a76ef3b08017
+[2026-08-15T11:27:53.564Z] [scrape] FOUND lead {"name":"Tito's Coffee Shop","rating":3.9,"ratingCount":39,"phone":"54400046","website":"","address":"PQQ3+CQ3, شارع 14 جانفي, Sfax 3027","placeId":"ChIJBWI4pSrTARMRa-MY_tcfVE4","category":"Cafe"}
+[2026-08-15T11:27:53.577Z] [client] FILTER PASS "Tito's Coffee Shop" rating=3.9 ratingCount=39
+[2026-08-15T11:27:53.612Z] [save] SAVED lead {"leadId":"53a49b37-53c6-4f18-a991-af90d8f2e1e6","name":"Tito's Coffee Shop","rating":3.9,"ratingCount":39,"phone":"54400046","placeId":"ChIJBWI4pSrTARMRa-MY_tcfVE4"}
+[2026-08-15T11:27:53.627Z] [client] SAVE ok "Tito's Coffee Shop" leadId=53a49b37-53c6-4f18-a991-af90d8f2e1e6
+[2026-08-15T11:27:53.857Z] [scrape] FOUND lead {"name":"Alba Coffee Shop","rating":3.1,"ratingCount":37,"phone":"","website":"","address":"Sfax","placeId":"ChIJCbC6LQDTARMRZ178M31DNAE","category":"Coffee shop"}
+[2026-08-15T11:27:57.850Z] [scrape] FOUND lead {"name":"Atome Coffee Shop","rating":5,"ratingCount":9,"phone":"55244536","website":"","address":"14 جانفي, Sfax 3000","placeId":"ChIJx6OgQ44tABMROTha9tjSdt8","category":"Coffee shop"}
+[2026-08-15T11:27:57.895Z] [scrape] FOUND lead {"name":"Café Moulin Rouge","rating":4.1,"ratingCount":67,"phone":"52957000","website":"","address":"PQW8+C9X, Sfax","placeId":"ChIJV784IdDSARMR7yKDelSzHw0","category":"Cafe"}
+[2026-08-15T11:27:57.910Z] [client] FILTER PASS "Café Moulin Rouge" rating=4.1 ratingCount=67
+[2026-08-15T11:27:57.932Z] [save] SAVED lead {"leadId":"f9ed817a-e339-4aac-9ca6-a6d891b2d9ec","name":"Café Moulin Rouge","rating":4.1,"ratingCount":67,"phone":"52957000","placeId":"ChIJV784IdDSARMR7yKDelSzHw0"}
+[2026-08-15T11:27:57.948Z] [client] SAVE ok "Café Moulin Rouge" leadId=f9ed817a-e339-4aac-9ca6-a6d891b2d9ec
+[2026-08-15T11:28:02.161Z] [scrape] FOUND lead {"name":"Café Atlas","rating":4.1,"ratingCount":42,"phone":"","website":"","address":"QPJW+CW6, Sfax","placeId":"ChIJQ5lNQynTARMR4WEs-rfXZK0","category":"Cafe"}
+[2026-08-15T11:28:02.174Z] [client] FILTER PASS "Café Atlas" rating=4.1 ratingCount=42
+[2026-08-15T11:28:02.195Z] [save] SAVED lead {"leadId":"2b4b319f-0136-44ab-87b2-9efcf0e69637","name":"Café Atlas","rating":4.1,"ratingCount":42,"phone":"","placeId":"ChIJQ5lNQynTARMR4WEs-rfXZK0"}
+[2026-08-15T11:28:02.213Z] [client] SAVE ok "Café Atlas" leadId=2b4b319f-0136-44ab-87b2-9efcf0e69637
+[2026-08-15T11:28:05.235Z] [scrape] FOUND lead {"name":"Offline coffee shop","rating":4.5,"ratingCount":22,"phone":"","website":"","address":"QP7R+8JF, Sfax","placeId":"ChIO1vfHcQAd_IIaPsUvfPwElytxLTOlXGojuBeMBF81JaRHWWtVW003X_1nT2ltwUeK1UbBtOWppCosV2E4OGCw33G__tJwZiM6Qr5HJJoPxii2Oh9t12FnWPR9A","category":"Coffee shop"}
+[2026-08-15T11:28:06.028Z] [scrape] FOUND lead {"name":"Salon de Thé Shine Up","rating":3.9,"ratingCount":80,"phone":"21871239","website":"https://www.facebook.com/SHINEUPSFAX/?ref=bookmarks","address":"QQ52+V3Q, Sfax 3031","placeId":"ChIJX44M5CHTARMRSlFVJaR45Tc","category":"Cafe"}
+[2026-08-15T11:28:06.051Z] [client] FILTER PASS "Salon de Thé Shine Up" rating=3.9 ratingCount=80
+[2026-08-15T11:28:06.075Z] [save] SAVED lead {"leadId":"ab67e468-dcb2-491a-8bf7-8cb49a1aec03","name":"Salon de Thé Shine Up","rating":3.9,"ratingCount":80,"phone":"21871239","placeId":"ChIJX44M5CHTARMRSlFVJaR45Tc"}
+[2026-08-15T11:28:06.103Z] [client] SAVE ok "Salon de Thé Shine Up" leadId=ab67e468-dcb2-491a-8bf7-8cb49a1aec03
+[2026-08-15T11:28:11.467Z] [scrape] FOUND lead {"name":"SOCOTRA COFFEE LOUNGE","rating":3.3,"ratingCount":49,"phone":"","website":"","address":"QPHV+3VM, Sfax","placeId":"ChIJBVoPMADTARMRoNhdEiiSQ3g","category":"Coffee shop"}
+[2026-08-15T11:28:11.479Z] [client] FILTER PASS "SOCOTRA COFFEE LOUNGE" rating=3.3 ratingCount=49
+[2026-08-15T11:28:11.499Z] [save] SAVED lead {"leadId":"1ea8f884-053e-4034-a958-18a3964d6dec","name":"SOCOTRA COFFEE LOUNGE","rating":3.3,"ratingCount":49,"phone":"","placeId":"ChIJBVoPMADTARMRoNhdEiiSQ3g"}
+[2026-08-15T11:28:11.517Z] [client] SAVE ok "SOCOTRA COFFEE LOUNGE" leadId=1ea8f884-053e-4034-a958-18a3964d6dec
+[2026-08-15T11:28:12.233Z] [scrape] FOUND lead {"name":"Milos Coffee House","rating":3.6,"ratingCount":32,"phone":"","website":"https://www.instagram.com/milos.coffeehouse/","address":"20 Rte Teniour, Sfax","placeId":"ChIJvfMbk2bTARMRtqdS5eqZIFw","category":"Coffee shop"}
+[2026-08-15T11:28:15.182Z] [scrape] FOUND lead {"name":"Linea Verda","rating":4.5,"ratingCount":11,"phone":"28738585","website":"","address":"Linea Verda, Route Lafrane, km 0 5, Sfax 3003","placeId":"ChIJlfKdCU3TARMRmEeCHJpqm1Y","category":"Cafe"}
+[2026-08-15T11:28:15.196Z] [client] FILTER PASS "Linea Verda" rating=4.5 ratingCount=11
+[2026-08-15T11:28:15.220Z] [save] SAVED lead {"leadId":"79f18298-6d45-4738-a85d-c34aa9cbbbba","name":"Linea Verda","rating":4.5,"ratingCount":11,"phone":"28738585","placeId":"ChIJlfKdCU3TARMRmEeCHJpqm1Y"}
+[2026-08-15T11:28:15.237Z] [client] SAVE ok "Linea Verda" leadId=79f18298-6d45-4738-a85d-c34aa9cbbbba
+[2026-08-15T11:28:16.417Z] [scrape] FOUND lead {"name":"Le Bayou Coffee Lounge","rating":3.7,"ratingCount":49,"phone":"51410255","website":"","address":"PPXQ+542, Rte El Ain, Sfax","placeId":"ChIJbQhhsS_TARMR7uYYrJFOYhI","category":"Coffee shop"}
+[2026-08-15T11:28:18.381Z] [scrape] FOUND lead {"name":"Camello Coffee Shop","rating":4.4,"ratingCount":18,"phone":"98762633","website":"","address":"QQ73+PQ7, طريق, Sfax","placeId":"ChIJh2q-Gx7TARMRnPsBl5jKOfM","category":"Cafe"}
+[2026-08-15T11:28:18.400Z] [client] FILTER PASS "Camello Coffee Shop" rating=4.4 ratingCount=18
+[2026-08-15T11:28:18.428Z] [save] SAVED lead {"leadId":"5ada42a4-e373-480b-a1f6-17f96fdb3bcd","name":"Camello Coffee Shop","rating":4.4,"ratingCount":18,"phone":"98762633","placeId":"ChIJh2q-Gx7TARMRnPsBl5jKOfM"}
+[2026-08-15T11:28:18.461Z] [client] SAVE ok "Camello Coffee Shop" leadId=5ada42a4-e373-480b-a1f6-17f96fdb3bcd
+[2026-08-15T11:28:22.902Z] [scrape] FOUND lead {"name":"Chill Out Sfax","rating":4.9,"ratingCount":7,"phone":"29550555","website":"","address":"Sfax","placeId":"ChIJaRjY2AktABMRf3RAwVnwv8Y","category":"Coffee shop"}
+[2026-08-15T11:28:22.916Z] [scrape] FOUND lead {"name":"Coffee lab","rating":3.6,"ratingCount":41,"phone":"20738380","website":"https://instagram.com/coffeelab.tn?igshid=YmMyMTA2M2Y=","address":"Av. Habib Bourguiba, Sfax 3029","placeId":"ChIJlXRRxIzTARMR_W9CcWF1MZk","category":"Coffee shop"}
+[2026-08-15T11:28:22.931Z] [client] FILTER PASS "Coffee lab" rating=3.6 ratingCount=41
+[2026-08-15T11:28:22.951Z] [save] SAVED lead {"leadId":"d615e0b8-6b43-4663-8a66-e7d311eaa037","name":"Coffee lab","rating":3.6,"ratingCount":41,"phone":"20738380","placeId":"ChIJlXRRxIzTARMR_W9CcWF1MZk"}
+[2026-08-15T11:28:22.967Z] [client] SAVE ok "Coffee lab" leadId=d615e0b8-6b43-4663-8a66-e7d311eaa037
+[2026-08-15T11:28:26.135Z] [scrape] FOUND lead {"name":"Hola Coffee Shop","rating":3.4,"ratingCount":44,"phone":"29420166","website":"","address":"Ceinture Bourguiba, Sfax 3000","placeId":"ChIJf0eXOCXTARMRG1yS5b1XzwM","category":"Cafe"}
+[2026-08-15T11:28:26.150Z] [client] FILTER PASS "Hola Coffee Shop" rating=3.4 ratingCount=44
+[2026-08-15T11:28:26.171Z] [save] SAVED lead {"leadId":"b532921e-4e8d-4714-8ba9-3df4eb73f08e","name":"Hola Coffee Shop","rating":3.4,"ratingCount":44,"phone":"29420166","placeId":"ChIJf0eXOCXTARMRG1yS5b1XzwM"}
+[2026-08-15T11:28:26.193Z] [client] SAVE ok "Hola Coffee Shop" leadId=b532921e-4e8d-4714-8ba9-3df4eb73f08e
+[2026-08-15T11:28:27.375Z] [scrape] FOUND lead {"name":"DON Café-Resto","rating":3.4,"ratingCount":257,"phone":"56333333","website":"","address":"Immeuble Amèn, Av. de la liberté, Sfax 3027","placeId":"ChIJ0ShStnDTARMRCvpXXO3HcMo","category":"Coffee shop"}
+[2026-08-15T11:28:30.115Z] [scrape] FOUND lead {"name":"Caffeitalia Sfax 2","rating":5,"ratingCount":2,"phone":"50788096","website":"","address":"Av. Sadok Guermazi, Sfax","placeId":"ChIJlekheADTARMRvUZrYpOhnKg","category":"Coffee shop"}
+[2026-08-15T11:28:31.360Z] [scrape] FOUND lead {"name":"Alba Coffee Shop","rating":3.1,"ratingCount":37,"phone":"","website":"","address":"Sfax","placeId":"ChIJCbC6LQDTARMRZ178M31DNAE","category":"Coffee shop"}
+[2026-08-15T11:28:31.375Z] [client] FILTER PASS "Alba Coffee Shop" rating=3.1 ratingCount=37
+[2026-08-15T11:28:31.399Z] [save] SAVED lead {"leadId":"c788b91f-c89a-40a3-bdaf-f275161fd293","name":"Alba Coffee Shop","rating":3.1,"ratingCount":37,"phone":"","placeId":"ChIJCbC6LQDTARMRZ178M31DNAE"}
+[2026-08-15T11:28:31.421Z] [client] SAVE ok "Alba Coffee Shop" leadId=c788b91f-c89a-40a3-bdaf-f275161fd293
+[2026-08-15T11:28:35.313Z] [scrape] FOUND lead {"name":"Atome Coffee Shop","rating":5,"ratingCount":9,"phone":"55244536","website":"","address":"14 جانفي, Sfax 3000","placeId":"ChIJx6OgQ44tABMROTha9tjSdt8","category":"Coffee shop"}
+[2026-08-15T11:28:35.326Z] [client] FILTER PASS "Atome Coffee Shop" rating=5 ratingCount=9
+[2026-08-15T11:28:35.346Z] [scrape] FOUND lead {"name":"Liviano coffee shop","rating":4.3,"ratingCount":18,"phone":"","website":"","address":"PPVX+4PG, Rte El Ain, Sfax","placeId":"ChIJB6WaOwDTARMRTQq7219g0vk","category":"Coffee shop"}
+[2026-08-15T11:28:35.348Z] [save] SAVED lead {"leadId":"24880a18-275f-4e01-af2d-0c25fc9b5d82","name":"Atome Coffee Shop","rating":5,"ratingCount":9,"phone":"55244536","placeId":"ChIJx6OgQ44tABMROTha9tjSdt8"}
+[2026-08-15T11:28:35.375Z] [client] SAVE ok "Atome Coffee Shop" leadId=24880a18-275f-4e01-af2d-0c25fc9b5d82
+[2026-08-15T11:28:39.687Z] [scrape] FOUND lead {"name":"Black Dose Coffee Lounge","rating":4.1,"ratingCount":19,"phone":"23208408","website":"","address":"QPGM+7PQ, Route Gremda, km 4 Bouzayen, Sfax","placeId":"ChIJvcvkh5DTARMR1ZR4d7UyLFM","category":"Coffee shop"}
+[2026-08-15T11:28:40.113Z] [scrape] FOUND lead {"name":"Offline coffee shop","rating":4.5,"ratingCount":22,"phone":"","website":"","address":"QP7R+8JF, Sfax","placeId":"ChIO1vfHcQAd_IIaPsUvfPwElytxLTOlXGojuBeMBF81JaRHWWtVW003X_1nT2ltwUeK1UbBtOWppCosV2E4OGCw33G__tJwZiM6Qr5HJJoPxii2Oh9t12FnWPR9A","category":"Coffee shop"}
+[2026-08-15T11:28:40.126Z] [client] FILTER PASS "Offline coffee shop" rating=4.5 ratingCount=22
+[2026-08-15T11:28:40.147Z] [save] SAVED lead {"leadId":"0f1774cd-ca74-47c5-a91f-de86fcdeeab7","name":"Offline coffee shop","rating":4.5,"ratingCount":22,"phone":"","placeId":"ChIO1vfHcQAd_IIaPsUvfPwElytxLTOlXGojuBeMBF81JaRHWWtVW003X_1nT2ltwUeK1UbBtOWppCosV2E4OGCw33G__tJwZiM6Qr5HJJoPxii2Oh9t12FnWPR9A"}
+[2026-08-15T11:28:40.163Z] [client] SAVE ok "Offline coffee shop" leadId=0f1774cd-ca74-47c5-a91f-de86fcdeeab7
+[2026-08-15T11:28:46.161Z] [scrape] FOUND lead {"name":"Milos Coffee House","rating":3.6,"ratingCount":32,"phone":"","website":"https://www.instagram.com/milos.coffeehouse/","address":"20 Rte Teniour, Sfax","placeId":"ChIJvfMbk2bTARMRtqdS5eqZIFw","category":"Coffee shop"}
+[2026-08-15T11:28:46.174Z] [client] FILTER PASS "Milos Coffee House" rating=3.6 ratingCount=32
+[2026-08-15T11:28:46.197Z] [save] SAVED lead {"leadId":"739b0b97-dc13-4ffb-8599-661e2e04b136","name":"Milos Coffee House","rating":3.6,"ratingCount":32,"phone":"","placeId":"ChIJvfMbk2bTARMRtqdS5eqZIFw"}
+[2026-08-15T11:28:46.215Z] [client] SAVE ok "Milos Coffee House" leadId=739b0b97-dc13-4ffb-8599-661e2e04b136
+[2026-08-15T11:28:46.304Z] [scrape] FOUND lead {"name":"SEVEN DAYS COFFEE","rating":3.7,"ratingCount":24,"phone":"","website":"","address":"4 Rue Commandant Bejaoui, Sfax","placeId":"ChIJg0llAUstABMR63pHbDYKhH0","category":"Coffee shop"}
+[2026-08-15T11:28:51.273Z] [scrape] FOUND lead {"name":"Flanel Café","rating":3.8,"ratingCount":380,"phone":"55192000","website":"https://m.facebook.com/Flanelsfax/?locale2=fr_FR","address":"QP8H+4R3, Rue Cheikh Mahmoud Krichen, Sfax","placeId":"ChIJzYHVqWvTARMRA2NDIwylbqo","category":"Tea house"}
+[2026-08-15T11:28:51.880Z] [scrape] FOUND lead {"name":"Le Bayou Coffee Lounge","rating":3.7,"ratingCount":49,"phone":"51410255","website":"","address":"PPXQ+542, Rte El Ain, Sfax","placeId":"ChIJbQhhsS_TARMR7uYYrJFOYhI","category":"Coffee shop"}
+[2026-08-15T11:28:51.896Z] [client] FILTER PASS "Le Bayou Coffee Lounge" rating=3.7 ratingCount=49
+[2026-08-15T11:28:51.926Z] [save] SAVED lead {"leadId":"9f2616a6-29a2-42a5-8f36-f2ecedc2c56d","name":"Le Bayou Coffee Lounge","rating":3.7,"ratingCount":49,"phone":"51410255","placeId":"ChIJbQhhsS_TARMR7uYYrJFOYhI"}
+[2026-08-15T11:28:51.951Z] [client] SAVE ok "Le Bayou Coffee Lounge" leadId=9f2616a6-29a2-42a5-8f36-f2ecedc2c56d
+[2026-08-15T11:28:55.726Z] [scrape] FOUND lead {"name":"Chill Out Sfax","rating":4.9,"ratingCount":7,"phone":"29550555","website":"","address":"Sfax","placeId":"ChIJaRjY2AktABMRf3RAwVnwv8Y","category":"Coffee shop"}
+[2026-08-15T11:28:55.739Z] [client] FILTER PASS "Chill Out Sfax" rating=4.9 ratingCount=7
+[2026-08-15T11:28:55.760Z] [save] SAVED lead {"leadId":"fc66abb7-abd4-4897-9c7a-2e19b20224e8","name":"Chill Out Sfax","rating":4.9,"ratingCount":7,"phone":"29550555","placeId":"ChIJaRjY2AktABMRf3RAwVnwv8Y"}
+[2026-08-15T11:28:55.776Z] [client] SAVE ok "Chill Out Sfax" leadId=fc66abb7-abd4-4897-9c7a-2e19b20224e8
+[2026-08-15T11:28:56.209Z] [scrape] FOUND lead {"name":"Café l'instant","rating":4.5,"ratingCount":2,"phone":"","website":"","address":"QPQP+PR7, Avenue Teboulbi, Sfax","placeId":"ChIJ2e3L0ZPTARMRoApHMI82K20","category":"Coffee shop"}
+[2026-08-15T11:28:59.911Z] [scrape] FOUND lead {"name":"DON Café-Resto","rating":3.4,"ratingCount":257,"phone":"56333333","website":"","address":"Immeuble Amèn, Av. de la liberté, Sfax 3027","placeId":"ChIJ0ShStnDTARMRCvpXXO3HcMo","category":"Coffee shop"}
+[2026-08-15T11:28:59.926Z] [client] FILTER PASS "DON Café-Resto" rating=3.4 ratingCount=257
+[2026-08-15T11:28:59.945Z] [save] SAVED lead {"leadId":"831cd132-8aa4-4ff6-8ee1-ad7626c6af33","name":"DON Café-Resto","rating":3.4,"ratingCount":257,"phone":"56333333","placeId":"ChIJ0ShStnDTARMRCvpXXO3HcMo"}
+[2026-08-15T11:28:59.960Z] [client] SAVE ok "DON Café-Resto" leadId=831cd132-8aa4-4ff6-8ee1-ad7626c6af33
+[2026-08-15T11:29:01.839Z] [scrape] FOUND lead {"name":"Syphax coffee","rating":4.3,"ratingCount":15,"phone":"","website":"","address":"QP4V+GXW, Rte Gremda, Sfax","placeId":"ChIJ__4Y0LTTARMRUVD41yxTadg","category":"Coffee shop"}
+[2026-08-15T11:29:02.591Z] [scrape] FOUND lead {"name":"Caffeitalia Sfax 2","rating":5,"ratingCount":2,"phone":"50788096","website":"","address":"Av. Sadok Guermazi, Sfax","placeId":"ChIJlekheADTARMRvUZrYpOhnKg","category":"Coffee shop"}
+[2026-08-15T11:29:02.610Z] [client] FILTER PASS "Caffeitalia Sfax 2" rating=5 ratingCount=2
+[2026-08-15T11:29:02.636Z] [save] SAVED lead {"leadId":"54d01856-a479-4f16-902d-6ada43ae1e04","name":"Caffeitalia Sfax 2","rating":5,"ratingCount":2,"phone":"50788096","placeId":"ChIJlekheADTARMRvUZrYpOhnKg"}
+[2026-08-15T11:29:02.661Z] [client] SAVE ok "Caffeitalia Sfax 2" leadId=54d01856-a479-4f16-902d-6ada43ae1e04
+[2026-08-15T11:29:05.879Z] [scrape] FOUND lead {"name":"Café Arena","rating":4.8,"ratingCount":6,"phone":"","website":"","address":"QP5C+H34, Sfax","placeId":"ChIJKaWpx1zTARMR8uvv8pMsZ-c","category":"Coffee shop"}
+[2026-08-15T11:29:08.069Z] [scrape] FOUND lead {"name":"Liviano coffee shop","rating":4.3,"ratingCount":18,"phone":"","website":"","address":"PPVX+4PG, Rte El Ain, Sfax","placeId":"ChIJB6WaOwDTARMRTQq7219g0vk","category":"Coffee shop"}
+[2026-08-15T11:29:08.085Z] [client] FILTER PASS "Liviano coffee shop" rating=4.3 ratingCount=18
+[2026-08-15T11:29:08.107Z] [save] SAVED lead {"leadId":"82ca21da-f5a2-4736-aa80-aa25beffd79a","name":"Liviano coffee shop","rating":4.3,"ratingCount":18,"phone":"","placeId":"ChIJB6WaOwDTARMRTQq7219g0vk"}
+[2026-08-15T11:29:08.131Z] [client] SAVE ok "Liviano coffee shop" leadId=82ca21da-f5a2-4736-aa80-aa25beffd79a
+[2026-08-15T11:29:12.971Z] [scrape] FOUND lead {"name":"GUEST coffee","rating":4.6,"ratingCount":22,"phone":"27204846","website":"https://www.facebook.com/guestbistro/","address":"chez café GUEST, kassas chaaben entre route de tunis et, Rte Teniour, Sfax 3000","placeId":"ChIJ-bOman_TARMRqV5yIGSfaRk","category":"Tea house"}
+[2026-08-15T11:29:13.341Z] [scrape] FOUND lead {"name":"Black Dose Coffee Lounge","rating":4.1,"ratingCount":19,"phone":"23208408","website":"","address":"QPGM+7PQ, Route Gremda, km 4 Bouzayen, Sfax","placeId":"ChIJvcvkh5DTARMR1ZR4d7UyLFM","category":"Coffee shop"}
+[2026-08-15T11:29:13.386Z] [client] FILTER PASS "Black Dose Coffee Lounge" rating=4.1 ratingCount=19
+[2026-08-15T11:29:13.487Z] [save] SAVED lead {"leadId":"c37b9b84-12a1-409b-a8bf-e3ccf1181846","name":"Black Dose Coffee Lounge","rating":4.1,"ratingCount":19,"phone":"23208408","placeId":"ChIJvcvkh5DTARMR1ZR4d7UyLFM"}
+[2026-08-15T11:29:13.536Z] [client] SAVE ok "Black Dose Coffee Lounge" leadId=c37b9b84-12a1-409b-a8bf-e3ccf1181846
+[2026-08-15T11:29:16.874Z] [scrape] FOUND lead {"name":"Today coffee shop","rating":4.5,"ratingCount":4,"phone":"54283030","website":"","address":"Rue de Mohsen Kallel, Sfax","placeId":"ChIJzx7wTCktABMRMLrVA7iTFmE","category":"Cafe"}
+[2026-08-15T11:29:19.656Z] [scrape] FOUND lead {"name":"GOOD NEWS SFAX","rating":3.8,"ratingCount":6,"phone":"26444800","website":"","address":"QPCV+34R, Route Bouzayyen, Sfax","placeId":"ChIJE4hTVQDTARMRh5QUl-Xnmv4","category":"Coffee shop"}
+[2026-08-15T11:29:19.845Z] [scrape] FOUND lead {"name":"SEVEN DAYS COFFEE","rating":3.7,"ratingCount":24,"phone":"","website":"","address":"4 Rue Commandant Bejaoui, Sfax","placeId":"ChIJg0llAUstABMR63pHbDYKhH0","category":"Coffee shop"}
+[2026-08-15T11:29:19.859Z] [client] FILTER PASS "SEVEN DAYS COFFEE" rating=3.7 ratingCount=24
+[2026-08-15T11:29:19.883Z] [save] SAVED lead {"leadId":"06844a23-2229-4796-b2b7-d03c2c402f7f","name":"SEVEN DAYS COFFEE","rating":3.7,"ratingCount":24,"phone":"","placeId":"ChIJg0llAUstABMR63pHbDYKhH0"}
+[2026-08-15T11:29:19.924Z] [client] SAVE ok "SEVEN DAYS COFFEE" leadId=06844a23-2229-4796-b2b7-d03c2c402f7f
+[2026-08-15T11:29:24.171Z] [scrape] FOUND lead {"name":"Flanel Café","rating":3.8,"ratingCount":380,"phone":"55192000","website":"https://m.facebook.com/Flanelsfax/?locale2=fr_FR","address":"QP8H+4R3, Rue Cheikh Mahmoud Krichen, Sfax","placeId":"ChIJzYHVqWvTARMRA2NDIwylbqo","category":"Tea house"}
+[2026-08-15T11:29:24.191Z] [client] FILTER PASS "Flanel Café" rating=3.8 ratingCount=380
+[2026-08-15T11:29:24.209Z] [save] SAVED lead {"leadId":"2dc753c5-c165-4419-9799-1b18d3d50851","name":"Flanel Café","rating":3.8,"ratingCount":380,"phone":"55192000","placeId":"ChIJzYHVqWvTARMRA2NDIwylbqo"}
+[2026-08-15T11:29:24.224Z] [client] SAVE ok "Flanel Café" leadId=2dc753c5-c165-4419-9799-1b18d3d50851
+[2026-08-15T11:29:24.498Z] [scrape] FOUND lead {"name":"Brio","rating":4.6,"ratingCount":16,"phone":"","website":"","address":"km 3.5, Sfax","placeId":"ChIJf2lg3mHTARMREtKdIzi2zdE","category":"Coffee shop"}
+[2026-08-15T11:29:29.445Z] [scrape] FOUND lead {"name":"Café Moon","rating":4.4,"ratingCount":11,"phone":"","website":"","address":"Av. du 20 Mars 1956, Sfax 3022","placeId":"ChIJt97TH7HTARMRZjAH_SVAhOA","category":"Cafeteria"}
+[2026-08-15T11:29:29.699Z] [scrape] FOUND lead {"name":"Café l'instant","rating":4.5,"ratingCount":2,"phone":"","website":"","address":"QPQP+PR7, Avenue Teboulbi, Sfax","placeId":"ChIJ2e3L0ZPTARMRoApHMI82K20","category":"Coffee shop"}
+[2026-08-15T11:29:29.720Z] [client] FILTER PASS "Café l'instant" rating=4.5 ratingCount=2
+[2026-08-15T11:29:29.756Z] [save] SAVED lead {"leadId":"df54295f-2a8b-4890-abd1-b00447d5c155","name":"Café l'instant","rating":4.5,"ratingCount":2,"phone":"","placeId":"ChIJ2e3L0ZPTARMRoApHMI82K20"}
+[2026-08-15T11:29:29.794Z] [client] SAVE ok "Café l'instant" leadId=df54295f-2a8b-4890-abd1-b00447d5c155
+[2026-08-15T11:29:32.772Z] [scrape] FOUND lead {"name":"BELOTE COFFEE","rating":5,"ratingCount":2,"phone":"74263578","website":"","address":"Route gremda km 1, N° 5 5 kassas, Sfax 3002","placeId":"ChIJr1RRJ9bTARMR8uj-jsAwTvI","category":"Coffee shop"}
+[2026-08-15T11:29:35.865Z] [scrape] FOUND lead {"name":"Syphax coffee","rating":4.3,"ratingCount":15,"phone":"","website":"","address":"QP4V+GXW, Rte Gremda, Sfax","placeId":"ChIJ__4Y0LTTARMRUVD41yxTadg","category":"Coffee shop"}
+[2026-08-15T11:29:35.877Z] [client] FILTER PASS "Syphax coffee" rating=4.3 ratingCount=15
+[2026-08-15T11:29:35.896Z] [save] SAVED lead {"leadId":"769722a0-a335-487f-8c55-6e520634d3c1","name":"Syphax coffee","rating":4.3,"ratingCount":15,"phone":"","placeId":"ChIJ__4Y0LTTARMRUVD41yxTadg"}
+[2026-08-15T11:29:35.913Z] [client] SAVE ok "Syphax coffee" leadId=769722a0-a335-487f-8c55-6e520634d3c1
+[2026-08-15T11:29:37.609Z] [scrape] FOUND lead {"name":"Pistachio coffe shop","rating":4.3,"ratingCount":39,"phone":"","website":"","address":"Km 1 Route Manzel Chaker, Sfax","placeId":"ChIJs77KuALTARMRBZ2eUC4y0SA","category":"Coffee shop"}
+[2026-08-15T11:29:39.671Z] [scrape] FOUND lead {"name":"Café Arena","rating":4.8,"ratingCount":6,"phone":"","website":"","address":"QP5C+H34, Sfax","placeId":"ChIJKaWpx1zTARMR8uvv8pMsZ-c","category":"Coffee shop"}
+[2026-08-15T11:29:39.684Z] [client] FILTER PASS "Café Arena" rating=4.8 ratingCount=6
+[2026-08-15T11:29:39.707Z] [save] SAVED lead {"leadId":"b41c06b3-6031-4852-8284-89f15c317f09","name":"Café Arena","rating":4.8,"ratingCount":6,"phone":"","placeId":"ChIJKaWpx1zTARMR8uvv8pMsZ-c"}
+[2026-08-15T11:29:39.728Z] [client] SAVE ok "Café Arena" leadId=b41c06b3-6031-4852-8284-89f15c317f09
+[2026-08-15T11:29:41.425Z] [scrape] FOUND lead {"name":"TOC Coffee","rating":4.2,"ratingCount":11,"phone":"26445012","website":"","address":"QP45+234, Sfax","placeId":"ChIJfckPsKfUARMR2DeQesz2cko","category":"Coffee shop"}
+[2026-08-15T11:29:43.643Z] [scrape] FOUND lead {"name":"GUEST coffee","rating":4.6,"ratingCount":22,"phone":"27204846","website":"https://www.facebook.com/guestbistro/","address":"chez café GUEST, kassas chaaben entre route de tunis et, Rte Teniour, Sfax 3000","placeId":"ChIJ-bOman_TARMRqV5yIGSfaRk","category":"Tea house"}
+[2026-08-15T11:29:43.702Z] [client] FILTER PASS "GUEST coffee" rating=4.6 ratingCount=22
+[2026-08-15T11:29:43.757Z] [save] SAVED lead {"leadId":"96912c30-9ace-41c0-ac2b-6edc70006635","name":"GUEST coffee","rating":4.6,"ratingCount":22,"phone":"27204846","placeId":"ChIJ-bOman_TARMRqV5yIGSfaRk"}
+[2026-08-15T11:29:43.788Z] [client] SAVE ok "GUEST coffee" leadId=96912c30-9ace-41c0-ac2b-6edc70006635
+[2026-08-15T11:29:47.422Z] [scrape] FOUND lead {"name":"Today coffee shop","rating":4.5,"ratingCount":4,"phone":"54283030","website":"","address":"Rue de Mohsen Kallel, Sfax","placeId":"ChIJzx7wTCktABMRMLrVA7iTFmE","category":"Cafe"}
+[2026-08-15T11:29:47.438Z] [client] FILTER PASS "Today coffee shop" rating=4.5 ratingCount=4
+[2026-08-15T11:29:47.465Z] [save] SAVED lead {"leadId":"30868155-1581-470b-9abd-0f37d6ecbf37","name":"Today coffee shop","rating":4.5,"ratingCount":4,"phone":"54283030","placeId":"ChIJzx7wTCktABMRMLrVA7iTFmE"}
+[2026-08-15T11:29:47.483Z] [client] SAVE ok "Today coffee shop" leadId=30868155-1581-470b-9abd-0f37d6ecbf37
+[2026-08-15T11:29:47.752Z] [scrape] FOUND lead {"name":"Salon de thé Kalaa","rating":4.3,"ratingCount":29,"phone":"","website":"https://www.instagram.com/salon_de_the_kalaa?igsh=MWxqcGd6cTR3am42dg==","address":"PQW7+3WW, Rue el fadhel ben achour, Sfax","placeId":"ChIJKahMNdDSARMR_Cbq7U1Ueww","category":"Cafe"}
+[2026-08-15T11:29:50.264Z] [scrape] FOUND lead {"name":"GOOD NEWS SFAX","rating":3.8,"ratingCount":6,"phone":"26444800","website":"","address":"QPCV+34R, Route Bouzayyen, Sfax","placeId":"ChIJE4hTVQDTARMRh5QUl-Xnmv4","category":"Coffee shop"}
+[2026-08-15T11:29:50.284Z] [client] FILTER PASS "GOOD NEWS SFAX" rating=3.8 ratingCount=6
+[2026-08-15T11:29:50.315Z] [save] SAVED lead {"leadId":"4ba88732-c8c0-4e5e-8729-feab0d49278a","name":"GOOD NEWS SFAX","rating":3.8,"ratingCount":6,"phone":"26444800","placeId":"ChIJE4hTVQDTARMRh5QUl-Xnmv4"}
+[2026-08-15T11:29:50.342Z] [client] SAVE ok "GOOD NEWS SFAX" leadId=4ba88732-c8c0-4e5e-8729-feab0d49278a
+[2026-08-15T11:29:52.713Z] [scrape] FOUND lead {"name":"Comptoirs Mokador","rating":4.2,"ratingCount":49,"phone":"29885385","website":"http://www.mokador.tn/","address":"QQ67+P2V, km 2 Rte de Tunis, Sfax 3002","placeId":"ChIJN4mRa0rTARMRefWH0dRKuNY","category":"Cafeteria"}
+[2026-08-15T11:29:55.094Z] [scrape] FOUND lead {"name":"Brio","rating":4.6,"ratingCount":16,"phone":"","website":"","address":"km 3.5, Sfax","placeId":"ChIJf2lg3mHTARMREtKdIzi2zdE","category":"Coffee shop"}
+[2026-08-15T11:29:55.108Z] [client] FILTER PASS "Brio" rating=4.6 ratingCount=16
+[2026-08-15T11:29:55.132Z] [save] SAVED lead {"leadId":"c09fd8e4-328a-4ced-bc25-6f5b4b230edf","name":"Brio","rating":4.6,"ratingCount":16,"phone":"","placeId":"ChIJf2lg3mHTARMREtKdIzi2zdE"}
+[2026-08-15T11:29:55.149Z] [client] SAVE ok "Brio" leadId=c09fd8e4-328a-4ced-bc25-6f5b4b230edf
+[2026-08-15T11:29:58.670Z] [scrape] FOUND lead {"name":"Papoter Coffee Shop","rating":4.6,"ratingCount":14,"phone":"","website":"","address":"QP9M+3G5, Rue Cheikh Mahmoud Krichen, Sfax","placeId":"ChIJ27SJvhfTARMRyzRogMoHHI4","category":"Coffee shop"}
+[2026-08-15T11:29:59.558Z] [scrape] FOUND lead {"name":"Café Moon","rating":4.4,"ratingCount":11,"phone":"","website":"","address":"Av. du 20 Mars 1956, Sfax 3022","placeId":"ChIJt97TH7HTARMRZjAH_SVAhOA","category":"Cafeteria"}
+[2026-08-15T11:29:59.579Z] [client] FILTER PASS "Café Moon" rating=4.4 ratingCount=11
+[2026-08-15T11:29:59.605Z] [save] SAVED lead {"leadId":"eecd189b-a2c7-410c-8370-79158c32c367","name":"Café Moon","rating":4.4,"ratingCount":11,"phone":"","placeId":"ChIJt97TH7HTARMRZjAH_SVAhOA"}
+[2026-08-15T11:29:59.632Z] [client] SAVE ok "Café Moon" leadId=eecd189b-a2c7-410c-8370-79158c32c367
+[2026-08-15T11:30:02.332Z] [scrape] FOUND lead {"name":"BELOTE COFFEE","rating":5,"ratingCount":2,"phone":"74263578","website":"","address":"Route gremda km 1, N° 5 5 kassas, Sfax 3002","placeId":"ChIJr1RRJ9bTARMR8uj-jsAwTvI","category":"Coffee shop"}
+[2026-08-15T11:30:02.349Z] [client] FILTER PASS "BELOTE COFFEE" rating=5 ratingCount=2
+[2026-08-15T11:30:02.376Z] [save] SAVED lead {"leadId":"7c353f65-0f96-42aa-b0bb-683f1517bac9","name":"BELOTE COFFEE","rating":5,"ratingCount":2,"phone":"74263578","placeId":"ChIJr1RRJ9bTARMR8uj-jsAwTvI"}
+[2026-08-15T11:30:02.404Z] [client] SAVE ok "BELOTE COFFEE" leadId=7c353f65-0f96-42aa-b0bb-683f1517bac9
+[2026-08-15T11:30:02.576Z] [scrape] FOUND lead {"name":"Koquet Café","rating":4.1,"ratingCount":41,"phone":"58334259","website":"","address":"PQQ3+GMP، Centre Ametista, Liberty St, Sfax","placeId":"ChIJQSycB7rTARMRgWiklzqsrW0","category":"Cafe"}
+[2026-08-15T11:30:05.301Z] [scrape] FOUND lead {"name":"Espress'oh Coffeshop","rating":3.9,"ratingCount":17,"phone":"56709709","website":"","address":"QP9R+G73, Sfax","placeId":"ChIJSx3bcQDTARMRX9m-JOFHK2k","category":"Coffee shop"}
+[2026-08-15T11:30:07.626Z] [scrape] FOUND lead {"name":"Pistachio coffe shop","rating":4.3,"ratingCount":39,"phone":"","website":"","address":"Km 1 Route Manzel Chaker, Sfax","placeId":"ChIJs77KuALTARMRBZ2eUC4y0SA","category":"Coffee shop"}
+[2026-08-15T11:30:07.641Z] [client] FILTER PASS "Pistachio coffe shop" rating=4.3 ratingCount=39
+[2026-08-15T11:30:07.662Z] [save] SAVED lead {"leadId":"84b1e70c-768f-42fb-b184-ec76ff0b00fc","name":"Pistachio coffe shop","rating":4.3,"ratingCount":39,"phone":"","placeId":"ChIJs77KuALTARMRBZ2eUC4y0SA"}
+[2026-08-15T11:30:07.683Z] [client] SAVE ok "Pistachio coffe shop" leadId=84b1e70c-768f-42fb-b184-ec76ff0b00fc
+[2026-08-15T11:30:09.313Z] [scrape] FOUND lead {"name":"Coffee Clock","rating":4.7,"ratingCount":6,"phone":"","website":"","address":"QPRH+R2C, Av. Hédi Chaker, Sfax","placeId":"ChIJjx_6kY7TARMRQc0h9sWEZKQ","category":"Coffee shop"}
+[2026-08-15T11:30:11.228Z] [scrape] FOUND lead {"name":"TOC Coffee","rating":4.2,"ratingCount":11,"phone":"26445012","website":"","address":"QP45+234, Sfax","placeId":"ChIJfckPsKfUARMR2DeQesz2cko","category":"Coffee shop"}
+[2026-08-15T11:30:11.247Z] [client] FILTER PASS "TOC Coffee" rating=4.2 ratingCount=11
+[2026-08-15T11:30:11.275Z] [save] SAVED lead {"leadId":"c41cc2bd-2249-45b9-ac35-4f5764a9a39c","name":"TOC Coffee","rating":4.2,"ratingCount":11,"phone":"26445012","placeId":"ChIJfckPsKfUARMR2DeQesz2cko"}
+[2026-08-15T11:30:11.299Z] [client] SAVE ok "TOC Coffee" leadId=c41cc2bd-2249-45b9-ac35-4f5764a9a39c
+[2026-08-15T11:30:17.006Z] [scrape] FOUND lead {"name":"Salon de thé Kalaa","rating":4.3,"ratingCount":29,"phone":"","website":"https://www.instagram.com/salon_de_the_kalaa?igsh=MWxqcGd6cTR3am42dg==","address":"PQW7+3WW, Rue el fadhel ben achour, Sfax","placeId":"ChIJKahMNdDSARMR_Cbq7U1Ueww","category":"Cafe"}
+[2026-08-15T11:30:17.019Z] [client] FILTER PASS "Salon de thé Kalaa" rating=4.3 ratingCount=29
+[2026-08-15T11:30:17.040Z] [save] SAVED lead {"leadId":"9528980b-5c95-4d71-b9f8-09cf005fe41c","name":"Salon de thé Kalaa","rating":4.3,"ratingCount":29,"phone":"","placeId":"ChIJKahMNdDSARMR_Cbq7U1Ueww"}
+[2026-08-15T11:30:17.059Z] [client] SAVE ok "Salon de thé Kalaa" leadId=9528980b-5c95-4d71-b9f8-09cf005fe41c
+[2026-08-15T11:30:17.548Z] [scrape] FOUND lead {"name":"Bridge Coffee & Arcade","rating":3.7,"ratingCount":32,"phone":"","website":"","address":"Ceinture Bourguiba, vers Kaid, Sfax 3062","placeId":"ChIJOSWA62LTARMRtngIn2WIg2w","category":"Coffee shop"}
+[2026-08-15T11:30:24.979Z] [scrape] FOUND lead {"name":"O'BOULOT Coffee Shop","rating":4.1,"ratingCount":34,"phone":"","website":"","address":"QQ2C+HXG, Eddinr El Afghani, Rue jamel eddin el Afghani, Sfax 3000","placeId":"ChIJgyc7CwDTARMR6OiVX8a7V5c","category":"Coffee shop"}
+[2026-08-15T11:30:29.090Z] [scrape] FOUND lead {"name":"Comptoirs Mokador","rating":4.2,"ratingCount":49,"phone":"29885385","website":"http://www.mokador.tn/","address":"QQ67+P2V, km 2 Rte de Tunis, Sfax 3002","placeId":"ChIJN4mRa0rTARMRefWH0dRKuNY","category":"Cafeteria"}
+[2026-08-15T11:30:29.103Z] [client] FILTER PASS "Comptoirs Mokador" rating=4.2 ratingCount=49
+[2026-08-15T11:30:29.125Z] [save] SAVED lead {"leadId":"b9f0f757-56a2-4f63-9898-1ad097846e7e","name":"Comptoirs Mokador","rating":4.2,"ratingCount":49,"phone":"29885385","placeId":"ChIJN4mRa0rTARMRefWH0dRKuNY"}
+[2026-08-15T11:30:29.153Z] [client] SAVE ok "Comptoirs Mokador" leadId=b9f0f757-56a2-4f63-9898-1ad097846e7e
+[2026-08-15T11:30:30.100Z] [scrape] FOUND lead {"name":"Coffee Shop Scood","rating":3.8,"ratingCount":75,"phone":"51515113","website":"","address":"3002 Rte Teniour, Sfax","placeId":"ChIJCeJKAN_SARMR6W4MDC8aCjY","category":"Tea house"}
+[2026-08-15T11:30:34.214Z] [scrape] FOUND lead {"name":"Papoter Coffee Shop","rating":4.6,"ratingCount":14,"phone":"","website":"","address":"QP9M+3G5, Rue Cheikh Mahmoud Krichen, Sfax","placeId":"ChIJ27SJvhfTARMRyzRogMoHHI4","category":"Coffee shop"}
+[2026-08-15T11:30:34.227Z] [client] FILTER PASS "Papoter Coffee Shop" rating=4.6 ratingCount=14
+[2026-08-15T11:30:34.247Z] [save] SAVED lead {"leadId":"04a5b85a-7f6b-4b6c-bbec-04582d8b3e65","name":"Papoter Coffee Shop","rating":4.6,"ratingCount":14,"phone":"","placeId":"ChIJ27SJvhfTARMRyzRogMoHHI4"}
+[2026-08-15T11:30:34.268Z] [client] SAVE ok "Papoter Coffee Shop" leadId=04a5b85a-7f6b-4b6c-bbec-04582d8b3e65
+[2026-08-15T11:30:34.763Z] [scrape] FOUND lead {"name":"La Casa Del Caffé Sfax","rating":4.5,"ratingCount":12,"phone":"22662042","website":"","address":"Avenue Teboulbi, Km 5 5, Sfax 3022","placeId":"ChIJ6YNtal7TARMRooABkIBK8dE","category":"Cafe"}
+[2026-08-15T11:30:38.420Z] [scrape] FOUND lead {"name":"Koquet Café","rating":4.1,"ratingCount":41,"phone":"58334259","website":"","address":"PQQ3+GMP، Centre Ametista, Liberty St, Sfax","placeId":"ChIJQSycB7rTARMRgWiklzqsrW0","category":"Cafe"}
+[2026-08-15T11:30:38.434Z] [client] FILTER PASS "Koquet Café" rating=4.1 ratingCount=41
+[2026-08-15T11:30:38.450Z] [save] SAVED lead {"leadId":"31a97a6a-0fb5-4fad-b3b7-6676a5f4b179","name":"Koquet Café","rating":4.1,"ratingCount":41,"phone":"58334259","placeId":"ChIJQSycB7rTARMRgWiklzqsrW0"}
+[2026-08-15T11:30:38.471Z] [client] SAVE ok "Koquet Café" leadId=31a97a6a-0fb5-4fad-b3b7-6676a5f4b179
+[2026-08-15T11:30:39.102Z] [scrape] FOUND lead {"name":"Bouricha coffee","rating":4,"ratingCount":1,"phone":"","website":"","address":"QP5R+RQ3, C81, Rte Gremda, Sfax","placeId":"ChIJdcQSMwDTARMRTNTd4G0Y2FI","category":"Coffee shop"}
+[2026-08-15T11:30:40.988Z] [scrape] FOUND lead {"name":"Espress'oh Coffeshop","rating":3.9,"ratingCount":17,"phone":"56709709","website":"","address":"QP9R+G73, Sfax","placeId":"ChIJSx3bcQDTARMRX9m-JOFHK2k","category":"Coffee shop"}
+[2026-08-15T11:30:41.002Z] [client] FILTER PASS "Espress'oh Coffeshop" rating=3.9 ratingCount=17
+[2026-08-15T11:30:41.030Z] [save] SAVED lead {"leadId":"18c0adc0-90e1-4ec1-8820-04aa93c920e1","name":"Espress'oh Coffeshop","rating":3.9,"ratingCount":17,"phone":"56709709","placeId":"ChIJSx3bcQDTARMRX9m-JOFHK2k"}
+[2026-08-15T11:30:41.072Z] [client] SAVE ok "Espress'oh Coffeshop" leadId=18c0adc0-90e1-4ec1-8820-04aa93c920e1
+[2026-08-15T11:30:43.829Z] [scrape] FOUND lead {"name":"Latino's café","rating":4.5,"ratingCount":15,"phone":"27114000","website":"","address":"PPFC+F4F, Sfax","placeId":"ChIJP1Rh2kktABMRIytmVyszGcE","category":"Coffee shop"}
+[2026-08-15T11:30:45.362Z] [scrape] FOUND lead {"name":"Coffee Clock","rating":4.7,"ratingCount":6,"phone":"","website":"","address":"QPRH+R2C, Av. Hédi Chaker, Sfax","placeId":"ChIJjx_6kY7TARMRQc0h9sWEZKQ","category":"Coffee shop"}
+[2026-08-15T11:30:45.378Z] [client] FILTER PASS "Coffee Clock" rating=4.7 ratingCount=6
+[2026-08-15T11:30:45.405Z] [save] SAVED lead {"leadId":"814f4fef-13d3-458c-a925-6bf3f9baedea","name":"Coffee Clock","rating":4.7,"ratingCount":6,"phone":"","placeId":"ChIJjx_6kY7TARMRQc0h9sWEZKQ"}
+[2026-08-15T11:30:45.437Z] [client] SAVE ok "Coffee Clock" leadId=814f4fef-13d3-458c-a925-6bf3f9baedea
+[2026-08-15T11:30:47.169Z] [scrape] FOUND lead {"name":"Input bistro Coffee Shop","rating":4.6,"ratingCount":22,"phone":"50901901","website":"","address":"QQ93+G85، Ctre، 3000","placeId":"ChIJJcLArfrTARMRC-2qWnknau0","category":"Cafe"}
+[2026-08-15T11:30:50.906Z] [scrape] FOUND lead {"name":"Business coffe","rating":4.3,"ratingCount":29,"phone":"21325613","website":"","address":"QPJV+258, Avenue Teboulbi, Sfax","placeId":"ChIJsXhjA6TTARMRJmcldYqPykw","category":"Coffee shop"}
+[2026-08-15T11:30:53.077Z] [scrape] FOUND lead {"name":"Bridge Coffee & Arcade","rating":3.7,"ratingCount":32,"phone":"","website":"","address":"Ceinture Bourguiba, vers Kaid, Sfax 3062","placeId":"ChIJOSWA62LTARMRtngIn2WIg2w","category":"Coffee shop"}
+[2026-08-15T11:30:53.090Z] [client] FILTER PASS "Bridge Coffee & Arcade" rating=3.7 ratingCount=32
+[2026-08-15T11:30:53.119Z] [save] SAVED lead {"leadId":"82dc376b-a886-448f-a45f-2b7cd6315444","name":"Bridge Coffee & Arcade","rating":3.7,"ratingCount":32,"phone":"","placeId":"ChIJOSWA62LTARMRtngIn2WIg2w"}
+[2026-08-15T11:30:53.149Z] [client] SAVE ok "Bridge Coffee & Arcade" leadId=82dc376b-a886-448f-a45f-2b7cd6315444
+[2026-08-15T11:30:55.475Z] [scrape] FOUND lead {"name":"Edam coffe sfax","rating":5,"ratingCount":1,"phone":"","website":"","address":"PQR7+F6M, Rue Ibn Rachik, Sfax","placeId":"ChIJLzvwq3TTARMRJdm_6tosczU","category":"Coffee shop"}
+[2026-08-15T11:30:58.666Z] [scrape] FOUND lead {"name":"MIDWAY Café Lounge","rating":3.7,"ratingCount":36,"phone":"29646949","website":"","address":"QPFP+52M, Près de, Bd de l'environnement, Sfax 3000","placeId":"ChIJkYiudwDTARMR6UWVvu1BcXA","category":"Coffee shop"}
+[2026-08-15T11:30:58.822Z] [scrape] FOUND lead {"name":"O'BOULOT Coffee Shop","rating":4.1,"ratingCount":34,"phone":"","website":"","address":"QQ2C+HXG, Eddinr El Afghani, Rue jamel eddin el Afghani, Sfax 3000","placeId":"ChIJgyc7CwDTARMR6OiVX8a7V5c","category":"Coffee shop"}
+[2026-08-15T11:30:58.838Z] [client] FILTER PASS "O'BOULOT Coffee Shop" rating=4.1 ratingCount=34
+[2026-08-15T11:30:58.866Z] [save] SAVED lead {"leadId":"e2e66939-99ee-4b55-baa8-3e70bf30256e","name":"O'BOULOT Coffee Shop","rating":4.1,"ratingCount":34,"phone":"","placeId":"ChIJgyc7CwDTARMR6OiVX8a7V5c"}
+[2026-08-15T11:30:58.906Z] [client] SAVE ok "O'BOULOT Coffee Shop" leadId=e2e66939-99ee-4b55-baa8-3e70bf30256e
+[2026-08-15T11:31:02.255Z] [scrape] FOUND lead {"name":"Coffee Shop Scood","rating":3.8,"ratingCount":75,"phone":"51515113","website":"","address":"3002 Rte Teniour, Sfax","placeId":"ChIJCeJKAN_SARMR6W4MDC8aCjY","category":"Tea house"}
+[2026-08-15T11:31:02.268Z] [client] FILTER PASS "Coffee Shop Scood" rating=3.8 ratingCount=75
+[2026-08-15T11:31:02.292Z] [save] SAVED lead {"leadId":"9c2b556c-a9ac-4b5a-8771-e1749c9be003","name":"Coffee Shop Scood","rating":3.8,"ratingCount":75,"phone":"51515113","placeId":"ChIJCeJKAN_SARMR6W4MDC8aCjY"}
+[2026-08-15T11:31:02.328Z] [client] SAVE ok "Coffee Shop Scood" leadId=9c2b556c-a9ac-4b5a-8771-e1749c9be003
+[2026-08-15T11:31:04.766Z] [scrape] FOUND lead {"name":"Salon De Thé DaDi","rating":4.4,"ratingCount":35,"phone":"","website":"","address":"Rue Habib Achour, Sfax","placeId":"ChIJuUv2Ty4tABMRbhTV1tzcD2Q","category":"Coffee shop"}
+[2026-08-15T11:31:05.901Z] [scrape] FOUND lead {"name":"La Casa Del Caffé Sfax","rating":4.5,"ratingCount":12,"phone":"22662042","website":"","address":"Avenue Teboulbi, Km 5 5, Sfax 3022","placeId":"ChIJ6YNtal7TARMRooABkIBK8dE","category":"Cafe"}
+[2026-08-15T11:31:05.918Z] [client] FILTER PASS "La Casa Del Caffé Sfax" rating=4.5 ratingCount=12
+[2026-08-15T11:31:05.948Z] [save] SAVED lead {"leadId":"8f6301df-0959-40d6-af43-5373c4498035","name":"La Casa Del Caffé Sfax","rating":4.5,"ratingCount":12,"phone":"22662042","placeId":"ChIJ6YNtal7TARMRooABkIBK8dE"}
+[2026-08-15T11:31:05.985Z] [client] SAVE ok "La Casa Del Caffé Sfax" leadId=8f6301df-0959-40d6-af43-5373c4498035
+[2026-08-15T11:31:09.668Z] [scrape] FOUND lead {"name":"Le Quai coffee shop","rating":4.7,"ratingCount":6,"phone":"","website":"","address":"PQH3+MMP, Rue Commandant Bejaoui, Sfax","placeId":"ChIJyTEV0NcsABMRle6y1x7jVVA","category":"Cafe"}
+[2026-08-15T11:31:10.283Z] [scrape] FOUND lead {"name":"Bouricha coffee","rating":4,"ratingCount":1,"phone":"","website":"","address":"QP5R+RQ3, C81, Rte Gremda, Sfax","placeId":"ChIJdcQSMwDTARMRTNTd4G0Y2FI","category":"Coffee shop"}
+[2026-08-15T11:31:10.324Z] [client] FILTER PASS "Bouricha coffee" rating=4 ratingCount=1
+[2026-08-15T11:31:10.353Z] [save] SAVED lead {"leadId":"dc6d2e25-d290-4dfc-9aff-60bf4b7c32a3","name":"Bouricha coffee","rating":4,"ratingCount":1,"phone":"","placeId":"ChIJdcQSMwDTARMRTNTd4G0Y2FI"}
+[2026-08-15T11:31:10.390Z] [client] SAVE ok "Bouricha coffee" leadId=dc6d2e25-d290-4dfc-9aff-60bf4b7c32a3
+[2026-08-15T11:31:14.478Z] [scrape] FOUND lead {"name":"Latino's café","rating":4.5,"ratingCount":15,"phone":"27114000","website":"","address":"PPFC+F4F, Sfax","placeId":"ChIJP1Rh2kktABMRIytmVyszGcE","category":"Coffee shop"}
+[2026-08-15T11:31:14.491Z] [client] FILTER PASS "Latino's café" rating=4.5 ratingCount=15
+[2026-08-15T11:31:14.513Z] [save] SAVED lead {"leadId":"29941f78-586c-4041-8e81-4503ea588be6","name":"Latino's café","rating":4.5,"ratingCount":15,"phone":"27114000","placeId":"ChIJP1Rh2kktABMRIytmVyszGcE"}
+[2026-08-15T11:31:14.546Z] [client] SAVE ok "Latino's café" leadId=29941f78-586c-4041-8e81-4503ea588be6
+[2026-08-15T11:31:14.854Z] [scrape] FOUND lead {"name":"Café Sfax","rating":5,"ratingCount":1,"phone":"","website":"","address":"PPH6+G3C, Sfax","placeId":"ChIJ-WDqGTotABMRT_8Ed_teln8","category":"Coffee shop"}
+[2026-08-15T11:31:21.383Z] [scrape] FOUND lead {"name":"City Coffee Shop","rating":3.9,"ratingCount":10,"phone":"","website":"","address":"PQX6+7H2, Avenue, Sfax","placeId":"ChIJXe9AptDSARMRbi1GRqvrcdQ","category":"Coffee shop"}
+[2026-08-15T11:31:22.141Z] [scrape] FOUND lead {"name":"Input bistro Coffee Shop","rating":4.6,"ratingCount":22,"phone":"50901901","website":"","address":"QQ93+G85، Ctre، 3000","placeId":"ChIJJcLArfrTARMRC-2qWnknau0","category":"Cafe"}
+[2026-08-15T11:31:22.159Z] [client] FILTER PASS "Input bistro Coffee Shop" rating=4.6 ratingCount=22
+[2026-08-15T11:31:22.197Z] [save] SAVED lead {"leadId":"88fefecd-a1bb-4428-ab76-82dcd920fc81","name":"Input bistro Coffee Shop","rating":4.6,"ratingCount":22,"phone":"50901901","placeId":"ChIJJcLArfrTARMRC-2qWnknau0"}
+[2026-08-15T11:31:22.244Z] [client] SAVE ok "Input bistro Coffee Shop" leadId=88fefecd-a1bb-4428-ab76-82dcd920fc81
+[2026-08-15T11:31:25.916Z] [scrape] FOUND lead {"name":"Café Koussay Sfax مقهى قصي صفاقس","rating":4,"ratingCount":2,"phone":"","website":"","address":"1, 40 الواد القبلاوي, Sakiet Eddaier","placeId":"ChIJGw4_NwDTARMR_7h8Xx8Rjr4","category":"Coffee shop"}
+[2026-08-15T11:31:26.217Z] [scrape] FOUND lead {"name":"Business coffe","rating":4.3,"ratingCount":29,"phone":"21325613","website":"","address":"QPJV+258, Avenue Teboulbi, Sfax","placeId":"ChIJsXhjA6TTARMRJmcldYqPykw","category":"Coffee shop"}
+[2026-08-15T11:31:26.233Z] [client] FILTER PASS "Business coffe" rating=4.3 ratingCount=29
+[2026-08-15T11:31:26.270Z] [save] SAVED lead {"leadId":"8fee2d74-7dbe-4cff-ab2c-4910c8fa5593","name":"Business coffe","rating":4.3,"ratingCount":29,"phone":"21325613","placeId":"ChIJsXhjA6TTARMRJmcldYqPykw"}
+[2026-08-15T11:31:26.336Z] [client] SAVE ok "Business coffe" leadId=8fee2d74-7dbe-4cff-ab2c-4910c8fa5593
+[2026-08-15T11:31:30.511Z] [scrape] FOUND lead {"name":"Café Factory","rating":3.9,"ratingCount":35,"phone":"24300020","website":"https://www.google.tn/maps/@34.762916,10.7480714,411m/data=!3m1!1e3!10m2!1e2!2e13","address":"3031 Rue Abdelaziz Thâalbi, Sfax","placeId":"ChIJeUgcyxjTARMRYY18NLs5gDE","category":"Cafe"}
+[2026-08-15T11:31:31.073Z] [scrape] FOUND lead {"name":"Edam coffe sfax","rating":5,"ratingCount":1,"phone":"","website":"","address":"PQR7+F6M, Rue Ibn Rachik, Sfax","placeId":"ChIJLzvwq3TTARMRJdm_6tosczU","category":"Coffee shop"}
+[2026-08-15T11:31:31.099Z] [client] FILTER PASS "Edam coffe sfax" rating=5 ratingCount=1
+[2026-08-15T11:31:31.146Z] [save] SAVED lead {"leadId":"ce28bd11-aef2-4f92-af07-96a84a4ca200","name":"Edam coffe sfax","rating":5,"ratingCount":1,"phone":"","placeId":"ChIJLzvwq3TTARMRJdm_6tosczU"}
+[2026-08-15T11:31:31.244Z] [client] SAVE ok "Edam coffe sfax" leadId=ce28bd11-aef2-4f92-af07-96a84a4ca200
+[2026-08-15T11:31:34.431Z] [scrape] FOUND lead {"name":"Level up coffe","rating":5,"ratingCount":1,"phone":"28403735","website":"","address":"PPJQ+MMG, Rte de la Soukra, Sfax","placeId":"ChIJv8uMSfEtABMRWLFE81I0cjs","category":"Coffee shop"}
+[2026-08-15T11:31:35.480Z] [scrape] FOUND lead {"name":"MIDWAY Café Lounge","rating":3.7,"ratingCount":36,"phone":"29646949","website":"","address":"QPFP+52M, Près de, Bd de l'environnement, Sfax 3000","placeId":"ChIJkYiudwDTARMR6UWVvu1BcXA","category":"Coffee shop"}
+[2026-08-15T11:31:35.494Z] [client] FILTER PASS "MIDWAY Café Lounge" rating=3.7 ratingCount=36
+[2026-08-15T11:31:35.520Z] [save] SAVED lead {"leadId":"693297cc-1923-45c5-99a8-1d99f94e4729","name":"MIDWAY Café Lounge","rating":3.7,"ratingCount":36,"phone":"29646949","placeId":"ChIJkYiudwDTARMR6UWVvu1BcXA"}
+[2026-08-15T11:31:35.571Z] [client] SAVE ok "MIDWAY Café Lounge" leadId=693297cc-1923-45c5-99a8-1d99f94e4729
+[2026-08-15T11:31:39.849Z] [scrape] FOUND lead {"name":"Côté Régal","rating":3.7,"ratingCount":83,"phone":"","website":"https://www.facebook.com/coteregal","address":"Rue Ali Bach Hamba, Sfax","placeId":"ChIJxf-WeS4tABMREKUirT2w4TQ","category":"Coffee shop"}
+[2026-08-15T11:31:41.580Z] [scrape] FOUND lead {"name":"Salon De Thé DaDi","rating":4.4,"ratingCount":35,"phone":"","website":"","address":"Rue Habib Achour, Sfax","placeId":"ChIJuUv2Ty4tABMRbhTV1tzcD2Q","category":"Coffee shop"}
+[2026-08-15T11:31:41.600Z] [client] FILTER PASS "Salon De Thé DaDi" rating=4.4 ratingCount=35
+[2026-08-15T11:31:41.628Z] [save] SAVED lead {"leadId":"db4f81c9-95c8-4b56-8546-604818e025ff","name":"Salon De Thé DaDi","rating":4.4,"ratingCount":35,"phone":"","placeId":"ChIJuUv2Ty4tABMRbhTV1tzcD2Q"}
+[2026-08-15T11:31:41.669Z] [client] SAVE ok "Salon De Thé DaDi" leadId=db4f81c9-95c8-4b56-8546-604818e025ff
+[2026-08-15T11:31:43.307Z] [scrape] FOUND lead {"name":"Vienna Coffee Shop - Sfax","rating":4.6,"ratingCount":5,"phone":"44714861","website":"https://www.facebook.com/profile.php?id=100095181018468","address":"km6 Rte Lafrane, Sfax 3039","placeId":"ChIJyUnHFpnTARMRNJpmYjkm-kM","category":"Coffee shop"}
+[2026-08-15T11:31:46.304Z] [scrape] FOUND lead {"name":"Kasper café","rating":2.5,"ratingCount":62,"phone":"20583001","website":"","address":"QP4M+CR6, Sfax","placeId":"ChIJZT4Y_I7TARMREc4K1yUYtv8","category":"Coffee shop"}
+[2026-08-15T11:31:46.564Z] [scrape] FOUND lead {"name":"Le Quai coffee shop","rating":4.7,"ratingCount":6,"phone":"","website":"","address":"PQH3+MMP, Rue Commandant Bejaoui, Sfax","placeId":"ChIJyTEV0NcsABMRle6y1x7jVVA","category":"Cafe"}
+[2026-08-15T11:31:46.578Z] [client] FILTER PASS "Le Quai coffee shop" rating=4.7 ratingCount=6
+[2026-08-15T11:31:46.606Z] [save] SAVED lead {"leadId":"627c4e04-ee2b-4384-a71c-12ec5e0ec151","name":"Le Quai coffee shop","rating":4.7,"ratingCount":6,"phone":"","placeId":"ChIJyTEV0NcsABMRle6y1x7jVVA"}
+[2026-08-15T11:31:46.680Z] [client] SAVE ok "Le Quai coffee shop" leadId=627c4e04-ee2b-4384-a71c-12ec5e0ec151
+[2026-08-15T11:31:51.521Z] [scrape] FOUND lead {"name":"Cafe Moez","rating":5,"ratingCount":1,"phone":"","website":"","address":"PQP5+Q4M Station des Bus, Av. des Martyrs, Sfax 3047","placeId":"ChIJGdoXOAAtABMReow96P8pMuU","category":"Coffee shop"}
+[2026-08-15T11:31:51.745Z] [scrape] FOUND lead {"name":"Café Sfax","rating":5,"ratingCount":1,"phone":"","website":"","address":"PPH6+G3C, Sfax","placeId":"ChIJ-WDqGTotABMRT_8Ed_teln8","category":"Coffee shop"}
+[2026-08-15T11:31:51.759Z] [client] FILTER PASS "Café Sfax" rating=5 ratingCount=1
+[2026-08-15T11:31:51.780Z] [save] SAVED lead {"leadId":"31885053-f1f4-4cc0-ae6f-06cd234775a3","name":"Café Sfax","rating":5,"ratingCount":1,"phone":"","placeId":"ChIJ-WDqGTotABMRT_8Ed_teln8"}
+[2026-08-15T11:31:51.872Z] [client] SAVE ok "Café Sfax" leadId=31885053-f1f4-4cc0-ae6f-06cd234775a3
+[2026-08-15T11:31:56.859Z] [scrape] FOUND lead {"name":"City Coffee Shop","rating":3.9,"ratingCount":10,"phone":"","website":"","address":"PQX6+7H2, Avenue, Sfax","placeId":"ChIJXe9AptDSARMRbi1GRqvrcdQ","category":"Coffee shop"}
+[2026-08-15T11:31:56.876Z] [client] FILTER PASS "City Coffee Shop" rating=3.9 ratingCount=10
+[2026-08-15T11:31:56.903Z] [save] SAVED lead {"leadId":"c6e22d49-39ce-4b55-990e-8dbff4f580aa","name":"City Coffee Shop","rating":3.9,"ratingCount":10,"phone":"","placeId":"ChIJXe9AptDSARMRbi1GRqvrcdQ"}
+[2026-08-15T11:31:56.967Z] [client] SAVE ok "City Coffee Shop" leadId=c6e22d49-39ce-4b55-990e-8dbff4f580aa
+[2026-08-15T11:31:57.741Z] [scrape] FOUND lead {"name":"Café Kemour","rating":4,"ratingCount":135,"phone":"28524796","website":"https://www.facebook.com/CafekemourSfax/","address":"3047, Sfax 3047","placeId":"ChIJBzpFoCwtABMRgyR7RopJa5k","category":"Cafe"}
+[2026-08-15T11:32:01.526Z] [scrape] FOUND lead {"name":"Café Koussay Sfax مقهى قصي صفاقس","rating":4,"ratingCount":2,"phone":"","website":"","address":"1, 40 الواد القبلاوي, Sakiet Eddaier","placeId":"ChIJGw4_NwDTARMR_7h8Xx8Rjr4","category":"Coffee shop"}
+[2026-08-15T11:32:01.539Z] [client] FILTER PASS "Café Koussay Sfax مقهى قصي صفاقس" rating=4 ratingCount=2
+[2026-08-15T11:32:01.559Z] [save] SAVED lead {"leadId":"d57b4a10-7b97-46c0-8542-6e6214623620","name":"Café Koussay Sfax مقهى قصي صفاقس","rating":4,"ratingCount":2,"phone":"","placeId":"ChIJGw4_NwDTARMR_7h8Xx8Rjr4"}
+[2026-08-15T11:32:01.609Z] [client] SAVE ok "Café Koussay Sfax مقهى قصي صفاقس" leadId=d57b4a10-7b97-46c0-8542-6e6214623620
+[2026-08-15T11:32:02.516Z] [scrape] FOUND lead {"name":"Mio Paraiso café - resto","rating":3.6,"ratingCount":29,"phone":"57033700","website":"","address":"QP6R+X95, 03039, Sfax","placeId":"ChIJ3x7kHwDTARMRmtaxGVuwUCY","category":"Coffee shop"}
+[2026-08-15T11:32:04.856Z] [scrape] FOUND lead {"name":"Café Factory","rating":3.9,"ratingCount":35,"phone":"24300020","website":"https://www.google.tn/maps/@34.762916,10.7480714,411m/data=!3m1!1e3!10m2!1e2!2e13","address":"3031 Rue Abdelaziz Thâalbi, Sfax","placeId":"ChIJeUgcyxjTARMRYY18NLs5gDE","category":"Cafe"}
+[2026-08-15T11:32:04.872Z] [client] FILTER PASS "Café Factory" rating=3.9 ratingCount=35
+[2026-08-15T11:32:04.899Z] [save] SAVED lead {"leadId":"c70a0b01-fd0c-452a-9fdb-b4c3495eb9ac","name":"Café Factory","rating":3.9,"ratingCount":35,"phone":"24300020","placeId":"ChIJeUgcyxjTARMRYY18NLs5gDE"}
+[2026-08-15T11:32:04.957Z] [client] SAVE ok "Café Factory" leadId=c70a0b01-fd0c-452a-9fdb-b4c3495eb9ac
+[2026-08-15T11:32:08.169Z] [scrape] FOUND lead {"name":"Level up coffe","rating":5,"ratingCount":1,"phone":"28403735","website":"","address":"PPJQ+MMG, Rte de la Soukra, Sfax","placeId":"ChIJv8uMSfEtABMRWLFE81I0cjs","category":"Coffee shop"}
+[2026-08-15T11:32:08.182Z] [client] FILTER PASS "Level up coffe" rating=5 ratingCount=1
+[2026-08-15T11:32:08.206Z] [save] SAVED lead {"leadId":"61f1af38-b9d6-4485-a34f-bd845093cb91","name":"Level up coffe","rating":5,"ratingCount":1,"phone":"28403735","placeId":"ChIJv8uMSfEtABMRWLFE81I0cjs"}
+[2026-08-15T11:32:08.257Z] [client] SAVE ok "Level up coffe" leadId=61f1af38-b9d6-4485-a34f-bd845093cb91
+[2026-08-15T11:32:08.342Z] [scrape] FOUND lead {"name":"Nirvana Café","rating":4.2,"ratingCount":27,"phone":"","website":"","address":"QPQF+WXQ, Sfax 3022","placeId":"ChIJIZMkipvTARMR9fL1vXjSZzg","category":"Cafe"}
+[2026-08-15T11:32:13.419Z] [scrape] FOUND lead {"name":"Côté Régal","rating":3.7,"ratingCount":83,"phone":"","website":"https://www.facebook.com/coteregal","address":"Rue Ali Bach Hamba, Sfax","placeId":"ChIJxf-WeS4tABMREKUirT2w4TQ","category":"Coffee shop"}
+[2026-08-15T11:32:13.432Z] [client] FILTER PASS "Côté Régal" rating=3.7 ratingCount=83
+[2026-08-15T11:32:13.450Z] [save] SAVED lead {"leadId":"7cd14830-8893-4731-aa12-c018f143bb6e","name":"Côté Régal","rating":3.7,"ratingCount":83,"phone":"","placeId":"ChIJxf-WeS4tABMREKUirT2w4TQ"}
+[2026-08-15T11:32:13.510Z] [client] SAVE ok "Côté Régal" leadId=7cd14830-8893-4731-aa12-c018f143bb6e
+[2026-08-15T11:32:13.995Z] [scrape] FOUND lead {"name":"Riverside Café & Restaurant","rating":2.8,"ratingCount":156,"phone":"94290416","website":"","address":"Ceinture Bourguiba, entre Rue Taniour et, Tunis Rd, Sfax 3003","placeId":"ChIJaXRSJwDTARMRHU5_-SNwJoA","category":"Cafe"}
+[2026-08-15T11:32:17.299Z] [scrape] FOUND lead {"name":"Vienna Coffee Shop - Sfax","rating":4.6,"ratingCount":5,"phone":"44714861","website":"https://www.facebook.com/profile.php?id=100095181018468","address":"km6 Rte Lafrane, Sfax 3039","placeId":"ChIJyUnHFpnTARMRNJpmYjkm-kM","category":"Coffee shop"}
+[2026-08-15T11:32:17.319Z] [client] FILTER PASS "Vienna Coffee Shop - Sfax" rating=4.6 ratingCount=5
+[2026-08-15T11:32:17.350Z] [save] SAVED lead {"leadId":"54277c4e-e83c-4d9c-adb7-d02c670454fe","name":"Vienna Coffee Shop - Sfax","rating":4.6,"ratingCount":5,"phone":"44714861","placeId":"ChIJyUnHFpnTARMRNJpmYjkm-kM"}
+[2026-08-15T11:32:17.459Z] [client] SAVE ok "Vienna Coffee Shop - Sfax" leadId=54277c4e-e83c-4d9c-adb7-d02c670454fe
+[2026-08-15T11:32:20.254Z] [scrape] FOUND lead {"name":"جواجم الحشيشة الافران","rating":4.4,"ratingCount":49,"phone":"22756895","website":"","address":"Rte Lafrane, Sfax","placeId":"ChIJjUa3VyfTARMRLNJ0oT3v4yw","category":"Coffee shop"}
+[2026-08-15T11:32:20.346Z] [scrape] FOUND lead {"name":"Kasper café","rating":2.5,"ratingCount":62,"phone":"20583001","website":"","address":"QP4M+CR6, Sfax","placeId":"ChIJZT4Y_I7TARMREc4K1yUYtv8","category":"Coffee shop"}
+[2026-08-15T11:32:20.360Z] [client] FILTER PASS "Kasper café" rating=2.5 ratingCount=62
+[2026-08-15T11:32:20.399Z] [save] SAVED lead {"leadId":"5c68e0e7-c9bd-4fbf-8d3a-a6aa20c7b280","name":"Kasper café","rating":2.5,"ratingCount":62,"phone":"20583001","placeId":"ChIJZT4Y_I7TARMREc4K1yUYtv8"}
+[2026-08-15T11:32:20.430Z] [client] SAVE ok "Kasper café" leadId=5c68e0e7-c9bd-4fbf-8d3a-a6aa20c7b280
+[2026-08-15T11:32:23.808Z] [scrape] FOUND lead {"name":"PAP COFEESHOP","rating":5,"ratingCount":1,"phone":"51828003","website":"","address":"Rue Ahmed Skelli, 3003 Sfax - Rated, Rue Ahmed Sekelli, Sfax 3003","placeId":"ChIJmX71k7ItABMRb9xZGJzCqag","category":"Cafe"}
+[2026-08-15T11:32:26.439Z] [scrape] FOUND lead {"name":"Cafe Moez","rating":5,"ratingCount":1,"phone":"","website":"","address":"PQP5+Q4M Station des Bus, Av. des Martyrs, Sfax 3047","placeId":"ChIJGdoXOAAtABMReow96P8pMuU","category":"Coffee shop"}
+[2026-08-15T11:32:26.458Z] [client] FILTER PASS "Cafe Moez" rating=5 ratingCount=1
+[2026-08-15T11:32:26.475Z] [save] SAVED lead {"leadId":"bb67c277-168e-41a6-8a46-3def2de58494","name":"Cafe Moez","rating":5,"ratingCount":1,"phone":"","placeId":"ChIJGdoXOAAtABMReow96P8pMuU"}
+[2026-08-15T11:32:26.526Z] [client] SAVE ok "Cafe Moez" leadId=bb67c277-168e-41a6-8a46-3def2de58494
+[2026-08-15T11:32:28.841Z] [scrape] FOUND lead {"name":"Story sfax","rating":3.2,"ratingCount":63,"phone":"27200075","website":"","address":"Ceinture Bourguiba entre Kaid Mohamed et entre teniour, Rue Hedi Nooman, Sfax 3022","placeId":"ChIJAZLrSzXTARMRC-V1IKgnyfo","category":"Tea house"}
+[2026-08-15T11:32:33.078Z] [scrape] FOUND lead {"name":"Café Kemour","rating":4,"ratingCount":135,"phone":"28524796","website":"https://www.facebook.com/CafekemourSfax/","address":"3047, Sfax 3047","placeId":"ChIJBzpFoCwtABMRgyR7RopJa5k","category":"Cafe"}
+[2026-08-15T11:32:33.090Z] [client] FILTER PASS "Café Kemour" rating=4 ratingCount=135
+[2026-08-15T11:32:33.110Z] [save] SAVED lead {"leadId":"11863251-dd3e-4747-9818-ac43712110fe","name":"Café Kemour","rating":4,"ratingCount":135,"phone":"28524796","placeId":"ChIJBzpFoCwtABMRgyR7RopJa5k"}
+[2026-08-15T11:32:33.170Z] [client] SAVE ok "Café Kemour" leadId=11863251-dd3e-4747-9818-ac43712110fe
+[2026-08-15T11:32:33.266Z] [scrape] FOUND lead {"name":"Bubbly Coffee Shop - Bubble Tea","rating":4.2,"ratingCount":19,"phone":"50034466","website":"http://facebook.com/bubblycoffeeshop/","address":"PQJ6+P4H, Rue de Kairouan, Sfax","placeId":"ChIJwcIdiUMtABMRBrGfkKUuTng","category":"Cafe"}
+[2026-08-15T11:32:37.753Z] [scrape] FOUND lead {"name":"The Buzz Lounge","rating":3.8,"ratingCount":91,"phone":"26680393","website":"","address":"QPGJ+GWQ, Sfax","placeId":"ChIJuSkqXQDTARMRCB0I6WKpYOI","category":"Coffee shop"}
+[2026-08-15T11:32:37.800Z] [scrape] FOUND lead {"name":"Mio Paraiso café - resto","rating":3.6,"ratingCount":29,"phone":"57033700","website":"","address":"QP6R+X95, 03039, Sfax","placeId":"ChIJ3x7kHwDTARMRmtaxGVuwUCY","category":"Coffee shop"}
+[2026-08-15T11:32:37.813Z] [client] FILTER PASS "Mio Paraiso café - resto" rating=3.6 ratingCount=29
+[2026-08-15T11:32:37.834Z] [save] SAVED lead {"leadId":"0b65db63-1ff5-4429-b3ff-c40a03261996","name":"Mio Paraiso café - resto","rating":3.6,"ratingCount":29,"phone":"57033700","placeId":"ChIJ3x7kHwDTARMRmtaxGVuwUCY"}
+[2026-08-15T11:32:37.895Z] [client] SAVE ok "Mio Paraiso café - resto" leadId=0b65db63-1ff5-4429-b3ff-c40a03261996
+[2026-08-15T11:32:42.357Z] [scrape] FOUND lead {"name":"Shakespeare coffee","rating":4.5,"ratingCount":11,"phone":"","website":"","address":"Rte de l'aéroport, Sfax","placeId":"ChIJk5ndR4gtABMRQye1Jgt8Jrw","category":"Cafe"}
+[2026-08-15T11:32:42.647Z] [scrape] FOUND lead {"name":"Nirvana Café","rating":4.2,"ratingCount":27,"phone":"","website":"","address":"QPQF+WXQ, Sfax 3022","placeId":"ChIJIZMkipvTARMR9fL1vXjSZzg","category":"Cafe"}
+[2026-08-15T11:32:42.668Z] [client] FILTER PASS "Nirvana Café" rating=4.2 ratingCount=27
+[2026-08-15T11:32:42.703Z] [save] SAVED lead {"leadId":"3d6cec34-cc80-4539-b807-07038aff5a33","name":"Nirvana Café","rating":4.2,"ratingCount":27,"phone":"","placeId":"ChIJIZMkipvTARMR9fL1vXjSZzg"}
+[2026-08-15T11:32:42.835Z] [client] SAVE ok "Nirvana Café" leadId=3d6cec34-cc80-4539-b807-07038aff5a33
+[2026-08-15T11:32:47.065Z] [scrape] FOUND lead {"name":"THE BARRIO 2 COFFEE","rating":4.3,"ratingCount":12,"phone":"26600152","website":"","address":"QPW9+MXG, Sfax","placeId":"ChIJJTLw64_TARMRD5mzrequA_4","category":"Cafe"}
+[2026-08-15T11:32:49.086Z] [scrape] FOUND lead {"name":"Riverside Café & Restaurant","rating":2.8,"ratingCount":156,"phone":"94290416","website":"","address":"Ceinture Bourguiba, entre Rue Taniour et, Tunis Rd, Sfax 3003","placeId":"ChIJaXRSJwDTARMRHU5_-SNwJoA","category":"Cafe"}
+[2026-08-15T11:32:49.100Z] [client] FILTER PASS "Riverside Café & Restaurant" rating=2.8 ratingCount=156
+[2026-08-15T11:32:49.125Z] [save] SAVED lead {"leadId":"fc9f1b54-3b98-4105-af9d-a8f495c46974","name":"Riverside Café & Restaurant","rating":2.8,"ratingCount":156,"phone":"94290416","placeId":"ChIJaXRSJwDTARMRHU5_-SNwJoA"}
+[2026-08-15T11:32:49.192Z] [client] SAVE ok "Riverside Café & Restaurant" leadId=fc9f1b54-3b98-4105-af9d-a8f495c46974
+[2026-08-15T11:32:51.932Z] [scrape] FOUND lead {"name":"CAFÉ CARTHAGE","rating":2.8,"ratingCount":4,"phone":"","website":"","address":"Route Gremda, Sfax","placeId":"ChIJld5ZTQDVARMRmZ0pab-OhA8","category":"Coffee shop"}
+[2026-08-15T11:32:55.739Z] [scrape] FOUND lead {"name":"جواجم الحشيشة الافران","rating":4.4,"ratingCount":49,"phone":"22756895","website":"","address":"Rte Lafrane, Sfax","placeId":"ChIJjUa3VyfTARMRLNJ0oT3v4yw","category":"Coffee shop"}
+[2026-08-15T11:32:55.751Z] [client] FILTER PASS "جواجم الحشيشة الافران" rating=4.4 ratingCount=49
+[2026-08-15T11:32:55.770Z] [save] SAVED lead {"leadId":"a524a618-9875-4ade-8d01-380112a91ccd","name":"جواجم الحشيشة الافران","rating":4.4,"ratingCount":49,"phone":"22756895","placeId":"ChIJjUa3VyfTARMRLNJ0oT3v4yw"}
+[2026-08-15T11:32:55.810Z] [client] SAVE ok "جواجم الحشيشة الافران" leadId=a524a618-9875-4ade-8d01-380112a91ccd
+[2026-08-15T11:32:55.999Z] [scrape] FOUND lead {"name":"Friend's Coffee Shop","rating":3.7,"ratingCount":37,"phone":"98972828","website":"","address":"Sfax","placeId":"ChIJ36gxPCvTARMR3lJYxWKGXCY","category":"Coffee shop"}
+[2026-08-15T11:33:02.306Z] [scrape] FOUND lead {"name":"PAP COFEESHOP","rating":0,"ratingCount":0,"phone":"51828003","website":"","address":"Rue Ahmed Skelli, 3003 Sfax - Rated, Rue Ahmed Sekelli, Sfax 3003","placeId":"ChIJmX71k7ItABMRb9xZGJzCqag","category":"Cafe"}
+[2026-08-15T11:33:02.321Z] [client] FILTER PASS "PAP COFEESHOP" rating=0 ratingCount=0
+[2026-08-15T11:33:02.352Z] [save] SAVED lead {"leadId":"8ffe70a9-5348-4666-bdbd-e06870f2cc5c","name":"PAP COFEESHOP","rating":0,"ratingCount":0,"phone":"51828003","placeId":"ChIJmX71k7ItABMRb9xZGJzCqag"}
+[2026-08-15T11:33:02.377Z] [client] SAVE ok "PAP COFEESHOP" leadId=8ffe70a9-5348-4666-bdbd-e06870f2cc5c
+[2026-08-15T11:33:03.968Z] [scrape] FOUND lead {"name":"MOON’S","rating":2.9,"ratingCount":64,"phone":"58453453","website":"","address":"QP57+HXR, Sfax","placeId":"ChIJX88RaVDTARMR6Mt79eq8zOo","category":"Coffee shop"}
+[2026-08-15T11:33:06.355Z] [scrape] FOUND lead {"name":"Story sfax","rating":3.2,"ratingCount":63,"phone":"27200075","website":"","address":"Ceinture Bourguiba entre Kaid Mohamed et entre teniour, Rue Hedi Nooman, Sfax 3022","placeId":"ChIJAZLrSzXTARMRC-V1IKgnyfo","category":"Tea house"}
+[2026-08-15T11:33:06.374Z] [client] FILTER PASS "Story sfax" rating=3.2 ratingCount=63
+[2026-08-15T11:33:06.399Z] [save] SAVED lead {"leadId":"fac64227-4d0e-4b56-a7ba-e97ac60fe6fb","name":"Story sfax","rating":3.2,"ratingCount":63,"phone":"27200075","placeId":"ChIJAZLrSzXTARMRC-V1IKgnyfo"}
+[2026-08-15T11:33:06.444Z] [client] SAVE ok "Story sfax" leadId=fac64227-4d0e-4b56-a7ba-e97ac60fe6fb
+[2026-08-15T11:33:07.545Z] [scrape] FOUND lead {"name":"Café Wajdi","rating":4.5,"ratingCount":11,"phone":"23500970","website":"","address":"QP57+FG2, Sfax","placeId":"ChIJ_WcXxl7TARMRwkxcaFLJi7s","category":"Cafe"}
+[2026-08-15T11:33:10.677Z] [scrape] FOUND lead {"name":"Bubbly Coffee Shop - Bubble Tea","rating":4.2,"ratingCount":19,"phone":"50034466","website":"http://facebook.com/bubblycoffeeshop/","address":"PQJ6+P4H, Rue de Kairouan, Sfax","placeId":"ChIJwcIdiUMtABMRBrGfkKUuTng","category":"Cafe"}
+[2026-08-15T11:33:10.690Z] [client] FILTER PASS "Bubbly Coffee Shop - Bubble Tea" rating=4.2 ratingCount=19
+[2026-08-15T11:33:10.710Z] [save] SAVED lead {"leadId":"2d0f6617-bee8-4bd2-8aa4-59d264f5ebf7","name":"Bubbly Coffee Shop - Bubble Tea","rating":4.2,"ratingCount":19,"phone":"50034466","placeId":"ChIJwcIdiUMtABMRBrGfkKUuTng"}
+[2026-08-15T11:33:10.751Z] [client] SAVE ok "Bubbly Coffee Shop - Bubble Tea" leadId=2d0f6617-bee8-4bd2-8aa4-59d264f5ebf7
+[2026-08-15T11:33:12.557Z] [scrape] FOUND lead {"name":"Café Sofiene","rating":4.5,"ratingCount":4,"phone":"","website":"","address":"PQV2+VPX, Sfax","placeId":"ChIJl0bCdSnTARMRQBLPTxd_knU","category":"Coffee shop"}
+[2026-08-15T11:33:15.147Z] [scrape] FOUND lead {"name":"The Buzz Lounge","rating":3.8,"ratingCount":91,"phone":"26680393","website":"","address":"QPGJ+GWQ, Sfax","placeId":"ChIJuSkqXQDTARMRCB0I6WKpYOI","category":"Coffee shop"}
+[2026-08-15T11:33:15.160Z] [client] FILTER PASS "The Buzz Lounge" rating=3.8 ratingCount=91
+[2026-08-15T11:33:15.180Z] [save] SAVED lead {"leadId":"4bc38f09-00f0-4310-8bd7-6d03225af1f2","name":"The Buzz Lounge","rating":3.8,"ratingCount":91,"phone":"26680393","placeId":"ChIJuSkqXQDTARMRCB0I6WKpYOI"}
+[2026-08-15T11:33:15.231Z] [client] SAVE ok "The Buzz Lounge" leadId=4bc38f09-00f0-4310-8bd7-6d03225af1f2
+[2026-08-15T11:33:18.658Z] [scrape] FOUND lead {"name":"The Cup","rating":4,"ratingCount":122,"phone":"","website":"","address":"QPCP+PC9, Sfax","placeId":"ChIJ9T-WcRLTARMRhwg1JOXAZGk","category":"Tea house"}
+[2026-08-15T11:33:19.660Z] [scrape] FOUND lead {"name":"Shakespeare coffee","rating":4.5,"ratingCount":11,"phone":"","website":"","address":"Rte de l'aéroport, Sfax","placeId":"ChIJk5ndR4gtABMRQye1Jgt8Jrw","category":"Cafe"}
+[2026-08-15T11:33:19.678Z] [client] FILTER PASS "Shakespeare coffee" rating=4.5 ratingCount=11
+[2026-08-15T11:33:19.707Z] [save] SAVED lead {"leadId":"b70ad63b-0e75-47a9-b175-ec5ec086f34c","name":"Shakespeare coffee","rating":4.5,"ratingCount":11,"phone":"","placeId":"ChIJk5ndR4gtABMRQye1Jgt8Jrw"}
+[2026-08-15T11:33:19.760Z] [client] SAVE ok "Shakespeare coffee" leadId=b70ad63b-0e75-47a9-b175-ec5ec086f34c
+[2026-08-15T11:33:23.725Z] [scrape] FOUND lead {"name":"Café Fedi","rating":4.4,"ratingCount":11,"phone":"","website":"","address":"Tbolbi km 7, Sfax","placeId":"ChIJTW6cHsnTARMRgmGiTL3u4Ck","category":"Coffee shop"}
+[2026-08-15T11:33:24.471Z] [scrape] FOUND lead {"name":"Friend's Coffee Shop","rating":3.7,"ratingCount":37,"phone":"98972828","website":"","address":"Sfax","placeId":"ChIJ36gxPCvTARMR3lJYxWKGXCY","category":"Coffee shop"}
+[2026-08-15T11:33:24.489Z] [client] FILTER PASS "Friend's Coffee Shop" rating=3.7 ratingCount=37
+[2026-08-15T11:33:24.516Z] [save] SAVED lead {"leadId":"f6dd94f7-6e5c-461d-87ca-b0d3a70dbed9","name":"Friend's Coffee Shop","rating":3.7,"ratingCount":37,"phone":"98972828","placeId":"ChIJ36gxPCvTARMR3lJYxWKGXCY"}
+[2026-08-15T11:33:24.608Z] [client] SAVE ok "Friend's Coffee Shop" leadId=f6dd94f7-6e5c-461d-87ca-b0d3a70dbed9
+[2026-08-15T11:33:27.232Z] [scrape] FOUND lead {"name":"IRON COFFEE","rating":3.7,"ratingCount":3,"phone":"22301937","website":"","address":"Km2 Route Mehdia, Sfax 3002","placeId":"ChIJ4eK7owXTARMRAyyJQAe4ohI","category":"Coffee shop"}
+[2026-08-15T11:33:28.505Z] [scrape] FOUND lead {"name":"THE BARRIO 2 COFFEE","rating":4.3,"ratingCount":12,"phone":"26600152","website":"","address":"QPW9+MXG, Sfax","placeId":"ChIJJTLw64_TARMRD5mzrequA_4","category":"Cafe"}
+[2026-08-15T11:33:28.533Z] [client] FILTER PASS "THE BARRIO 2 COFFEE" rating=4.3 ratingCount=12
+[2026-08-15T11:33:28.561Z] [save] SAVED lead {"leadId":"5bd90b7d-7b07-4c25-adce-868ed3b941f9","name":"THE BARRIO 2 COFFEE","rating":4.3,"ratingCount":12,"phone":"26600152","placeId":"ChIJJTLw64_TARMRD5mzrequA_4"}
+[2026-08-15T11:33:28.635Z] [client] SAVE ok "THE BARRIO 2 COFFEE" leadId=5bd90b7d-7b07-4c25-adce-868ed3b941f9
+[2026-08-15T11:33:32.306Z] [scrape] FOUND lead {"name":"Café Freud","rating":4,"ratingCount":8,"phone":"","website":"","address":"PPJP+HH6, Rte de la Soukra, Sfax","placeId":"ChIJFXR6ZfQtABMREQju7P2qLPo","category":"Coffee shop"}
+[2026-08-15T11:33:34.439Z] [scrape] FOUND lead {"name":"CAFÉ CARTHAGE","rating":2.8,"ratingCount":4,"phone":"","website":"","address":"Route Gremda, Sfax","placeId":"ChIJld5ZTQDVARMRmZ0pab-OhA8","category":"Coffee shop"}
+[2026-08-15T11:33:34.452Z] [client] FILTER PASS "CAFÉ CARTHAGE" rating=2.8 ratingCount=4
+[2026-08-15T11:33:34.480Z] [save] SAVED lead {"leadId":"cd835105-e302-4837-9cdb-d34947c3038a","name":"CAFÉ CARTHAGE","rating":2.8,"ratingCount":4,"phone":"","placeId":"ChIJld5ZTQDVARMRmZ0pab-OhA8"}
+[2026-08-15T11:33:34.582Z] [client] SAVE ok "CAFÉ CARTHAGE" leadId=cd835105-e302-4837-9cdb-d34947c3038a
+[2026-08-15T11:33:38.340Z] [scrape] FOUND lead {"name":"VERO Coffee","rating":5,"ratingCount":3,"phone":"","website":"","address":"Route saltania, kassas masrah, Sfax","placeId":"ChIJM8mOVQLTARMRSNcq1TBIIq4","category":"Coffee shop"}
+[2026-08-15T11:33:42.250Z] [scrape] FOUND lead {"name":"MOON’S","rating":2.9,"ratingCount":64,"phone":"58453453","website":"","address":"QP57+HXR, Sfax","placeId":"ChIJX88RaVDTARMR6Mt79eq8zOo","category":"Coffee shop"}
+[2026-08-15T11:33:42.263Z] [client] FILTER PASS "MOON’S" rating=2.9 ratingCount=64
+[2026-08-15T11:33:42.284Z] [save] SAVED lead {"leadId":"3c568114-5b6f-4b51-9224-22c30b5e7060","name":"MOON’S","rating":2.9,"ratingCount":64,"phone":"58453453","placeId":"ChIJX88RaVDTARMR6Mt79eq8zOo"}
+[2026-08-15T11:33:42.338Z] [client] SAVE ok "MOON’S" leadId=3c568114-5b6f-4b51-9224-22c30b5e7060
+[2026-08-15T11:33:42.957Z] [scrape] FOUND lead {"name":"Café de Tunis","rating":4.8,"ratingCount":4,"phone":"","website":"","address":"PQM7+2JQ, Ave Habib Bourguiba, Sfax 3000","placeId":"ChIJrdmTxS0tABMRtT5nUVrOha4","category":"Bar"}
+[2026-08-15T11:33:45.635Z] [scrape] FOUND lead {"name":"Café Wajdi","rating":4.5,"ratingCount":11,"phone":"23500970","website":"","address":"QP57+FG2, Sfax","placeId":"ChIJ_WcXxl7TARMRwkxcaFLJi7s","category":"Cafe"}
+[2026-08-15T11:33:45.648Z] [client] FILTER PASS "Café Wajdi" rating=4.5 ratingCount=11
+[2026-08-15T11:33:45.673Z] [save] SAVED lead {"leadId":"24916620-2865-4d93-9d39-7843574a5087","name":"Café Wajdi","rating":4.5,"ratingCount":11,"phone":"23500970","placeId":"ChIJ_WcXxl7TARMRwkxcaFLJi7s"}
+[2026-08-15T11:33:45.717Z] [client] SAVE ok "Café Wajdi" leadId=24916620-2865-4d93-9d39-7843574a5087
+[2026-08-15T11:33:46.286Z] [scrape] FOUND lead {"name":"Le Point Coffee Shop","rating":4.5,"ratingCount":2,"phone":"26323465","website":"","address":"PQJ7+CFR, Sfax","placeId":"ChIJNwykCAAtABMRCC2E1n5sKus","category":"Coffee shop"}
+[2026-08-15T11:33:51.547Z] [scrape] FOUND lead {"name":"Café Dar Anbar","rating":3.8,"ratingCount":32,"phone":"22191358","website":"","address":"PQP5+MF7, Rue Abdelkader, Sfax","placeId":"ChIJ840mtHUtABMR-Bz9EG2mbJA","category":"Cafe"}
+[2026-08-15T11:33:51.879Z] [scrape] FOUND lead {"name":"Café Sofiene","rating":4.5,"ratingCount":4,"phone":"","website":"","address":"PQV2+VPX, Sfax","placeId":"ChIJl0bCdSnTARMRQBLPTxd_knU","category":"Coffee shop"}
+[2026-08-15T11:33:51.895Z] [client] FILTER PASS "Café Sofiene" rating=4.5 ratingCount=4
+[2026-08-15T11:33:51.920Z] [save] SAVED lead {"leadId":"90f23500-17e7-4d63-992b-bc3e25926804","name":"Café Sofiene","rating":4.5,"ratingCount":4,"phone":"","placeId":"ChIJl0bCdSnTARMRQBLPTxd_knU"}
+[2026-08-15T11:33:51.982Z] [client] SAVE ok "Café Sofiene" leadId=90f23500-17e7-4d63-992b-bc3e25926804
+[2026-08-15T11:33:57.671Z] [scrape] FOUND lead {"name":"Café Castello","rating":4.1,"ratingCount":14,"phone":"","website":"","address":"PPRX+C4H، نهج محمد صالح, Sfax","placeId":"ChIJs_kwiyzTARMRmG15aM8IitI","category":"Cafe"}
+[2026-08-15T11:33:58.810Z] [scrape] FOUND lead {"name":"The Cup","rating":4,"ratingCount":122,"phone":"","website":"","address":"QPCP+PC9, Sfax","placeId":"ChIJ9T-WcRLTARMRhwg1JOXAZGk","category":"Tea house"}
+[2026-08-15T11:33:58.828Z] [client] FILTER PASS "The Cup" rating=4 ratingCount=122
+[2026-08-15T11:33:58.857Z] [save] SAVED lead {"leadId":"0a7d43a2-1910-48a3-a371-646cd3b3b100","name":"The Cup","rating":4,"ratingCount":122,"phone":"","placeId":"ChIJ9T-WcRLTARMRhwg1JOXAZGk"}
+[2026-08-15T11:33:58.905Z] [client] SAVE ok "The Cup" leadId=0a7d43a2-1910-48a3-a371-646cd3b3b100
+[2026-08-15T11:34:03.975Z] [scrape] FOUND lead {"name":"Centre ville coffee shop","rating":3.8,"ratingCount":4,"phone":"","website":"","address":"PQM7+956, Le 100 mètre, Sfax","placeId":"ChIJl7mIg7fTARMR_YOpPvypegU","category":"Coffee shop"}
+[2026-08-15T11:34:04.100Z] [scrape] FOUND lead {"name":"Café Fedi","rating":4.4,"ratingCount":11,"phone":"","website":"","address":"Tbolbi km 7, Sfax","placeId":"ChIJTW6cHsnTARMRgmGiTL3u4Ck","category":"Coffee shop"}
+[2026-08-15T11:34:04.112Z] [client] FILTER PASS "Café Fedi" rating=4.4 ratingCount=11
+[2026-08-15T11:34:04.142Z] [save] SAVED lead {"leadId":"d3a38a42-a1b7-4853-89dd-02c742de7102","name":"Café Fedi","rating":4.4,"ratingCount":11,"phone":"","placeId":"ChIJTW6cHsnTARMRgmGiTL3u4Ck"}
+[2026-08-15T11:34:04.192Z] [client] SAVE ok "Café Fedi" leadId=d3a38a42-a1b7-4853-89dd-02c742de7102
+[2026-08-15T11:34:08.501Z] [scrape] FOUND lead {"name":"IRON COFFEE","rating":3.7,"ratingCount":3,"phone":"22301937","website":"","address":"Km2 Route Mehdia, Sfax 3002","placeId":"ChIJ4eK7owXTARMRAyyJQAe4ohI","category":"Coffee shop"}
+[2026-08-15T11:34:08.514Z] [client] FILTER PASS "IRON COFFEE" rating=3.7 ratingCount=3
+[2026-08-15T11:34:08.535Z] [save] SAVED lead {"leadId":"ab0c8996-d124-4fc1-8e43-30d979ef2df5","name":"IRON COFFEE","rating":3.7,"ratingCount":3,"phone":"22301937","placeId":"ChIJ4eK7owXTARMRAyyJQAe4ohI"}
+[2026-08-15T11:34:08.593Z] [client] SAVE ok "IRON COFFEE" leadId=ab0c8996-d124-4fc1-8e43-30d979ef2df5
+[2026-08-15T11:34:10.862Z] [scrape] FOUND lead {"name":"Café Mama Rosa","rating":3.9,"ratingCount":68,"phone":"","website":"","address":"Univers CD, Bd Majida Boulila, Sfax 3079","placeId":"ChIJBSoSu9QsABMRLXB2XKir6U8","category":"Cafe"}
+[2026-08-15T11:34:13.479Z] [scrape] FOUND lead {"name":"Café Freud","rating":4,"ratingCount":8,"phone":"","website":"","address":"PPJP+HH6, Rte de la Soukra, Sfax","placeId":"ChIJFXR6ZfQtABMREQju7P2qLPo","category":"Coffee shop"}
+[2026-08-15T11:34:13.492Z] [client] FILTER PASS "Café Freud" rating=4 ratingCount=8
+[2026-08-15T11:34:13.517Z] [save] SAVED lead {"leadId":"86d86940-0cc4-4103-83b4-1350aa9720d4","name":"Café Freud","rating":4,"ratingCount":8,"phone":"","placeId":"ChIJFXR6ZfQtABMREQju7P2qLPo"}
+[2026-08-15T11:34:13.562Z] [client] SAVE ok "Café Freud" leadId=86d86940-0cc4-4103-83b4-1350aa9720d4
+[2026-08-15T11:34:13.926Z] [scrape] FOUND lead {"name":"Cafétéria 2A","rating":5,"ratingCount":4,"phone":"28287796","website":"","address":"14, Sfax","placeId":"ChIJ8-07lfctABMRqJsp9seZVpI","category":"Coffee shop"}
+[2026-08-15T11:34:19.465Z] [scrape] FOUND lead {"name":"Cave","rating":5,"ratingCount":3,"phone":"","website":"","address":"PQM6+7JV, Rue Dag Hammarskjold, Sfax","placeId":"ChIJE5r4cwItABMRc4BFtof4aDo","category":"Coffee shop"}
+[2026-08-15T11:34:20.084Z] [scrape] FOUND lead {"name":"VERO Coffee","rating":5,"ratingCount":3,"phone":"","website":"","address":"Route saltania, kassas masrah, Sfax","placeId":"ChIJM8mOVQLTARMRSNcq1TBIIq4","category":"Coffee shop"}
+[2026-08-15T11:34:20.100Z] [client] FILTER PASS "VERO Coffee" rating=5 ratingCount=3
+[2026-08-15T11:34:20.132Z] [save] SAVED lead {"leadId":"ab863b6d-0160-4d61-bf6d-f9adc7d5349c","name":"VERO Coffee","rating":5,"ratingCount":3,"phone":"","placeId":"ChIJM8mOVQLTARMRSNcq1TBIIq4"}
+[2026-08-15T11:34:20.208Z] [client] SAVE ok "VERO Coffee" leadId=ab863b6d-0160-4d61-bf6d-f9adc7d5349c
+[2026-08-15T11:34:24.430Z] [scrape] FOUND lead {"name":"Café ma3touk","rating":3.7,"ratingCount":21,"phone":"","website":"","address":"PQR3+98C, Sfax","placeId":"ChIJRycaXyrTARMRivJfJOaQTN0","category":"Coffee shop"}
+[2026-08-15T11:34:26.444Z] [scrape] FOUND lead {"name":"Café de Tunis","rating":4.8,"ratingCount":4,"phone":"","website":"","address":"PQM7+2JQ, Ave Habib Bourguiba, Sfax 3000","placeId":"ChIJrdmTxS0tABMRtT5nUVrOha4","category":"Bar"}
+[2026-08-15T11:34:26.463Z] [client] FILTER PASS "Café de Tunis" rating=4.8 ratingCount=4
+[2026-08-15T11:34:26.500Z] [save] SAVED lead {"leadId":"f155231f-fe18-4177-89d0-d52e30ddd5ed","name":"Café de Tunis","rating":4.8,"ratingCount":4,"phone":"","placeId":"ChIJrdmTxS0tABMRtT5nUVrOha4"}
+[2026-08-15T11:34:26.560Z] [client] SAVE ok "Café de Tunis" leadId=f155231f-fe18-4177-89d0-d52e30ddd5ed
+[2026-08-15T11:34:27.722Z] [scrape] FOUND lead {"name":"Café jumeaux","rating":5,"ratingCount":3,"phone":"44678524","website":"https://www.facebook.com/cafejumeaux","address":"3027 Rue Hédi Nouira, Sfax","placeId":"ChIJhT2ZyGTTARMRadanpPTwfp8","category":"Coffee shop"}
+[2026-08-15T11:34:30.921Z] [scrape] FOUND lead {"name":"Le Point Coffee Shop","rating":4.5,"ratingCount":2,"phone":"26323465","website":"","address":"PQJ7+CFR, Sfax","placeId":"ChIJNwykCAAtABMRCC2E1n5sKus","category":"Coffee shop"}
+[2026-08-15T11:34:30.932Z] [client] FILTER PASS "Le Point Coffee Shop" rating=4.5 ratingCount=2
+[2026-08-15T11:34:30.952Z] [save] SAVED lead {"leadId":"6347b752-524f-4239-8c7f-d99f5b12396d","name":"Le Point Coffee Shop","rating":4.5,"ratingCount":2,"phone":"26323465","placeId":"ChIJNwykCAAtABMRCC2E1n5sKus"}
+[2026-08-15T11:34:31.020Z] [client] SAVE ok "Le Point Coffee Shop" leadId=6347b752-524f-4239-8c7f-d99f5b12396d
+[2026-08-15T11:34:32.899Z] [scrape] FOUND lead {"name":"Bargino coffee shop","rating":4.5,"ratingCount":2,"phone":"","website":"","address":"PQJ6+MVR, Rue Dag Hammarskjold, Sfax","placeId":"ChIJO_ukDwAtABMR5vaRsayzRH4","category":"Coffee shop"}
+[2026-08-15T11:34:35.248Z] [scrape] FOUND lead {"name":"Café Dar Anbar","rating":3.8,"ratingCount":32,"phone":"22191358","website":"","address":"PQP5+MF7, Rue Abdelkader, Sfax","placeId":"ChIJ840mtHUtABMR-Bz9EG2mbJA","category":"Cafe"}
+[2026-08-15T11:34:35.261Z] [client] FILTER PASS "Café Dar Anbar" rating=3.8 ratingCount=32
+[2026-08-15T11:34:35.302Z] [save] SAVED lead {"leadId":"c97700b5-c5a1-4daf-bc5b-95ae9af7030e","name":"Café Dar Anbar","rating":3.8,"ratingCount":32,"phone":"22191358","placeId":"ChIJ840mtHUtABMR-Bz9EG2mbJA"}
+[2026-08-15T11:34:35.386Z] [client] SAVE ok "Café Dar Anbar" leadId=c97700b5-c5a1-4daf-bc5b-95ae9af7030e
+[2026-08-15T11:34:37.828Z] [scrape] FOUND lead {"name":"Swift coffee","rating":3.8,"ratingCount":5,"phone":"","website":"","address":"QP7C+CQV, Av. des Martyrs, Sfax","placeId":"ChIJtzUc3VHTARMRGf084Q2RkPY","category":"Coffee shop"}
+[2026-08-15T11:34:40.360Z] [scrape] FOUND lead {"name":"Café Castello","rating":4.1,"ratingCount":14,"phone":"","website":"","address":"PPRX+C4H، نهج محمد صالح, Sfax","placeId":"ChIJs_kwiyzTARMRmG15aM8IitI","category":"Cafe"}
+[2026-08-15T11:34:40.377Z] [client] FILTER PASS "Café Castello" rating=4.1 ratingCount=14
+[2026-08-15T11:34:40.403Z] [save] SAVED lead {"leadId":"55c2646b-8851-45b6-8102-9a0edf16d394","name":"Café Castello","rating":4.1,"ratingCount":14,"phone":"","placeId":"ChIJs_kwiyzTARMRmG15aM8IitI"}
+[2026-08-15T11:34:40.449Z] [client] SAVE ok "Café Castello" leadId=55c2646b-8851-45b6-8102-9a0edf16d394
+[2026-08-15T11:34:42.419Z] [scrape] FOUND lead {"name":"Cafe Sevinç","rating":5,"ratingCount":1,"phone":"","website":"","address":"3000 Rue tazarka, Sfax","placeId":"ChIJQ2SWj2MtABMRQmdwAqITnC8","category":"Coffee shop"}
+[2026-08-15T11:34:45.324Z] [scrape] FOUND lead {"name":"Centre ville coffee shop","rating":3.8,"ratingCount":4,"phone":"","website":"","address":"PQM7+956, Le 100 mètre, Sfax","placeId":"ChIJl7mIg7fTARMR_YOpPvypegU","category":"Coffee shop"}
+[2026-08-15T11:34:45.336Z] [client] FILTER PASS "Centre ville coffee shop" rating=3.8 ratingCount=4
+[2026-08-15T11:34:45.354Z] [save] SAVED lead {"leadId":"2382ab7b-6798-4398-9c97-266320f0aa91","name":"Centre ville coffee shop","rating":3.8,"ratingCount":4,"phone":"","placeId":"ChIJl7mIg7fTARMR_YOpPvypegU"}
+[2026-08-15T11:34:45.415Z] [client] SAVE ok "Centre ville coffee shop" leadId=2382ab7b-6798-4398-9c97-266320f0aa91
+[2026-08-15T11:34:47.178Z] [scrape] FOUND lead {"name":"first time","rating":5,"ratingCount":5,"phone":"","website":"","address":"7 Rue Ali Bach Hamba, Sfax","placeId":"ChIJvRxHNhctABMR-OOu0rQhoiQ","category":"Coffee shop"}
+[2026-08-15T11:34:50.895Z] [scrape] FOUND lead {"name":"Coffee Time","rating":4.9,"ratingCount":11,"phone":"98416068","website":"","address":"PQM6+3C2, Léopold sédar senghor, Sfax","placeId":"ChIJs1_B8xEtABMRYO7kUcRHUSc","category":"Cafe"}
+[2026-08-15T11:34:51.253Z] [scrape] FOUND lead {"name":"Café Mama Rosa","rating":3.9,"ratingCount":68,"phone":"","website":"","address":"Univers CD, Bd Majida Boulila, Sfax 3079","placeId":"ChIJBSoSu9QsABMRLXB2XKir6U8","category":"Cafe"}
+[2026-08-15T11:34:51.287Z] [client] FILTER PASS "Café Mama Rosa" rating=3.9 ratingCount=68
+[2026-08-15T11:34:51.319Z] [save] SAVED lead {"leadId":"dadfe417-b638-4f91-be6b-592ff2254fc9","name":"Café Mama Rosa","rating":3.9,"ratingCount":68,"phone":"","placeId":"ChIJBSoSu9QsABMRLXB2XKir6U8"}
+[2026-08-15T11:34:51.397Z] [client] SAVE ok "Café Mama Rosa" leadId=dadfe417-b638-4f91-be6b-592ff2254fc9
+[2026-08-15T11:34:55.113Z] [scrape] FOUND lead {"name":"Cafétéria 2A","rating":5,"ratingCount":4,"phone":"28287796","website":"","address":"14, Sfax","placeId":"ChIJ8-07lfctABMRqJsp9seZVpI","category":"Coffee shop"}
+[2026-08-15T11:34:55.127Z] [client] FILTER PASS "Cafétéria 2A" rating=5 ratingCount=4
+[2026-08-15T11:34:55.150Z] [save] SAVED lead {"leadId":"f57a59ee-2290-4ced-b244-38680b7109c3","name":"Cafétéria 2A","rating":5,"ratingCount":4,"phone":"28287796","placeId":"ChIJ8-07lfctABMRqJsp9seZVpI"}
+[2026-08-15T11:34:55.161Z] [scrape] FOUND lead {"name":"Salon De The ATATÜRK","rating":4.1,"ratingCount":29,"phone":"98975440","website":"","address":"PQV4+42X, Sfax","placeId":"ChIJbYUa-dXSARMRwyPXI6q1kxY","category":"Cafe"}
+[2026-08-15T11:34:55.208Z] [client] SAVE ok "Cafétéria 2A" leadId=f57a59ee-2290-4ced-b244-38680b7109c3
+[2026-08-15T11:34:59.973Z] [scrape] FOUND lead {"name":"Bibelot coffee shop","rating":3.5,"ratingCount":27,"phone":"20251116","website":"https://www.facebook.com/profile.php?id=100087462856156&mibextid=ZbWKwL","address":"QP9R+RQG, Rte Gremda, Sfax","placeId":"ChIJV2obktvTARMRFjbD5D3SWZE","category":"Coffee shop"}
+[2026-08-15T11:35:00.849Z] [scrape] FOUND lead {"name":"Cave","rating":5,"ratingCount":3,"phone":"","website":"","address":"PQM6+7JV, Rue Dag Hammarskjold, Sfax","placeId":"ChIJE5r4cwItABMRc4BFtof4aDo","category":"Coffee shop"}
+[2026-08-15T11:35:00.862Z] [client] FILTER PASS "Cave" rating=5 ratingCount=3
+[2026-08-15T11:35:00.892Z] [save] SAVED lead {"leadId":"a51e443f-a2b4-4320-b709-4a27d67efec0","name":"Cave","rating":5,"ratingCount":3,"phone":"","placeId":"ChIJE5r4cwItABMRc4BFtof4aDo"}
+[2026-08-15T11:35:00.962Z] [client] SAVE ok "Cave" leadId=a51e443f-a2b4-4320-b709-4a27d67efec0
+[2026-08-15T11:35:03.981Z] [scrape] FOUND lead {"name":"cafe Patcino","rating":3.9,"ratingCount":13,"phone":"71770051","website":"","address":"km 4.5 Tunis Rd, Sfax","placeId":"ChIJEwtmbKfTARMRdTD4JW6vMrU","category":"Coffee shop"}
+[2026-08-15T11:35:05.885Z] [scrape] FOUND lead {"name":"Café ma3touk","rating":3.7,"ratingCount":21,"phone":"","website":"","address":"PQR3+98C, Sfax","placeId":"ChIJRycaXyrTARMRivJfJOaQTN0","category":"Coffee shop"}
+[2026-08-15T11:35:05.904Z] [client] FILTER PASS "Café ma3touk" rating=3.7 ratingCount=21
+[2026-08-15T11:35:05.937Z] [save] SAVED lead {"leadId":"e7fca9a3-8c13-49ab-80a8-156ef26856d9","name":"Café ma3touk","rating":3.7,"ratingCount":21,"phone":"","placeId":"ChIJRycaXyrTARMRivJfJOaQTN0"}
+[2026-08-15T11:35:05.990Z] [client] SAVE ok "Café ma3touk" leadId=e7fca9a3-8c13-49ab-80a8-156ef26856d9
+[2026-08-15T11:35:09.543Z] [scrape] FOUND lead {"name":"Café jumeaux","rating":5,"ratingCount":3,"phone":"44678524","website":"https://www.facebook.com/cafejumeaux","address":"3027 Rue Hédi Nouira, Sfax","placeId":"ChIJhT2ZyGTTARMRadanpPTwfp8","category":"Coffee shop"}
+[2026-08-15T11:35:09.557Z] [client] FILTER PASS "Café jumeaux" rating=5 ratingCount=3
+[2026-08-15T11:35:09.586Z] [save] SAVED lead {"leadId":"ee88fde9-bcc6-464c-845d-b49721a5fc89","name":"Café jumeaux","rating":5,"ratingCount":3,"phone":"44678524","placeId":"ChIJhT2ZyGTTARMRadanpPTwfp8"}
+[2026-08-15T11:35:09.638Z] [client] SAVE ok "Café jumeaux" leadId=ee88fde9-bcc6-464c-845d-b49721a5fc89
+[2026-08-15T11:35:10.571Z] [scrape] FOUND lead {"name":"Bourgeoise Lounge","rating":3.5,"ratingCount":29,"phone":"","website":"","address":"PQP2+HQ7, Imm. Esia, Rue Ahmed Aloulou, Sfax 3027","placeId":"ChIJ_5TLFgAtABMRvNmYocLXVqI","category":"Coffee shop"}
+[2026-08-15T11:35:14.710Z] [scrape] FOUND lead {"name":"Bargino coffee shop","rating":4.5,"ratingCount":2,"phone":"","website":"","address":"PQJ6+MVR, Rue Dag Hammarskjold, Sfax","placeId":"ChIJO_ukDwAtABMR5vaRsayzRH4","category":"Coffee shop"}
+[2026-08-15T11:35:14.724Z] [client] FILTER PASS "Bargino coffee shop" rating=4.5 ratingCount=2
+[2026-08-15T11:35:14.750Z] [save] SAVED lead {"leadId":"7c1a0206-113e-4a00-9c05-96d140d76b8a","name":"Bargino coffee shop","rating":4.5,"ratingCount":2,"phone":"","placeId":"ChIJO_ukDwAtABMR5vaRsayzRH4"}
+[2026-08-15T11:35:14.766Z] [scrape] FOUND lead {"name":"Cool Sfax","rating":4.2,"ratingCount":5,"phone":"53656023","website":"","address":"Rte Gremda, Sfax","placeId":"ChIJBT1a_rfTARMRkYTjfSupxJo","category":"Coffee shop"}
+[2026-08-15T11:35:14.767Z] [scrape] phase2 done, leads returned = 108
+[2026-08-15T11:35:14.767Z] ===== SCRAPE SESSION END (success) =====
+[2026-08-15T11:35:14.817Z] [client] SAVE ok "Bargino coffee shop" leadId=7c1a0206-113e-4a00-9c05-96d140d76b8a
+[2026-08-15T11:35:15.560Z] [scrape] browser closed OK
+[2026-08-15T11:35:19.079Z] [scrape] FOUND lead {"name":"Swift coffee","rating":3.8,"ratingCount":5,"phone":"","website":"","address":"QP7C+CQV, Av. des Martyrs, Sfax","placeId":"ChIJtzUc3VHTARMRGf084Q2RkPY","category":"Coffee shop"}
+[2026-08-15T11:35:19.092Z] [client] FILTER PASS "Swift coffee" rating=3.8 ratingCount=5
+[2026-08-15T11:35:19.115Z] [save] SAVED lead {"leadId":"041d72e4-dece-4b6a-af39-0cb89b28631e","name":"Swift coffee","rating":3.8,"ratingCount":5,"phone":"","placeId":"ChIJtzUc3VHTARMRGf084Q2RkPY"}
+[2026-08-15T11:35:19.174Z] [client] SAVE ok "Swift coffee" leadId=041d72e4-dece-4b6a-af39-0cb89b28631e
+[2026-08-15T11:35:23.876Z] [scrape] FOUND lead {"name":"Cafe Sevinç","rating":5,"ratingCount":1,"phone":"","website":"","address":"3000 Rue tazarka, Sfax","placeId":"ChIJQ2SWj2MtABMRQmdwAqITnC8","category":"Coffee shop"}
+[2026-08-15T11:35:23.889Z] [client] FILTER PASS "Cafe Sevinç" rating=5 ratingCount=1
+[2026-08-15T11:35:23.912Z] [save] SAVED lead {"leadId":"db7d1f6f-590f-428b-890d-c396d79545e3","name":"Cafe Sevinç","rating":5,"ratingCount":1,"phone":"","placeId":"ChIJQ2SWj2MtABMRQmdwAqITnC8"}
+[2026-08-15T11:35:23.965Z] [client] SAVE ok "Cafe Sevinç" leadId=db7d1f6f-590f-428b-890d-c396d79545e3
+[2026-08-15T11:35:28.490Z] [scrape] FOUND lead {"name":"first time","rating":5,"ratingCount":5,"phone":"","website":"","address":"7 Rue Ali Bach Hamba, Sfax","placeId":"ChIJvRxHNhctABMR-OOu0rQhoiQ","category":"Coffee shop"}
+[2026-08-15T11:35:28.502Z] [client] FILTER PASS "first time" rating=5 ratingCount=5
+[2026-08-15T11:35:28.520Z] [save] SAVED lead {"leadId":"cb4eb334-1f38-4e0d-8878-167032613438","name":"first time","rating":5,"ratingCount":5,"phone":"","placeId":"ChIJvRxHNhctABMR-OOu0rQhoiQ"}
+[2026-08-15T11:35:28.578Z] [client] SAVE ok "first time" leadId=cb4eb334-1f38-4e0d-8878-167032613438
+[2026-08-15T11:35:33.948Z] [scrape] FOUND lead {"name":"Coffee Time","rating":4.9,"ratingCount":11,"phone":"98416068","website":"","address":"PQM6+3C2, Léopold sédar senghor, Sfax","placeId":"ChIJs1_B8xEtABMRYO7kUcRHUSc","category":"Cafe"}
+[2026-08-15T11:35:33.960Z] [client] FILTER PASS "Coffee Time" rating=4.9 ratingCount=11
+[2026-08-15T11:35:33.983Z] [save] SAVED lead {"leadId":"78f25bba-4b41-46cc-9ceb-630b373e77ce","name":"Coffee Time","rating":4.9,"ratingCount":11,"phone":"98416068","placeId":"ChIJs1_B8xEtABMRYO7kUcRHUSc"}
+[2026-08-15T11:35:34.041Z] [client] SAVE ok "Coffee Time" leadId=78f25bba-4b41-46cc-9ceb-630b373e77ce
+[2026-08-15T11:35:37.355Z] [scrape] FOUND lead {"name":"Salon De The ATATÜRK","rating":4.1,"ratingCount":29,"phone":"98975440","website":"","address":"PQV4+42X, Sfax","placeId":"ChIJbYUa-dXSARMRwyPXI6q1kxY","category":"Cafe"}
+[2026-08-15T11:35:37.368Z] [client] FILTER PASS "Salon De The ATATÜRK" rating=4.1 ratingCount=29
+[2026-08-15T11:35:37.386Z] [save] SAVED lead {"leadId":"66cf2ac9-9324-47bd-99a1-8876da1f34a8","name":"Salon De The ATATÜRK","rating":4.1,"ratingCount":29,"phone":"98975440","placeId":"ChIJbYUa-dXSARMRwyPXI6q1kxY"}
+[2026-08-15T11:35:37.460Z] [client] SAVE ok "Salon De The ATATÜRK" leadId=66cf2ac9-9324-47bd-99a1-8876da1f34a8
+[2026-08-15T11:35:41.334Z] [scrape] FOUND lead {"name":"Bibelot coffee shop","rating":3.5,"ratingCount":27,"phone":"20251116","website":"https://www.facebook.com/profile.php?id=100087462856156&mibextid=ZbWKwL","address":"QP9R+RQG, Rte Gremda, Sfax","placeId":"ChIJV2obktvTARMRFjbD5D3SWZE","category":"Coffee shop"}
+[2026-08-15T11:35:41.346Z] [client] FILTER PASS "Bibelot coffee shop" rating=3.5 ratingCount=27
+[2026-08-15T11:35:41.365Z] [save] SAVED lead {"leadId":"cfe74ca5-9d7d-4729-87fb-3c3a318283a0","name":"Bibelot coffee shop","rating":3.5,"ratingCount":27,"phone":"20251116","placeId":"ChIJV2obktvTARMRFjbD5D3SWZE"}
+[2026-08-15T11:35:41.426Z] [client] SAVE ok "Bibelot coffee shop" leadId=cfe74ca5-9d7d-4729-87fb-3c3a318283a0
+[2026-08-15T11:35:44.511Z] [scrape] FOUND lead {"name":"cafe Patcino","rating":3.9,"ratingCount":13,"phone":"71770051","website":"","address":"km 4.5 Tunis Rd, Sfax","placeId":"ChIJEwtmbKfTARMRdTD4JW6vMrU","category":"Coffee shop"}
+[2026-08-15T11:35:44.521Z] [client] FILTER PASS "cafe Patcino" rating=3.9 ratingCount=13
+[2026-08-15T11:35:44.538Z] [save] SAVED lead {"leadId":"3a33deb7-73a4-4333-be09-57977037a95a","name":"cafe Patcino","rating":3.9,"ratingCount":13,"phone":"71770051","placeId":"ChIJEwtmbKfTARMRdTD4JW6vMrU"}
+[2026-08-15T11:35:44.601Z] [client] SAVE ok "cafe Patcino" leadId=3a33deb7-73a4-4333-be09-57977037a95a
+[2026-08-15T11:35:50.082Z] [scrape] FOUND lead {"name":"Bourgeoise Lounge","rating":3.5,"ratingCount":29,"phone":"","website":"","address":"PQP2+HQ7, Imm. Esia, Rue Ahmed Aloulou, Sfax 3027","placeId":"ChIJ_5TLFgAtABMRvNmYocLXVqI","category":"Coffee shop"}
+[2026-08-15T11:35:50.094Z] [client] FILTER PASS "Bourgeoise Lounge" rating=3.5 ratingCount=29
+[2026-08-15T11:35:50.112Z] [save] SAVED lead {"leadId":"bafe52c8-45df-4517-abd1-dfbc2ffc2589","name":"Bourgeoise Lounge","rating":3.5,"ratingCount":29,"phone":"","placeId":"ChIJ_5TLFgAtABMRvNmYocLXVqI"}
+[2026-08-15T11:35:50.172Z] [client] SAVE ok "Bourgeoise Lounge" leadId=bafe52c8-45df-4517-abd1-dfbc2ffc2589
+[2026-08-15T11:35:53.811Z] [scrape] FOUND lead {"name":"Cool Sfax","rating":4.2,"ratingCount":5,"phone":"53656023","website":"","address":"Rte Gremda, Sfax","placeId":"ChIJBT1a_rfTARMRkYTjfSupxJo","category":"Coffee shop"}
+[2026-08-15T11:35:53.825Z] [client] FILTER PASS "Cool Sfax" rating=4.2 ratingCount=5
+[2026-08-15T11:35:53.847Z] [save] SAVED lead {"leadId":"001a37a0-94e8-41f9-95e3-a51f9f69522a","name":"Cool Sfax","rating":4.2,"ratingCount":5,"phone":"53656023","placeId":"ChIJBT1a_rfTARMRkYTjfSupxJo"}
+[2026-08-15T11:35:53.918Z] [client] SAVE ok "Cool Sfax" leadId=001a37a0-94e8-41f9-95e3-a51f9f69522a
+[2026-08-15T11:35:57.372Z] [scrape] FOUND lead {"name":"Salon de thé Dorcas","rating":3.9,"ratingCount":93,"phone":"22095686","website":"","address":"Dorcas Coffee, Sfax","placeId":"ChIJW3-4IcXSARMRmminiCJ9T7U","category":"Tea house"}
+[2026-08-15T11:35:57.384Z] [client] FILTER PASS "Salon de thé Dorcas" rating=3.9 ratingCount=93
+[2026-08-15T11:35:57.411Z] [save] SAVED lead {"leadId":"5c9f89a6-9173-4029-b0ab-8f958700d325","name":"Salon de thé Dorcas","rating":3.9,"ratingCount":93,"phone":"22095686","placeId":"ChIJW3-4IcXSARMRmminiCJ9T7U"}
+[2026-08-15T11:35:57.461Z] [client] SAVE ok "Salon de thé Dorcas" leadId=5c9f89a6-9173-4029-b0ab-8f958700d325
+[2026-08-15T11:36:01.502Z] [scrape] FOUND lead {"name":"Rond point SFAX 200","rating":4.9,"ratingCount":8,"phone":"","website":"","address":"PQQ6+W2C, Sfax","placeId":"ChIJZ9c8IgDTARMRES6RWG2i4io","category":"Coffee shop"}
+[2026-08-15T11:36:01.515Z] [client] FILTER PASS "Rond point SFAX 200" rating=4.9 ratingCount=8
+[2026-08-15T11:36:01.534Z] [save] SAVED lead {"leadId":"af3eca6d-44f0-4a63-a949-5e6ea2dc78dc","name":"Rond point SFAX 200","rating":4.9,"ratingCount":8,"phone":"","placeId":"ChIJZ9c8IgDTARMRES6RWG2i4io"}
+[2026-08-15T11:36:01.598Z] [client] SAVE ok "Rond point SFAX 200" leadId=af3eca6d-44f0-4a63-a949-5e6ea2dc78dc
+[2026-08-15T11:36:05.543Z] [scrape] FOUND lead {"name":"Cafe carré d'or","rating":4.5,"ratingCount":2,"phone":"","website":"","address":"QP36+H9R, P13, Sfax","placeId":"ChIJ35p54BvTARMRrKmAxbA1t6E","category":"Coffee shop"}
+[2026-08-15T11:36:05.555Z] [client] FILTER PASS "Cafe carré d'or" rating=4.5 ratingCount=2
+[2026-08-15T11:36:05.576Z] [save] SAVED lead {"leadId":"ccdcccd8-8f36-468e-807c-3d1e9a04387b","name":"Cafe carré d'or","rating":4.5,"ratingCount":2,"phone":"","placeId":"ChIJ35p54BvTARMRrKmAxbA1t6E"}
+[2026-08-15T11:36:05.639Z] [client] SAVE ok "Cafe carré d'or" leadId=ccdcccd8-8f36-468e-807c-3d1e9a04387b
+[2026-08-15T11:36:09.456Z] [scrape] FOUND lead {"name":"THE ROYCE","rating":3.6,"ratingCount":38,"phone":"54069408","website":"","address":"QQ54+5GF, Sfax","placeId":"ChIJSUz6ewDTARMR0Ovld6M9w8g","category":"Coffee shop"}
+[2026-08-15T11:36:09.456Z] [scrape] phase2 done, leads returned = 112
+[2026-08-15T11:36:09.456Z] ===== SCRAPE SESSION END (success) =====
+[2026-08-15T11:36:09.468Z] [client] FILTER PASS "THE ROYCE" rating=3.6 ratingCount=38
+[2026-08-15T11:36:09.489Z] [save] SAVED lead {"leadId":"24099ad1-1416-468c-9c56-5f2ecb04bff0","name":"THE ROYCE","rating":3.6,"ratingCount":38,"phone":"54069408","placeId":"ChIJSUz6ewDTARMR0Ovld6M9w8g"}
+[2026-08-15T11:36:09.572Z] [client] SAVE ok "THE ROYCE" leadId=24099ad1-1416-468c-9c56-5f2ecb04bff0
+[2026-08-15T11:36:09.946Z] [scrape] browser closed OK
+[2026-08-15T11:36:09.999Z] [client] REGION done received count=112 accumulated=112 unsavedAfterStream=0
+[2026-08-22T20:33:01.850Z] ===== SCRAPE SESSION START ===== {"query":"dentist miami","at":"2026-08-22T20:33:01.850Z"}
+[2026-08-22T20:33:02.175Z] [scrape] launching browser from C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+[2026-08-22T20:33:02.654Z] [client] REGION 1/1 "dentist miami" filters minRating=0 maxRating=5 minReviews=0
+[2026-08-22T20:33:26.523Z] [scrape] phase1 total results = 116
+[2026-08-22T20:33:30.641Z] [scrape] FOUND lead {"name":"Super Dentist Miami","rating":4.9,"ratingCount":300,"phone":"+13056428499","website":"https://superdentistmiami.com/","address":"1660 SW 1st St, Miami, FL 33135, United States","placeId":"ChIJwyRMIXm32YgRWKinaI_2bm4","category":"Dentist"}
+[2026-08-22T20:33:30.657Z] [client] FILTER PASS "Super Dentist Miami" rating=4.9 ratingCount=300
+[2026-08-22T20:33:31.353Z] [save] SAVED lead {"leadId":"f962d71c-9b34-45b2-b212-67411c7e9b60","name":"Super Dentist Miami","rating":4.9,"ratingCount":300,"phone":"+13056428499","placeId":"ChIJwyRMIXm32YgRWKinaI_2bm4"}
+[2026-08-22T20:33:31.367Z] [client] SAVE ok "Super Dentist Miami" leadId=f962d71c-9b34-45b2-b212-67411c7e9b60
+[2026-08-22T20:33:35.832Z] [scrape] FOUND lead {"name":"Relax and Smile Dental Care","rating":4.9,"ratingCount":922,"phone":"+17869834812","website":"https://www.relaxandsmile.com/?utm_source=GMB&utm_medium=organic&utm_campaign=DevOptimization&utm_content=Website","address":"271 NE 2nd St, Miami, FL 33132, United States","placeId":"ChIJ8WVD9Z622YgRTsE_RcBq1Qk","category":"Dental clinic"}
+[2026-08-22T20:33:35.847Z] [client] FILTER PASS "Relax and Smile Dental Care" rating=4.9 ratingCount=922
+[2026-08-22T20:33:35.874Z] [save] SAVED lead {"leadId":"76fa4e35-6948-46da-970d-03db6adfe51a","name":"Relax and Smile Dental Care","rating":4.9,"ratingCount":922,"phone":"+17869834812","placeId":"ChIJ8WVD9Z622YgRTsE_RcBq1Qk"}
+[2026-08-22T20:33:35.889Z] [client] SAVE ok "Relax and Smile Dental Care" leadId=76fa4e35-6948-46da-970d-03db6adfe51a
+[2026-08-22T20:33:40.170Z] [scrape] FOUND lead {"name":"Miami Modern Dental","rating":4.9,"ratingCount":197,"phone":"+17863389228","website":"https://moderndentalbysmile.com/","address":"7155 W Flagler St, Miami, FL 33144, United States","placeId":"ChIJyTev2q252YgR3zyVoULZvB0","category":"Dentist"}
+[2026-08-22T20:33:40.185Z] [client] FILTER PASS "Miami Modern Dental" rating=4.9 ratingCount=197
+[2026-08-22T20:33:40.203Z] [save] SAVED lead {"leadId":"bb1a4231-8869-4d7b-9905-52561c32d86d","name":"Miami Modern Dental","rating":4.9,"ratingCount":197,"phone":"+17863389228","placeId":"ChIJyTev2q252YgR3zyVoULZvB0"}
+[2026-08-22T20:33:40.219Z] [client] SAVE ok "Miami Modern Dental" leadId=bb1a4231-8869-4d7b-9905-52561c32d86d
+[2026-08-22T20:33:44.650Z] [scrape] FOUND lead {"name":"Ultra Smile Miami","rating":4.8,"ratingCount":854,"phone":"+13053721020","website":"http://ultrasmilemiami.com/","address":"168 SE 1st St, Miami, FL 33131, United States","placeId":"ChIJzfnoM5y22YgR1GGcGrWwfH8","category":"Dental clinic"}
+[2026-08-22T20:33:44.665Z] [client] FILTER PASS "Ultra Smile Miami" rating=4.8 ratingCount=854
+[2026-08-22T20:33:44.683Z] [save] SAVED lead {"leadId":"862e2b56-6b76-4a08-8e17-cbc0146b7ca8","name":"Ultra Smile Miami","rating":4.8,"ratingCount":854,"phone":"+13053721020","placeId":"ChIJzfnoM5y22YgR1GGcGrWwfH8"}
+[2026-08-22T20:33:44.699Z] [client] SAVE ok "Ultra Smile Miami" leadId=862e2b56-6b76-4a08-8e17-cbc0146b7ca8
+[2026-08-22T20:33:49.126Z] [scrape] FOUND lead {"name":"Brickell Dental Care","rating":4.6,"ratingCount":335,"phone":"+13056144423","website":"https://downtownmiamidentalcare.com/?gad_source=1&gbraid=0AAAAApWqt99gs1_0sJjMrln30HGh59R9C&gclid=CjwKCAiA2JG9BhAuEiwAH_zf3g2DWF_ARANmOC_MXmFhh_VC9i55l9Ne7GU6y9LxjmUvfWlY5PSsvBoCRKwQAvD_BwE%23app&utm_source=ig&utm_medium=social&utm_content=link_in_bio&fbclid=PAZXh0bgNhZW0CMTEAc3J0YwZhcHBfaWQMMjU2MjgxMDQwNTU4AAGnst3w4Nccp2ihsPcR0fNJT9foJ0-Z6dJuDB8jzzM31h2ldxfmSQxBYsUx9HE_aem_X2TRe3zrDjVD4Qe6GPhMxw","address":"65 SE 9th St, Miami, FL 33131, United States","placeId":"ChIJ5dgwtem32YgREjPdlArA0lg","category":"Dentist"}
+[2026-08-22T20:33:49.140Z] [client] FILTER PASS "Brickell Dental Care" rating=4.6 ratingCount=335
+[2026-08-22T20:33:49.160Z] [save] SAVED lead {"leadId":"2b311c83-9061-45e9-ab79-68dcb5e66ab7","name":"Brickell Dental Care","rating":4.6,"ratingCount":335,"phone":"+13056144423","placeId":"ChIJ5dgwtem32YgREjPdlArA0lg"}
+[2026-08-22T20:33:49.177Z] [client] SAVE ok "Brickell Dental Care" leadId=2b311c83-9061-45e9-ab79-68dcb5e66ab7
+[2026-08-22T20:33:52.930Z] [scrape] FOUND lead {"name":"Dentists in Brickell - HQ Dontics Dental Centre","rating":4.9,"ratingCount":751,"phone":"+12295080551","website":"https://www.hqdontics.com/","address":"1060 Brickell Ave Suite 103/M2, Miami, FL 33131, United States","placeId":"ChIJ0XSP4IO22YgRhKT-1BNj3Z0","category":"Dentist"}
+[2026-08-22T20:33:52.944Z] [client] FILTER PASS "Dentists in Brickell - HQ Dontics Dental Centre" rating=4.9 ratingCount=751
+[2026-08-22T20:33:52.966Z] [save] SAVED lead {"leadId":"1dfcffa9-43a9-423a-9042-2b732bc85a5c","name":"Dentists in Brickell - HQ Dontics Dental Centre","rating":4.9,"ratingCount":751,"phone":"+12295080551","placeId":"ChIJ0XSP4IO22YgRhKT-1BNj3Z0"}
+[2026-08-22T20:33:52.981Z] [client] SAVE ok "Dentists in Brickell - HQ Dontics Dental Centre" leadId=1dfcffa9-43a9-423a-9042-2b732bc85a5c
+[2026-08-22T20:33:57.707Z] [scrape] FOUND lead {"name":"ONE Dental Miami","rating":4.8,"ratingCount":367,"phone":"+13052855150","website":"http://www.onedentalmiami.com/","address":"1330 Coral Wy #100, Miami, FL 33145, United States","placeId":"ChIJOeo2vFu22YgRnXmUhbsc1LE","category":"Dentist"}
+[2026-08-22T20:33:57.721Z] [client] FILTER PASS "ONE Dental Miami" rating=4.8 ratingCount=367
+[2026-08-22T20:33:57.738Z] [save] SAVED lead {"leadId":"6d55fde8-5c74-4d06-a00b-b3a383aad9d6","name":"ONE Dental Miami","rating":4.8,"ratingCount":367,"phone":"+13052855150","placeId":"ChIJOeo2vFu22YgRnXmUhbsc1LE"}
+[2026-08-22T20:33:57.754Z] [client] SAVE ok "ONE Dental Miami" leadId=6d55fde8-5c74-4d06-a00b-b3a383aad9d6
+[2026-08-22T20:34:00.854Z] [scrape] FOUND lead {"name":"Midtown Dental Miami","rating":4.3,"ratingCount":150,"phone":"+13055986070","website":"http://www.midtowndentalmiami.com/","address":"3915 Biscayne Blvd Unit 306, Miami, FL 33137, United States","placeId":"ChIJQzJHv1ex2YgRMdj_j6kkb0c","category":"Dentist"}
+[2026-08-22T20:34:00.869Z] [client] FILTER PASS "Midtown Dental Miami" rating=4.3 ratingCount=150
+[2026-08-22T20:34:00.887Z] [save] SAVED lead {"leadId":"66d642d6-e02c-42b1-89eb-bc74030d438f","name":"Midtown Dental Miami","rating":4.3,"ratingCount":150,"phone":"+13055986070","placeId":"ChIJQzJHv1ex2YgRMdj_j6kkb0c"}
+[2026-08-22T20:34:00.905Z] [client] SAVE ok "Midtown Dental Miami" leadId=66d642d6-e02c-42b1-89eb-bc74030d438f
+[2026-08-22T20:34:05.965Z] [scrape] FOUND lead {"name":"Alfonso Dental Miami","rating":5,"ratingCount":1017,"phone":"+13056424142","website":"https://alfonsodental305.com/","address":"351 NW 42nd Ave Ste 402, Miami, FL 33126, United States","placeId":"ChIJOzkeHFu_2YgRSHlh6Ja0stg","category":"Dentist"}
+[2026-08-22T20:34:05.978Z] [client] FILTER PASS "Alfonso Dental Miami" rating=5 ratingCount=1017
+[2026-08-22T20:34:05.995Z] [save] SAVED lead {"leadId":"b24cff11-6807-4ee8-8e05-edb88a513a6d","name":"Alfonso Dental Miami","rating":5,"ratingCount":1017,"phone":"+13056424142","placeId":"ChIJOzkeHFu_2YgRSHlh6Ja0stg"}
+[2026-08-22T20:34:06.010Z] [client] SAVE ok "Alfonso Dental Miami" leadId=b24cff11-6807-4ee8-8e05-edb88a513a6d
+[2026-08-22T20:34:11.035Z] [scrape] FOUND lead {"name":"My Smile Miami","rating":5,"ratingCount":1570,"phone":"+13054440808","website":"https://www.mysmilemiami.com/?utm_source=google&utm_medium=organic&utm_campaign=gbp","address":"782 NW 42nd Ave #633, Miami, FL 33126, United States","placeId":"ChIJZ524ymi32YgR4HrN8bg9vzU","category":"Cosmetic dentist"}
+[2026-08-22T20:34:11.050Z] [client] FILTER PASS "My Smile Miami" rating=5 ratingCount=1570
+[2026-08-22T20:34:11.068Z] [save] SAVED lead {"leadId":"1d861316-1449-4454-8fe4-12d076d5cb28","name":"My Smile Miami","rating":5,"ratingCount":1570,"phone":"+13054440808","placeId":"ChIJZ524ymi32YgR4HrN8bg9vzU"}
+[2026-08-22T20:34:11.085Z] [client] SAVE ok "My Smile Miami" leadId=1d861316-1449-4454-8fe4-12d076d5cb28
+[2026-08-22T20:34:14.299Z] [scrape] FOUND lead {"name":"Bayfront Dental - Dr. Taylor Light","rating":4.9,"ratingCount":539,"phone":"+13055301866","website":"https://www.bayfrontdental.com/","address":"224 SE 1st St, Miami, FL 33131, United States","placeId":"ChIJXfwuyZ222YgRMJFFi-sUKag","category":"Dentist"}
+[2026-08-22T20:34:14.312Z] [client] FILTER PASS "Bayfront Dental - Dr. Taylor Light" rating=4.9 ratingCount=539
+[2026-08-22T20:34:14.332Z] [save] SAVED lead {"leadId":"6c002c77-8abc-466b-9ff4-f6aa0ea36d24","name":"Bayfront Dental - Dr. Taylor Light","rating":4.9,"ratingCount":539,"phone":"+13055301866","placeId":"ChIJXfwuyZ222YgRMJFFi-sUKag"}
+[2026-08-22T20:34:14.348Z] [client] SAVE ok "Bayfront Dental - Dr. Taylor Light" leadId=6c002c77-8abc-466b-9ff4-f6aa0ea36d24
+[2026-08-22T20:34:18.876Z] [scrape] FOUND lead {"name":"All Smiles Dentistry Miami","rating":4.9,"ratingCount":404,"phone":"+13053716064","website":"https://miamidental.net/","address":"150 SE 2nd Ave STE 604, Miami, FL 33131, United States","placeId":"ChIJkdeQKFDA2YgRpaDPJCQgHEQ","category":"Dentist"}
+[2026-08-22T20:34:18.890Z] [client] FILTER PASS "All Smiles Dentistry Miami" rating=4.9 ratingCount=404
+[2026-08-22T20:34:18.910Z] [save] SAVED lead {"leadId":"ad028103-0c18-4f84-8e2c-0c323deaf5e7","name":"All Smiles Dentistry Miami","rating":4.9,"ratingCount":404,"phone":"+13053716064","placeId":"ChIJkdeQKFDA2YgRpaDPJCQgHEQ"}
+[2026-08-22T20:34:18.925Z] [client] SAVE ok "All Smiles Dentistry Miami" leadId=ad028103-0c18-4f84-8e2c-0c323deaf5e7
+[2026-08-22T20:34:22.293Z] [scrape] FOUND lead {"name":"Dental World of Miami","rating":4.8,"ratingCount":459,"phone":"+13055054100","website":"http://www.dentalworldmiami.com/","address":"40 SW 13th St #801, Miami, FL 33130, United States","placeId":"ChIJwRlwO4W22YgRnDvPty3p8qg","category":"Dentist"}
+[2026-08-22T20:34:22.309Z] [client] FILTER PASS "Dental World of Miami" rating=4.8 ratingCount=459
+[2026-08-22T20:34:22.329Z] [save] SAVED lead {"leadId":"062cff9f-0631-4cae-837a-6bd460a5bfbf","name":"Dental World of Miami","rating":4.8,"ratingCount":459,"phone":"+13055054100","placeId":"ChIJwRlwO4W22YgRnDvPty3p8qg"}
+[2026-08-22T20:34:22.347Z] [client] SAVE ok "Dental World of Miami" leadId=062cff9f-0631-4cae-837a-6bd460a5bfbf
+[2026-08-22T20:34:26.225Z] [scrape] FOUND lead {"name":"Miami Dental Sedation Spa","rating":5,"ratingCount":1305,"phone":"+13054454646","website":"https://www.miamidentalsedationspa.com/","address":"401 SW 42nd Ave #302, Miami, FL 33134, United States","placeId":"ChIJ8Sx_2nC32YgReiUaspXKIYs","category":"Dentist"}
+[2026-08-22T20:34:31.417Z] [scrape] FOUND lead {"name":"Dental Team of Miami","rating":4.8,"ratingCount":458,"phone":"+13056803939","website":"https://dentalteamfl.com/locations/miami/?utm_campaign=gmb&utm_medium=gmb&utm_source=google","address":"801 NW 37th Ave Ste 204, Miami, FL 33125, United States","placeId":"ChIJVySxrCq32YgRB8mrK5b9fcg","category":"Dentist"}
+[2026-08-22T20:34:35.937Z] [scrape] FOUND lead {"name":"Dentists at Midtown","rating":4.2,"ratingCount":510,"phone":"+17867240418","website":"https://www.dentistsatmidtown.com/?sc_cid=GBP%3AO%3AGP%3A979%3AOrganic_Search%3AGeneral%3Ana&_vsrefdom=organic_gbp&y_source=1_MTIwMzA0NDgtNzE1LWxvY2F0aW9uLndlYnNpdGU%3D","address":"3120 N Miami Ave, Miami, FL 33127, United States","placeId":"ChIJp5CEqmCx2YgRCvJLGG0k_UY","category":"Dentist"}
+[2026-08-22T20:34:41.695Z] [scrape] FOUND lead {"name":"Miami Sedation & Cosmetic Dentistry","rating":4.9,"ratingCount":488,"phone":"+13059120186","website":"https://drramonbana.com/?utm_source=GMBlisting&utm_medium=organic&utm_campaign=gmb","address":"2461 Coral Wy, Miami, FL 33145, United States","placeId":"ChIJ90NRrq232YgROx9mQGh-ap4","category":"Cosmetic dentist"}
+[2026-08-22T20:34:45.571Z] [scrape] FOUND lead {"name":"Dental Progress","rating":4.9,"ratingCount":212,"phone":"+17864092233","website":"https://dentalprogres.com/","address":"477 NW 27th Ave, Miami, FL 33125, United States","placeId":"ChIJ3S26L1G32YgRhQvyzzgOdGo","category":"Dental clinic"}

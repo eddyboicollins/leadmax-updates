@@ -1,3 +1,0 @@
-{
-  "/api/campaigns/[id]/leads/[leadId]/purge/route": "app/api/campaigns/[id]/leads/[leadId]/purge/route.js"
-}

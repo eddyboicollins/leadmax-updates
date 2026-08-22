@@ -1,3 +1,0 @@
-{
-  "/api/campaigns/[id]/leads/[leadId]/images/deep-search/route": "app/api/campaigns/[id]/leads/[leadId]/images/deep-search/route.js"
-}

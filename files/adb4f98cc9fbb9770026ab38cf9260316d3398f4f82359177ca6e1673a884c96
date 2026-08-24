@@ -1,0 +1,289 @@
+const PACKAGE_JSON = (name: string) => JSON.stringify({
+  name,
+  version: '0.1.0',
+  private: true,
+  scripts: { dev: 'next dev', build: 'next build', start: 'next start', lint: 'next lint' },
+  dependencies: { next: '16.2.6', react: '19.2.4', 'react-dom': '19.2.4' },
+  devDependencies: {
+    '@tailwindcss/postcss': '^4',
+    tailwindcss: '^4',
+    '@types/node': '^20',
+    '@types/react': '^19',
+    '@types/react-dom': '^19',
+    typescript: '^5',
+  },
+}, null, 2);
+
+const NEXT_CONFIG = `import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {};
+
+export default nextConfig;
+`;
+
+const TSCONFIG = JSON.stringify({
+  compilerOptions: {
+    target: 'ES2017',
+    lib: ['dom', 'dom.iterable', 'esnext'],
+    allowJs: true,
+    skipLibCheck: true,
+    strict: false,
+    noImplicitAny: false,
+    noEmit: true,
+    esModuleInterop: true,
+    module: 'esnext',
+    moduleResolution: 'bundler',
+    resolveJsonModule: true,
+    isolatedModules: true,
+    jsx: 'preserve',
+    incremental: true,
+    plugins: [{ name: 'next' }],
+  },
+  include: ['next-env.d.ts', '**/*.ts', '**/*.tsx', '.next/types/**/*.ts'],
+  exclude: ['node_modules'],
+}, null, 2);
+
+const POSTCSS_CONFIG = `const config = {
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
+};
+export default config;
+`;
+
+const GLOBALS_CSS = `@import "tailwindcss";
+html { scroll-behavior: smooth; }
+body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+img, video { max-width: 100%; height: auto; }
+::selection { background-color: rgba(16, 185, 129, 0.3); }
+`;
+
+const LAYOUT_TSX = `import './globals.css';
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" />
+      </head>
+      <body>{children}</body>
+    </html>
+  );
+}
+`;
+
+const NEXT_ENV = `/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+`;
+
+export function buildLandingPageFiles(projectName: string, componentCode: string) {
+  return [
+    { file: 'package.json', data: PACKAGE_JSON(projectName) },
+    { file: 'next.config.ts', data: NEXT_CONFIG },
+    { file: 'tsconfig.json', data: TSCONFIG },
+    { file: 'postcss.config.mjs', data: POSTCSS_CONFIG },
+    { file: 'next-env.d.ts', data: NEXT_ENV },
+    { file: 'app/globals.css', data: GLOBALS_CSS },
+    { file: 'app/layout.tsx', data: LAYOUT_TSX },
+    { file: 'app/page.tsx', data: componentCode },
+  ];
+}
+
+export function slugifyProjectName(businessName: string): string {
+  const safeName = businessName
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 30)
+    .replace(/^-|-$/g, '');
+  return `lp-${safeName}`;
+}
+
+export interface VercelDeployment {
+  id: string;
+  url?: string;
+  alias?: string[];
+  readyState?: string;
+  errorMessage?: string;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export async function createVercelDeployment(
+  token: string,
+  projectName: string,
+  componentCode: string,
+): Promise<VercelDeployment> {
+  const res = await fetch('https://api.vercel.com/v13/deployments', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: projectName,
+      files: buildLandingPageFiles(projectName, componentCode),
+      projectSettings: { framework: 'nextjs' },
+      target: 'production',
+    }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Vercel deployment request failed');
+  }
+  return data as VercelDeployment;
+}
+
+export async function getVercelDeployment(token: string, deploymentId: string): Promise<VercelDeployment> {
+  const res = await fetch(`https://api.vercel.com/v13/deployments/${deploymentId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error?.message || data.message || 'Failed to fetch deployment status');
+  }
+  return data as VercelDeployment;
+}
+
+export async function waitForVercelDeployment(
+  token: string,
+  deploymentId: string,
+  timeoutMs = 180_000,
+): Promise<VercelDeployment> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const deployment = await getVercelDeployment(token, deploymentId);
+    const state = deployment.readyState;
+    if (state === 'READY') return deployment;
+    if (state === 'ERROR' || state === 'CANCELED') return deployment;
+    await sleep(4000);
+  }
+  throw new Error('Vercel deployment timed out waiting for build to finish');
+}
+
+interface DeploymentEvent {
+  type?: string;
+  payload?: { text?: string; message?: string };
+  text?: string;
+}
+
+export async function getVercelBuildLogs(token: string, deploymentId: string): Promise<string> {
+  const res = await fetch(
+    `https://api.vercel.com/v2/deployments/${deploymentId}/events?limit=-1&direction=backward`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+
+  let eventsText = '';
+  if (res.ok) {
+    const data = await res.json();
+    const events: DeploymentEvent[] = Array.isArray(data) ? data : data.events || [];
+    eventsText = events
+      .map((e) => e.payload?.text || e.payload?.message || e.text || '')
+      .filter(Boolean)
+      .reverse()
+      .join('\n');
+  }
+
+  const deployment = await getVercelDeployment(token, deploymentId);
+  const parts = [
+    deployment.errorMessage ? `Error: ${deployment.errorMessage}` : '',
+    eventsText,
+  ].filter(Boolean);
+
+  const combined = parts.join('\n\n');
+  return combined.slice(-12_000) || 'No build logs available from Vercel.';
+}
+
+export async function disableVercelProjectProtection(token: string, projectName: string): Promise<void> {
+  try {
+    await fetch(`https://api.vercel.com/v9/projects/${projectName}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ssoProtection: null, passwordProtection: null }),
+    });
+  } catch {
+    // best-effort
+  }
+}
+
+export function resolveDeploymentUrl(deployment: VercelDeployment, projectName: string): string {
+  if (deployment.url) return `https://${deployment.url}`;
+  return `https://${projectName}.vercel.app`;
+}
+
+export async function assignVercelAlias(
+  token: string,
+  projectName: string,
+  deploymentId: string,
+): Promise<void> {
+  const aliasDomain = `${projectName}.vercel.app`;
+  const res = await fetch(`https://api.vercel.com/v2/deployments/${deploymentId}/aliases`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ alias: aliasDomain }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error?.message || data.message || 'Failed to assign alias');
+  }
+}
+
+export type NameAvailability = 'available' | 'taken' | 'invalid';
+
+/** Vercel project-name rules: lowercase alphanumerics and inner hyphens only. */
+export function isValidProjectName(projectName: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/.test(projectName);
+}
+
+/**
+ * Checks whether a Vercel project name (and therefore its <name>.vercel.app
+ * subdomain) is free to use.
+ *
+ * Two sources of truth are consulted:
+ *  1. The user's own Vercel account (GET /v9/projects/{name}) — catches names
+ *     already used by this account (the "same name used twice" case).
+ *  2. A live HTTP probe of https://{name}.vercel.app — .vercel.app names are
+ *     globally unique, so if the subdomain responds with a real site (status
+ *     < 400) the name is taken even if it belongs to another account.
+ *
+ * Free names either 404 (Vercel wildcard DNS) or are unreachable, so those
+ * are reported as available. Syntactically invalid names short-circuit to
+ * 'invalid' — Vercel's API answers 404 (not 400) for them, which would
+ * otherwise read as "free".
+ */
+export async function checkVercelNameAvailability(
+  token: string,
+  projectName: string,
+): Promise<NameAvailability> {
+  if (!projectName.trim() || !isValidProjectName(projectName)) return 'invalid';
+
+  // 1. Own-account project check.
+  try {
+    const res = await fetch(`https://api.vercel.com/v9/projects/${encodeURIComponent(projectName)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) return 'taken';
+  } catch {
+    // Ignore and fall through to the global probe.
+  }
+
+  // 2. Global subdomain probe (authoritative for taken-by-others names).
+  try {
+    const probe = await fetch(`https://${projectName}.vercel.app/`, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (probe.status < 400) return 'taken';
+  } catch {
+    // Unreachable or DNS failure -> available.
+  }
+
+  return 'available';
+}

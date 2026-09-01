@@ -1,0 +1,575 @@
+import { promises as fs } from 'fs';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { sortLeadsByRating } from './leads';
+import { profileTitle } from './businessProfiles';
+import type { Campaign, Lead, BusinessData, LeadStatus, LeadLandingPage, LeadImage, LeadDeployment, DeploymentEntry, LeadGeneration, GlobalSettings, CampaignRegion, Chat, ChatMessage, BusinessProfile, LeadInvoice, InvoiceSettings } from './types';
+import { scrapeLog } from './scrapeLog';
+
+export const DATA_DIR = (() => {
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'data');
+  }
+  return path.join(process.cwd(), 'data');
+})();
+const CAMPAIGNS_FILE = path.join(DATA_DIR, 'campaigns.json');
+export const GENERATIONS_FILE = path.join(DATA_DIR, 'generations.json');
+export const SCRAPED_DIR = path.join(DATA_DIR, 'scraped');
+const CHATS_FILE = path.join(DATA_DIR, 'chats.json');
+const CHAT_MESSAGES_DIR = path.join(DATA_DIR, 'chat-messages');
+
+async function ensureDir(dir: string) {
+  await fs.mkdir(dir, { recursive: true });
+}
+
+export async function readJSON<T>(filePath: string, fallback: T): Promise<T> {
+  try {
+    const content = await fs.readFile(filePath, 'utf-8');
+    return JSON.parse(content);
+  } catch {
+    return fallback;
+  }
+}
+
+async function writeJSON(filePath: string, data: unknown): Promise<void> {
+  await ensureDir(path.dirname(filePath));
+  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+  await fs.rename(tmpPath, filePath);
+}
+
+function leadsFile(campaignId: string): string {
+  return path.join(DATA_DIR, 'leads', `${campaignId}.json`);
+}
+
+function settingsFile(): string {
+  return path.join(DATA_DIR, 'settings.json');
+}
+
+async function readCampaigns(): Promise<Campaign[]> {
+  return readJSON<Campaign[]>(CAMPAIGNS_FILE, []);
+}
+
+async function writeCampaigns(campaigns: Campaign[]): Promise<void> {
+  const stripped = campaigns.map(c => ({ ...c, leads: [] }));
+  await writeJSON(CAMPAIGNS_FILE, stripped);
+}
+
+// ── Campaigns ──
+
+export async function getCampaigns(): Promise<Campaign[]> {
+  const campaigns = await readCampaigns();
+  for (const c of campaigns) {
+    c.leads = await getCampaignLeads(c.id);
+  }
+  return campaigns.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function getCampaign(id: string): Promise<Campaign | null> {
+  const campaigns = await readCampaigns();
+  const campaign = campaigns.find(c => c.id === id);
+  if (!campaign) return null;
+  campaign.leads = await getCampaignLeads(id);
+  return campaign;
+}
+
+export interface CampaignFilter {
+  minRating?: number;
+  maxRating?: number;
+  minReviews?: number;
+}
+
+export async function saveCampaign(keyword: string, location: string, filter?: CampaignFilter, regions?: CampaignRegion[]): Promise<Campaign> {
+  const campaigns = await readCampaigns();
+  const id = uuidv4();
+  const now = new Date().toISOString();
+  const campaign: Campaign = {
+    id,
+    keyword,
+    location,
+    displayName: `${keyword} - ${location}`,
+    leads: [],
+    ...(filter || {}),
+    ...(regions && regions.length > 0 ? { regions } : {}),
+    createdAt: now,
+    updatedAt: now,
+  };
+  campaigns.push(campaign);
+  await writeCampaigns(campaigns);
+  return campaign;
+}
+
+export async function deleteCampaign(id: string): Promise<void> {
+  const campaigns = await readCampaigns();
+  const campaign = campaigns.find(c => c.id === id);
+  if (campaign && !campaign.deleted) {
+    campaign.deleted = true;
+    campaign.deletedAt = new Date().toISOString();
+    campaign.updatedAt = new Date().toISOString();
+  }
+  await writeCampaigns(campaigns);
+}
+
+export async function restoreCampaign(id: string): Promise<void> {
+  const campaigns = await readCampaigns();
+  const campaign = campaigns.find(c => c.id === id);
+  if (campaign && campaign.deleted) {
+    campaign.deleted = false;
+    campaign.deletedAt = undefined;
+    campaign.updatedAt = new Date().toISOString();
+  }
+  await writeCampaigns(campaigns);
+}
+
+// Permanently erases a soft-deleted campaign: removes it from campaigns.json
+// and deletes its leads file. Refuses to erase an active (non-deleted) campaign.
+export async function purgeCampaign(id: string): Promise<void> {
+  const campaigns = await readCampaigns();
+  const campaign = campaigns.find(c => c.id === id);
+  if (!campaign) return;
+  if (!campaign.deleted) {
+    throw new Error('Campaign must be soft-deleted before it can be erased.');
+  }
+  await writeCampaigns(campaigns.filter(c => c.id !== id));
+  try {
+    await fs.rm(leadsFile(id), { force: true });
+  } catch { /* no leads file */ }
+}
+
+// ── Leads ──
+
+// Serializes read-modify-write access to a campaign's leads file so that
+// per-lead (single) saves during streaming don't race each other.
+const leadWriteLocks = new Map<string, Promise<void>>();
+
+async function withCampaignLeadsLock<T>(campaignId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = leadWriteLocks.get(campaignId) || Promise.resolve();
+  const next = prev.catch(() => {}).then(async () => fn());
+  leadWriteLocks.set(campaignId, next as Promise<void>);
+  try {
+    return await next;
+  } finally {
+    if (leadWriteLocks.get(campaignId) === next) leadWriteLocks.delete(campaignId);
+  }
+}
+
+export async function getCampaignLeads(campaignId: string): Promise<Lead[]> {
+  const leads = await readJSON<Lead[]>(leadsFile(campaignId), []);
+  return sortLeadsByRating(leads);
+}
+
+export async function getLead(leadId: string): Promise<Lead | null> {
+  const campaigns = await readCampaigns();
+  for (const c of campaigns) {
+    const leads = await getCampaignLeads(c.id);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead) return lead;
+  }
+  return null;
+}
+
+async function findLeadCampaignId(leadId: string): Promise<string | null> {
+  const campaigns = await readCampaigns();
+  for (const c of campaigns) {
+    const leads = await getCampaignLeads(c.id);
+    if (leads.some(l => l.id === leadId)) return c.id;
+  }
+  return null;
+}
+
+export async function addLeads(campaignId: string, businesses: { leadId: string; business: BusinessData }[]): Promise<void> {
+  if (businesses.length === 0) return;
+  await withCampaignLeadsLock(campaignId, async () => {
+    const leads = await getCampaignLeads(campaignId);
+    const existingIds = new Set(leads.map(l => l.id));
+    const existingPlaceIds = new Set(leads.map(l => l.business?.placeId).filter(Boolean));
+    const existingPhones = new Set(leads.map(l => l.business?.phone).filter(Boolean));
+    const existingNames = new Set(leads.map(l => l.business?.name.toLowerCase().replace(/[^a-z0-9]/g, '')).filter(Boolean));
+    const now = new Date().toISOString();
+    for (const { leadId, business } of businesses) {
+      if (existingIds.has(leadId)) {
+        scrapeLog('[save] SKIP existing leadId', leadId, business.name);
+        continue;
+      }
+      const normName = business.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (business.placeId && existingPlaceIds.has(business.placeId)) {
+        scrapeLog('[save] SKIP duplicate placeId', business.placeId, business.name);
+        continue;
+      }
+      if (business.phone && existingPhones.has(business.phone)) {
+        scrapeLog('[save] SKIP duplicate phone', business.phone, business.name);
+        continue;
+      }
+      if (existingNames.has(normName)) {
+        scrapeLog('[save] SKIP duplicate name', business.name);
+        continue;
+      }
+      leads.push({
+        id: leadId,
+        business,
+        status: 'pending',
+        notes: '',
+        createdAt: now,
+        updatedAt: now,
+      });
+      scrapeLog('[save] SAVED lead', JSON.stringify({
+        leadId,
+        name: business.name,
+        rating: business.rating,
+        ratingCount: business.ratingCount,
+        phone: business.phone,
+        placeId: business.placeId,
+      }));
+    }
+    await writeJSON(leadsFile(campaignId), leads);
+  });
+}
+
+export async function removeLead(leadId: string): Promise<void> {
+  const campaignId = await findLeadCampaignId(leadId);
+  if (!campaignId) return;
+  await withCampaignLeadsLock(campaignId, async () => {
+    const leads = await getCampaignLeads(campaignId);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead && !lead.deleted) {
+      lead.deleted = true;
+      lead.deletedAt = new Date().toISOString();
+      lead.updatedAt = new Date().toISOString();
+      await writeJSON(leadsFile(campaignId), leads);
+    }
+  });
+}
+
+export async function restoreLead(leadId: string): Promise<void> {
+  const campaignId = await findLeadCampaignId(leadId);
+  if (!campaignId) return;
+  await withCampaignLeadsLock(campaignId, async () => {
+    const leads = await getCampaignLeads(campaignId);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead && lead.deleted) {
+      lead.deleted = false;
+      lead.deletedAt = undefined;
+      lead.updatedAt = new Date().toISOString();
+      await writeJSON(leadsFile(campaignId), leads);
+    }
+  });
+}
+
+export async function updateLead(
+  leadId: string,
+  data: { status?: LeadStatus; notes?: string },
+): Promise<void> {
+  const campaignId = await findLeadCampaignId(leadId);
+  if (!campaignId) return;
+  await withCampaignLeadsLock(campaignId, async () => {
+    const leads = await getCampaignLeads(campaignId);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead) {
+      if (data.status) lead.status = data.status;
+      if (data.notes !== undefined) lead.notes = data.notes;
+      lead.updatedAt = new Date().toISOString();
+      await writeJSON(leadsFile(campaignId), leads);
+    }
+  });
+}
+
+export async function updateLeadLandingPage(
+  leadId: string,
+  landingPage: LeadLandingPage,
+): Promise<void> {
+  const campaignId = await findLeadCampaignId(leadId);
+  if (!campaignId) return;
+  await withCampaignLeadsLock(campaignId, async () => {
+    const leads = await getCampaignLeads(campaignId);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead) {
+      lead.landingPage = landingPage;
+      lead.updatedAt = new Date().toISOString();
+      await writeJSON(leadsFile(campaignId), leads);
+    }
+  });
+}
+
+export async function updateLeadDeployment(
+  leadId: string,
+  deployment: LeadDeployment,
+): Promise<void> {
+  const campaignId = await findLeadCampaignId(leadId);
+  if (!campaignId) return;
+  await withCampaignLeadsLock(campaignId, async () => {
+    const leads = await getCampaignLeads(campaignId);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead) {
+      lead.deployment = deployment;
+      lead.updatedAt = new Date().toISOString();
+      await writeJSON(leadsFile(campaignId), leads);
+    }
+  });
+}
+
+export async function addDeploymentEntry(
+  leadId: string,
+  entry: DeploymentEntry,
+): Promise<void> {
+  const campaignId = await findLeadCampaignId(leadId);
+  if (!campaignId) return;
+  await withCampaignLeadsLock(campaignId, async () => {
+    const leads = await getCampaignLeads(campaignId);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead) {
+      if (!lead.deploymentHistory) lead.deploymentHistory = [];
+      for (const e of lead.deploymentHistory) e.isMain = false;
+      entry.isMain = true;
+      lead.deploymentHistory.unshift(entry);
+      lead.deployment = { provider: 'vercel', url: entry.aliasUrl, deployedAt: entry.deployedAt, projectName: entry.aliasUrl.replace('https://', '').split('.')[0] };
+      lead.updatedAt = new Date().toISOString();
+      await writeJSON(leadsFile(campaignId), leads);
+    }
+  });
+}
+
+export async function setMainDeployment(
+  leadId: string,
+  entryId: string,
+): Promise<{ entry: DeploymentEntry | null }> {
+  const campaignId = await findLeadCampaignId(leadId);
+  if (!campaignId) return { entry: null };
+  return withCampaignLeadsLock(campaignId, async () => {
+    const leads = await getCampaignLeads(campaignId);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead && lead.deploymentHistory) {
+      let found: DeploymentEntry | null = null;
+      for (const e of lead.deploymentHistory) {
+        if (e.id === entryId) {
+          e.isMain = true;
+          found = e;
+        } else {
+          e.isMain = false;
+        }
+      }
+      if (found) {
+        lead.deployment = { provider: 'vercel', url: found.aliasUrl, deployedAt: found.deployedAt, projectName: found.aliasUrl.replace('https://', '').split('.')[0] };
+        // Promote the selected snapshot into the working copy so AI edits,
+        // redeploys and previews all operate on the default run.
+        if (found.tsx) {
+          const lp = lead.landingPage || { generatedAt: found.deployedAt, version: 0, sections: [] };
+          lead.landingPage = {
+            tsx: found.tsx,
+            generatedAt: lp.generatedAt || found.deployedAt,
+            version: (lp.version || 0) + 1,
+            sections: lp.sections || [],
+          };
+        }
+      }
+      lead.updatedAt = new Date().toISOString();
+      await writeJSON(leadsFile(campaignId), leads);
+      return { entry: found };
+    }
+    return { entry: null };
+  });
+}
+
+export async function updateLeadImages(leadId: string, images: LeadImage[]): Promise<void> {
+  const campaignId = await findLeadCampaignId(leadId);
+  if (!campaignId) return;
+  await withCampaignLeadsLock(campaignId, async () => {
+    const leads = await getCampaignLeads(campaignId);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead) {
+      lead.images = images;
+      lead.updatedAt = new Date().toISOString();
+      await writeJSON(leadsFile(campaignId), leads);
+    }
+  });
+}
+
+export async function updateLeadDeploymentName(
+  leadId: string,
+  deploymentName: string,
+): Promise<void> {
+  const campaignId = await findLeadCampaignId(leadId);
+  if (!campaignId) return;
+  await withCampaignLeadsLock(campaignId, async () => {
+    const leads = await getCampaignLeads(campaignId);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead) {
+      lead.deploymentName = deploymentName || undefined;
+      lead.updatedAt = new Date().toISOString();
+      await writeJSON(leadsFile(campaignId), leads);
+    }
+  });
+}
+
+export async function updateLeadInvoice(
+  leadId: string,
+  invoice: LeadInvoice | null,
+): Promise<void> {
+  const campaignId = await findLeadCampaignId(leadId);
+  if (!campaignId) return;
+  await withCampaignLeadsLock(campaignId, async () => {
+    const leads = await getCampaignLeads(campaignId);
+    const lead = leads.find(l => l.id === leadId);
+    if (lead) {
+      lead.invoice = invoice === null ? undefined : invoice;
+      lead.updatedAt = new Date().toISOString();
+      await writeJSON(leadsFile(campaignId), leads);
+    }
+  });
+}
+
+// ── Settings ──
+
+export async function getSettings(): Promise<GlobalSettings> {
+  const data = await readJSON<GlobalSettings>(settingsFile(), {} as GlobalSettings);
+  return {
+    vercelToken: data?.vercelToken || '',
+    imgbbKey: data?.imgbbKey || '',
+    geminiApiKey: data?.geminiApiKey || '',
+    geminiModel: data?.geminiModel || 'gemini-2.5-flash',
+    geminiSource: data?.geminiSource || 'proxy',
+    systemPrompt: data?.systemPrompt || '',
+    assistantSystemPrompt: data?.assistantSystemPrompt || '',
+    wizardCompleted: data?.wizardCompleted || false,
+    defaultMinRating: data?.defaultMinRating ?? 0,
+    defaultMaxRating: data?.defaultMaxRating ?? 5,
+    defaultMinReviews: data?.defaultMinReviews ?? 0,
+    invoice: data?.invoice || undefined,
+  };
+}
+
+export async function saveSettings(data: Partial<GlobalSettings>): Promise<void> {
+  const existing = await getSettings();
+  const toSave: GlobalSettings = {
+    vercelToken: data.vercelToken !== undefined ? data.vercelToken : existing.vercelToken,
+    imgbbKey: data.imgbbKey !== undefined ? data.imgbbKey : existing.imgbbKey,
+    geminiApiKey: data.geminiApiKey !== undefined ? data.geminiApiKey : existing.geminiApiKey,
+    geminiModel: data.geminiModel || existing.geminiModel || 'gemini-2.5-flash',
+    geminiSource: data.geminiSource !== undefined ? data.geminiSource : existing.geminiSource || 'proxy',
+    systemPrompt: data.systemPrompt !== undefined ? data.systemPrompt : existing.systemPrompt,
+    assistantSystemPrompt: data.assistantSystemPrompt !== undefined ? data.assistantSystemPrompt : existing.assistantSystemPrompt,
+    wizardCompleted: data.wizardCompleted !== undefined ? data.wizardCompleted : existing.wizardCompleted,
+    defaultMinRating: data.defaultMinRating !== undefined ? data.defaultMinRating : existing.defaultMinRating ?? 0,
+    defaultMaxRating: data.defaultMaxRating !== undefined ? data.defaultMaxRating : existing.defaultMaxRating ?? 5,
+    defaultMinReviews: data.defaultMinReviews !== undefined ? data.defaultMinReviews : existing.defaultMinReviews ?? 0,
+    invoice: data.invoice !== undefined ? data.invoice as InvoiceSettings : existing.invoice,
+  };
+  await writeJSON(settingsFile(), toSave);
+}
+
+// ── Generations ──
+
+export async function createLeadGeneration(data: {
+  leadId: string;
+  campaignId: string;
+  landingPageCode?: string;
+  deploymentUrl?: string;
+  projectName?: string;
+}): Promise<void> {
+  const generations = await readJSON<LeadGeneration[]>(GENERATIONS_FILE, []);
+  const existingIdx = generations.findIndex(g => g.leadId === data.leadId);
+  const now = new Date().toISOString();
+  if (existingIdx >= 0) {
+    generations[existingIdx] = {
+      ...generations[existingIdx],
+      landingPageCode: data.landingPageCode || generations[existingIdx].landingPageCode,
+      deploymentUrl: data.deploymentUrl || generations[existingIdx].deploymentUrl,
+      projectName: data.projectName || generations[existingIdx].projectName,
+    };
+  } else {
+    generations.push({
+      id: uuidv4(),
+      leadId: data.leadId,
+      campaignId: data.campaignId,
+      landingPageCode: data.landingPageCode,
+      deploymentUrl: data.deploymentUrl,
+      projectName: data.projectName,
+      createdAt: now,
+    });
+  }
+  await writeJSON(GENERATIONS_FILE, generations);
+}
+
+export async function getGenerationCountsForCampaign(campaignId: string): Promise<Record<string, number>> {
+  const generations = await readJSON<LeadGeneration[]>(GENERATIONS_FILE, []);
+  const filtered = generations.filter(g => g.campaignId === campaignId);
+  const counts: Record<string, number> = {};
+  for (const g of filtered) {
+    counts[g.leadId] = (counts[g.leadId] || 0) + 1;
+  }
+  return counts;
+}
+
+// ── Assistant Chats ──
+
+function chatMessagesFile(chatId: string): string {
+  return path.join(CHAT_MESSAGES_DIR, `${chatId}.json`);
+}
+
+async function readChats(): Promise<Chat[]> {
+  return readJSON<Chat[]>(CHATS_FILE, []);
+}
+
+export async function getChats(): Promise<Chat[]> {
+  const chats = await readChats();
+  return chats
+    .filter(c => !(c as Chat & { model?: string }).model)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
+
+export async function getChat(chatId: string): Promise<Chat | null> {
+  const chats = await readChats();
+  return chats.find(c => c.id === chatId) || null;
+}
+
+export async function createChat(profile?: BusinessProfile): Promise<Chat> {
+  const chats = await readChats();
+  const now = new Date().toISOString();
+  const chat: Chat = {
+    id: uuidv4(),
+    title: profile ? profileTitle(profile) : 'New conversation',
+    ...(profile ? { profile } : {}),
+    ended: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+  chats.push(chat);
+  await writeJSON(CHATS_FILE, chats);
+  return chat;
+}
+
+export async function deleteChat(chatId: string): Promise<void> {
+  const chats = await readChats();
+  await writeJSON(CHATS_FILE, chats.filter(c => c.id !== chatId));
+  await fs.rm(chatMessagesFile(chatId), { force: true }).catch(() => {});
+}
+
+async function updateChat(chatId: string, patch: Partial<Chat>): Promise<Chat | null> {
+  const chats = await readChats();
+  const chat = chats.find(c => c.id === chatId);
+  if (!chat) return null;
+  Object.assign(chat, patch, { updatedAt: new Date().toISOString() });
+  await writeJSON(CHATS_FILE, chats);
+  return chat;
+}
+
+export async function endChat(chatId: string): Promise<Chat | null> {
+  return updateChat(chatId, { ended: true });
+}
+
+export async function getMessages(chatId: string): Promise<ChatMessage[]> {
+  return readJSON<ChatMessage[]>(chatMessagesFile(chatId), []);
+}
+
+export async function addMessage(chatId: string, message: Omit<ChatMessage, 'id' | 'createdAt'>): Promise<ChatMessage> {
+  const messages = await getMessages(chatId);
+  const now = new Date().toISOString();
+  const full: ChatMessage = { id: uuidv4(), ...message, createdAt: now };
+  messages.push(full);
+  await writeJSON(chatMessagesFile(chatId), messages);
+  await updateChat(chatId, {});
+  return full;
+}
+
+export async function renameChat(chatId: string, title: string): Promise<void> {
+  await updateChat(chatId, { title });
+}

@@ -1,0 +1,3 @@
+module.exports=[90479,a=>{"use strict";a.s(["formatRating",0,function(a){return a.toFixed(1).replace(".",",")}])}];
+
+//# sourceMappingURL=src_lib_businessProfiles_ts_0bzg~ri._.js.map

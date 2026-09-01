@@ -1,0 +1,8 @@
+var R=require("../../../../../../../chunks/[turbopack]_runtime.js")("server/app/api/campaigns/[id]/leads/[leadId]/images/route.js")
+R.c("server/chunks/[root-of-the-server]__04m~ol~._.js")
+R.c("server/chunks/src_lib_store_ts_0bogt-u._.js")
+R.c("server/chunks/[root-of-the-server]__0op9af~._.js")
+R.c("server/chunks/node_modules_next_04~_e52._.js")
+R.c("server/chunks/0zjb_server_app_api_campaigns_[id]_leads_[leadId]_images_route_actions_0v9r-_w.js")
+R.m(19547)
+module.exports=R.m(19547).exports

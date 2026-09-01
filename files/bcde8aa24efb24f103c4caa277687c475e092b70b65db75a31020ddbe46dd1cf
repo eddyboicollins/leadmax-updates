@@ -1,0 +1,38 @@
+'use client';
+
+import { useEffect } from 'react';
+
+// Prevents the page behind from scrolling while a modal/overlay is active.
+// The modal itself controls its own scroll independently.
+//
+// A module-level counter keeps the body locked while ANY modal is open and
+// only restores the original overflow when the LAST modal closes. This avoids
+// the classic multi-modal bug where one modal closes and incorrectly
+// un-locks the body (or leaves it stuck) while another is still open.
+let activeLocks = 0;
+let originalOverflow = '';
+
+function lock() {
+  if (activeLocks === 0) {
+    originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+  activeLocks++;
+}
+
+function unlock() {
+  if (activeLocks === 0) return;
+  activeLocks--;
+  if (activeLocks === 0) {
+    document.body.style.overflow = originalOverflow;
+    originalOverflow = '';
+  }
+}
+
+export function useLockBodyScroll(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    lock();
+    return unlock;
+  }, [active]);
+}

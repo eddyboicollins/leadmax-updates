@@ -1,0 +1,47 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaign, updateLead, removeLead, updateLeadDeploymentName, updateLeadInvoice } from '@/lib/store';
+import type { LeadInvoice, LeadStatus } from '@/lib/types';
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  const { id, leadId } = await params;
+  const campaign = await getCampaign(id);
+  if (!campaign) {
+    return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+  }
+
+  const body = await request.json();
+  const updateData: { status?: LeadStatus; notes?: string } = {};
+
+  if (body.status && ['pending', 'contacted', 'negotiating', 'not_interested', 'sold'].includes(body.status)) {
+    updateData.status = body.status as LeadStatus;
+  }
+  if (body.notes !== undefined) {
+    updateData.notes = body.notes;
+  }
+  if (body.deploymentName !== undefined) {
+    await updateLeadDeploymentName(leadId, String(body.deploymentName).trim());
+  }
+  if (body.invoice !== undefined && (body.invoice === null || typeof body.invoice === 'object')) {
+    await updateLeadInvoice(leadId, body.invoice as LeadInvoice | null);
+  }
+
+  await updateLead(leadId, updateData);
+  return NextResponse.json({ success: true });
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  const { id, leadId } = await params;
+  const campaign = await getCampaign(id);
+  if (!campaign) {
+    return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+  }
+
+  await removeLead(leadId);
+  return NextResponse.json({ success: true });
+}

@@ -36,7 +36,7 @@ export async function POST(
     const settings = await getSettings();
     const imgbbKey = settings.imgbbKey;
     if (!imgbbKey) {
-      return NextResponse.json({ error: 'ImgXX API key not configured. Set it in Settings.' }, { status: 400 });
+      return NextResponse.json({ code: 'IMGXX_KEY_MISSING', error: 'ImgXX API key not configured. Set it in Settings.' }, { status: 400 });
     }
 
     const campaign = await getCampaign(id);
@@ -92,6 +92,6 @@ export async function POST(
 
     return NextResponse.json({ imported: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, results });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Import failed' }, { status: 500 });
+    return NextResponse.json({ code: err.code, error: err.message || 'Import failed' }, { status: 500 });
   }
 }

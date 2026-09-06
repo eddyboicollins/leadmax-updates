@@ -1,0 +1,26 @@
+export interface ImgxxResult {
+  url: string;
+  delete_url: string;
+}
+
+const IMGXX_UPLOAD_URL = 'https://leadmaximguploadmechanism.vercel.app/api/1/upload';
+
+export async function uploadToImgxx(base64Image: string, apiKey: string): Promise<ImgxxResult> {
+  const params = new URLSearchParams();
+  params.append('key', apiKey);
+  params.append('image', base64Image);
+
+  const res = await fetch(IMGXX_UPLOAD_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString(),
+  });
+
+  const json = await res.json();
+  if (!json.success) {
+    const message = json.error?.message || json.error || 'ImgXX upload failed';
+    throw new Error(message);
+  }
+
+  return { url: json.data.url, delete_url: json.data.delete_url };
+}

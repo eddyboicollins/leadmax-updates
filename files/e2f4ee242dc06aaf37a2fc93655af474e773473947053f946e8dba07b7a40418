@@ -1,8 +1,0 @@
-var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/campaigns/restore/route.js")
-R.c("server/chunks/[root-of-the-server]__113lx~m._.js")
-R.c("server/chunks/src_lib_store_ts_0bogt-u._.js")
-R.c("server/chunks/[root-of-the-server]__0op9af~._.js")
-R.c("server/chunks/node_modules_next_04~_e52._.js")
-R.c("server/chunks/_next-internal_server_app_api_campaigns_restore_route_actions_080gnep.js")
-R.m(39578)
-module.exports=R.m(39578).exports

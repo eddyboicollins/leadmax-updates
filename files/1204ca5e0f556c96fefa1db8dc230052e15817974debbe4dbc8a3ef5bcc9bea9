@@ -1,0 +1,137 @@
+import { sendProxyChat, type ProxyVisionCreds } from '@/lib/proxyVision';
+import type { BusinessData } from '@/lib/types';
+import { v4 as uuidv4 } from 'uuid';
+
+function buildManualPrompt(name: string, mapsUrl: string): string {
+  return `You are given a business and its Google Maps link. Open/resolve the link and extract every detail below about THIS business.
+
+Business name: ${name}
+Google Maps link: ${mapsUrl}
+
+Return ONLY a single JSON object, no markdown fences, no explanations, exactly these keys.
+URLs must be raw (starting with https://) — NEVER markdown links like [text](url), NEVER relative paths:
+{
+  "name": "FULL official business name exactly as shown on Google Maps — the input may be shortened or partial, always expand and correct it",
+  "mapsUrl": "canonical Google Maps place URL for this exact business (looks like https://www.google.com/maps/place/Name/... or a share link https://maps.app.goo.gl/... — never a search URL, never empty)",
+  "category": "business category, e.g. Restaurant",
+  "rating": 4.5,
+  "ratingCount": 128,
+  "address": "full street address",
+  "phone": "phone number with country code or empty string",
+  "website": "business website URL or empty string",
+  "hours": ["Monday: 9:00 AM – 10:00 PM"],
+  "latitude": 0.0,
+  "longitude": 0.0,
+  "placeId": "Google place id or empty string",
+  "reviews": [{"author": "name", "text": "review text", "rating": 5, "date": "recent"}]
+}
+
+Rules: rating is a number 0-5 (0 when unknown). ratingCount is an integer (0 when unknown). Include up to 5 real-looking recent reviews when the listing has any, otherwise an empty array. Use empty strings (never null) for unknown text fields. Do NOT fetch, attach or reference photos/thumbnails — text data only. The JSON must parse as-is.`;
+}
+
+function asText(v: unknown, max: number): string {
+  if (typeof v !== 'string') return '';
+  return v.trim().slice(0, max);
+}
+
+function asNum(v: unknown, fallback = 0): number {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** Extract a bare https:// URL from AI output (unwraps [text](url) markdown, strips tracking params). */
+function asUrl(v: unknown, max: number): string {
+  if (typeof v !== 'string') return '';
+  const s = v.trim();
+  const md = /\[https?:\/\/[^\]]+\]\((https?:\/\/[^)\s]+)\)/i.exec(s);
+  const raw = md ? md[1] : /https?:\/\/[^\s)]+/.exec(s)?.[0] || '';
+  if (!raw) return '';
+  let clean = raw.replace(/[.,;:!?]+$/, '');
+  try {
+    const u = new URL(clean);
+    for (const k of [...u.searchParams.keys()]) {
+      if (/^(utm_.*|gclid|gbraid|fbclid|gad_source|mcid|_openstat)$/i.test(k)) u.searchParams.delete(k);
+    }
+    clean = u.toString();
+    if (clean.endsWith('?')) clean = clean.slice(0, -1);
+  } catch { /* keep raw */ }
+  return clean.slice(0, max);
+}
+
+/** A usable Maps link, or a search fallback built from the business name. */
+function asMapsUrl(v: unknown, name: string): string {
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (/^https?:\/\//i.test(s)) return s.slice(0, 600);
+    //_scheme-less domain the user pasted (e.g. "dinnerinthesky.ae")
+    if (s && !/\s/.test(s) && s.includes('.')) {
+      return `https://${s.replace(/^[a-z]+:\/+/i, '')}`.slice(0, 600);
+    }
+  }
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}`;
+}
+
+function extractJson(raw: string): Record<string, any> {
+  const cleaned = raw
+    .replace(/```json\s*/gi, '')
+    .replace(/```\s*/g, '')
+    .trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('no JSON object in reply');
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
+
+function normalizeBusiness(parsed: Record<string, any>, name: string, mapsUrl: string): BusinessData {
+  const resolvedName = asText(parsed.name, 120) || name;
+  const reviews = Array.isArray(parsed.reviews) ? parsed.reviews : [];
+  return {
+    id: uuidv4(),
+    name: resolvedName,
+    rating: Math.min(5, Math.max(0, asNum(parsed.rating))),
+    ratingCount: Math.max(0, Math.round(asNum(parsed.ratingCount))),
+    address: asText(parsed.address, 300),
+    phone: asText(parsed.phone, 40),
+    website: asUrl(parsed.website, 300),
+    category: asText(parsed.category, 80) || 'Local Business',
+    reviews: reviews
+      .filter((r: any) => r && (r.text || r.author))
+      .slice(0, 5)
+      .map((r: any) => ({
+        author: asText(r.author, 80),
+        text: asText(r.text, 500),
+        rating: Math.min(5, Math.max(0, Math.round(asNum(r.rating)))),
+        date: asText(r.date, 40),
+      })),
+    latitude: asNum(parsed.latitude),
+    longitude: asNum(parsed.longitude),
+    placeId: asText(parsed.placeId, 200),
+    googleUrl: asMapsUrl(asUrl(parsed.mapsUrl, 600) || mapsUrl, resolvedName),
+    hours: Array.isArray(parsed.hours) ? parsed.hours.filter((h: any) => typeof h === 'string').map((h: string) => h.slice(0, 120)).slice(0, 14) : [],
+    scrapedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Resolve one user-provided business (name + Google Maps link) into full
+ * BusinessData through a fresh proxy chat. Retries on malformed replies.
+ * @throws with the business name attached when all attempts fail.
+ */
+export async function resolveManualBusiness(
+  name: string,
+  mapsUrl: string,
+  creds: ProxyVisionCreds,
+  maxAttempts = 3,
+): Promise<BusinessData> {
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const raw = await sendProxyChat(buildManualPrompt(name, mapsUrl), [], creds);
+      return normalizeBusiness(extractJson(raw), name, mapsUrl);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.error(`[manual] resolve "${name}" attempt ${attempt}/${maxAttempts} failed: ${lastError.message}`);
+    }
+  }
+  throw new Error(`Could not fetch details for "${name}": ${lastError?.message || 'unknown error'}`);
+}

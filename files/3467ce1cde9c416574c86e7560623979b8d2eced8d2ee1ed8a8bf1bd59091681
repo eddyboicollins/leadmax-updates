@@ -1,0 +1,79 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getChats, createChat, deleteChat, getSettings, addMessage, endChat, ensureFreshVisionCreds } from '@/lib/store';
+import { generateBusinessProfile, generateProfileWithAI } from '@/lib/businessProfiles';
+import { askAssistant, cleanReply } from '@/lib/assistant';
+import type { Chat } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
+
+function publicChat(chat: Chat) {
+  return {
+    id: chat.id,
+    title: chat.title,
+    profile: chat.profile,
+    ended: !!chat.ended,
+    createdAt: chat.createdAt,
+    updatedAt: chat.updatedAt,
+  };
+}
+
+export async function GET() {
+  const chats = await getChats();
+  return NextResponse.json({ chats: chats.map(publicChat) });
+}
+
+export async function POST(request: NextRequest) {
+  let generateProfile = false;
+  try {
+    const body = await request.json();
+    generateProfile = body?.generateProfile === true;
+  } catch {
+    // no body → default empty chat
+  }
+  await getSettings();
+  const creds = await ensureFreshVisionCreds();
+  let profile: Chat['profile'];
+  if (generateProfile) {
+    const existingNames = (await getChats())
+      .map(c => c.profile?.name)
+      .filter((n): n is string => typeof n === 'string' && n.trim().length > 0);
+    const used = new Set(existingNames.map(n => n.trim().toLowerCase()));
+
+    profile = undefined;
+    for (let attempt = 0; attempt < 3 && !profile; attempt++) {
+      const candidate = (await generateProfileWithAI(existingNames, creds || undefined)) || generateBusinessProfile(existingNames);
+      if (candidate && !used.has(candidate.name.trim().toLowerCase())) {
+        profile = candidate;
+      } else if (candidate) {
+        used.add(candidate.name.trim().toLowerCase());
+        existingNames.push(candidate.name);
+      }
+    }
+    if (!profile) profile = generateBusinessProfile(existingNames);
+  }
+  const chat = await createChat(profile);
+
+  // The AI always starts the conversation: as soon as the profile is generated
+  // and the call starts, the business owner picks up and greets first.
+  if (profile) {
+    try {
+      const rawReply = await askAssistant(chat.id, []);
+      const { content, ended } = cleanReply(rawReply || '');
+      if (content) {
+        await addMessage(chat.id, { role: 'assistant', content });
+        if (ended) await endChat(chat.id);
+      }
+    } catch {
+      // Greeting is best-effort; the caller can still kick off the conversation.
+    }
+  }
+
+  return NextResponse.json({ chat: publicChat(chat) }, { status: 201 });
+}
+
+export async function DELETE(request: NextRequest) {
+  const id = request.nextUrl.searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  await deleteChat(id);
+  return NextResponse.json({ success: true });
+}

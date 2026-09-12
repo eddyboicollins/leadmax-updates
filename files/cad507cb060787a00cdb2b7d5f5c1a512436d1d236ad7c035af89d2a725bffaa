@@ -1,0 +1,43 @@
+import { sendProxyChat, type ProxyChatImage, type ProxyVisionCreds } from '@/lib/proxyVision';
+
+// All AI in LeadMax runs through the cookie-based Gemini web session
+// (Settings → AI Vision). Every call opens a FRESH chat, so each task lands
+// in the Gemini account as its own conversation. There is no official-API
+// path and no model selection — the web default model answers.
+
+export type { ProxyChatImage, ProxyVisionCreds };
+
+/** Single prompt (+ optional images) through the proxy chat. */
+export async function askGemini(prompt: string, images: ProxyChatImage[] = [], creds: ProxyVisionCreds): Promise<string> {
+  return sendProxyChat(prompt, images, creds);
+}
+
+/** Same, with retries on network/model failures. */
+export async function retryAskGemini(
+  prompt: string,
+  maxRetries = 4,
+  onRetry?: (attempt: number, maxRetries: number, error: string) => void,
+  images: ProxyChatImage[] = [],
+  creds?: ProxyVisionCreds,
+): Promise<string> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      if (!creds?.psid || !creds?.psidts) {
+        throw new Error('Gemini session cookies are missing. Add them in Settings → AI Vision to enable AI features.');
+      }
+      return await askGemini(prompt, images, creds);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      const isLastAttempt = attempt >= maxRetries;
+      const msg = lastError.message;
+      onRetry?.(attempt + 1, maxRetries + 1, msg);
+      console.error(`[Gemini] Attempt ${attempt + 1}/${maxRetries + 1} failed: ${msg}`);
+      if (isLastAttempt) break;
+      const delay = Math.min(1000 * Math.pow(2, attempt), 15000);
+      console.error(`[Gemini] Retrying in ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastError || new Error('Gemini request failed after retries');
+}

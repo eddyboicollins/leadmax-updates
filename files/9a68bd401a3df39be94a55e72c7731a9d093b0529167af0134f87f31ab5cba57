@@ -1,0 +1,65 @@
+'use client';
+
+import { useSyncExternalStore } from 'react';
+
+const listeners = new Map<string, Set<() => void>>();
+
+function getListeners(key: string): Set<() => void> {
+  let set = listeners.get(key);
+  if (!set) {
+    set = new Set();
+    listeners.set(key, set);
+  }
+  return set;
+}
+
+function readPref(key: string): boolean {
+  if (typeof window === 'undefined') return true;
+  return localStorage.getItem(key) !== '0';
+}
+
+function readNumberPref(key: string, fallback: number): number {
+  if (typeof window === 'undefined') return fallback;
+  const raw = localStorage.getItem(key);
+  if (raw == null) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+export function useLocalStorageNumberPref(key: string, fallback: number): [number, (next: number) => void] {
+  const subscribe = (cb: () => void) => {
+    getListeners(key).add(cb);
+    return () => {
+      getListeners(key).delete(cb);
+    };
+  };
+  const getSnapshot = () => readNumberPref(key, fallback);
+  const getServerSnapshot = () => fallback;
+  const value = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+
+  const set = (next: number) => {
+    if (typeof window !== 'undefined') localStorage.setItem(key, String(next));
+    getListeners(key).forEach(cb => cb());
+  };
+
+  return [value, set];
+}
+
+export function useLocalStoragePref(key: string): [boolean, (next: boolean) => void] {
+  const subscribe = (cb: () => void) => {
+    getListeners(key).add(cb);
+    return () => {
+      getListeners(key).delete(cb);
+    };
+  };
+  const getSnapshot = () => readPref(key);
+  const getServerSnapshot = () => true;
+  const value = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+
+  const set = (next: boolean) => {
+    if (typeof window !== 'undefined') localStorage.setItem(key, next ? '1' : '0');
+    getListeners(key).forEach(cb => cb());
+  };
+
+  return [value, set];
+}

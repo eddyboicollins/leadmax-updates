@@ -1,0 +1,28 @@
+import sharp from 'sharp';
+import type { ProxyChatImage } from '@/lib/proxyVision';
+
+/**
+ * Download a lead's hosted photos and normalize them for chat upload
+ * (downscaled webp, unloadable images skipped silently).
+ *
+ * Server-only (imports sharp) — never import from client components.
+ */
+export async function loadLeadChatImages(images: { url: string }[] | undefined): Promise<ProxyChatImage[]> {
+  const out: ProxyChatImage[] = [];
+  let n = 0;
+  for (const img of images || []) {
+    try {
+      if (!img?.url) continue;
+      const res = await fetch(img.url, { signal: AbortSignal.timeout(60000) });
+      if (!res.ok) continue;
+      const input = Buffer.from(await res.arrayBuffer());
+      if (input.length === 0) continue;
+      const webp = await sharp(input).resize({ width: 1600, withoutEnlargement: true }).webp({ quality: 78 }).toBuffer();
+      n += 1;
+      out.push({ bytes: webp, mimeType: 'image/webp', filename: `photo-${n}.webp` });
+    } catch {
+      // Skip photos that can't be downloaded or decoded — text still goes through.
+    }
+  }
+  return out;
+}

@@ -1,0 +1,85 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaigns, saveCampaign, saveManualCampaign, addLeads, deleteCampaign, ensureFreshVisionCreds } from '@/lib/store';
+import { resolveManualBusiness } from '@/lib/manualResolve';
+import { v4 as uuidv4 } from 'uuid';
+
+export const maxDuration = 300;
+
+export async function GET(request: NextRequest) {
+  const deletedParam = request.nextUrl.searchParams.get('deleted');
+  const campaigns = await getCampaigns();
+  if (deletedParam === 'all') {
+    return NextResponse.json({ campaigns });
+  }
+  if (deletedParam === 'true') {
+    return NextResponse.json({ campaigns: campaigns.filter(c => c.deleted) });
+  }
+  return NextResponse.json({ campaigns: campaigns.filter(c => !c.deleted) });
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { keyword, location, regions, mode, displayName, entries } = body;
+
+    // Manual mode: user's own clients. The proxy visits each Maps link and
+    // extracts full business data — no scraping involved.
+    if (mode === 'manual') {
+      const name = typeof displayName === 'string' ? displayName.trim() : '';
+      const list = Array.isArray(entries)
+        ? entries
+            .filter((e: any) => e && typeof e.name === 'string' && e.name.trim() && typeof e.mapsUrl === 'string' && e.mapsUrl.trim())
+            .map((e: any) => ({ name: e.name.trim(), mapsUrl: e.mapsUrl.trim() }))
+        : [];
+      if (!name) {
+        return NextResponse.json({ error: 'campaign name required' }, { status: 400 });
+      }
+      if (list.length === 0) {
+        return NextResponse.json({ error: 'at least one business with a Maps link required' }, { status: 400 });
+      }
+      const creds = await ensureFreshVisionCreds();
+      if (!creds) {
+        return NextResponse.json({ error: 'Gemini session expired and could not be renewed. Paste fresh cookie values in Settings → AI Vision.' }, { status: 400 });
+      }
+      const campaign = await saveManualCampaign(name);
+      const results: { name: string; ok: boolean; error?: string }[] = [];
+      for (const entry of list) {
+        try {
+          const business = await resolveManualBusiness(entry.name, entry.mapsUrl, creds);
+          await addLeads(campaign.id, [{ leadId: uuidv4(), business }]);
+          results.push({ name: entry.name, ok: true });
+        } catch (err: any) {
+          results.push({ name: entry.name, ok: false, error: err?.message || 'Resolve failed' });
+        }
+      }
+      return NextResponse.json({ ...campaign, resolveResults: results });
+    }
+
+    if (!keyword || !location) {
+      return NextResponse.json({ error: 'keyword and location required' }, { status: 400 });
+    }
+    let regionList = regions;
+    if (Array.isArray(regionList)) {
+      regionList = regionList.filter(
+        (r: any) => r && typeof r.keyword === 'string' && r.keyword && typeof r.location === 'string' && r.location
+      );
+      regionList = regionList.map((r: any) => ({
+        keyword: r.keyword,
+        location: r.location,
+      }));
+    }
+    const campaign = await saveCampaign(keyword, location, Array.isArray(regionList) && regionList.length > 0 ? regionList : undefined);
+    return NextResponse.json(campaign);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const id = request.nextUrl.searchParams.get('id');
+  if (!id) {
+    return NextResponse.json({ error: 'id required' }, { status: 400 });
+  }
+  await deleteCampaign(id);
+  return NextResponse.json({ success: true });
+}

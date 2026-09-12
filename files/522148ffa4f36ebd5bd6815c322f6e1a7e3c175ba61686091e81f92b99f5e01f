@@ -1,0 +1,40 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaign, getLead, updateLeadImages } from '@/lib/store';
+
+const MAX_IMAGES = 10;
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { id, leadId } = await params;
+
+    const { imageId } = await request.json();
+
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    const images = lead.images || [];
+    const target = images.find((i) => i.id === imageId);
+    if (!target) return NextResponse.json({ error: 'Image not found' }, { status: 404 });
+
+    const activeCount = images.filter((i) => !i.deleted).length;
+    if (activeCount >= MAX_IMAGES) {
+      return NextResponse.json({ error: 'Maximum 10 images allowed' }, { status: 400 });
+    }
+
+    const { deleted: _d, deletedAt: _t, ...rest } = target;
+    await updateLeadImages(
+      leadId,
+      images.map((i) => (i.id === imageId ? rest : i)),
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Restore failed' }, { status: 500 });
+  }
+}

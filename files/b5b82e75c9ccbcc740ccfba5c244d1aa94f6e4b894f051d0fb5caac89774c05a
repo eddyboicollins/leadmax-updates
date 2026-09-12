@@ -1,0 +1,812 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+  import { useAllCampaigns, useCreateCampaign, useDeleteCampaign, useRestoreCampaign, usePurgeCampaign, useGenerations, type Generation } from '@/lib/query/useCampaigns';
+import { SetNavbar } from '@/components/AppShell';
+import { useToast } from '@/components/Toast';
+import OnboardingWizard from '@/components/OnboardingWizard';
+import CampaignExportModal from '@/components/CampaignExportModal';
+import SafeImg from '@/components/SafeImg';
+import { useTranslation } from 'react-i18next';
+import { useLockBodyScroll } from '@/lib/useLockBodyScroll';
+import { useScrape } from '@/lib/scrape/ScrapeProvider';
+import { useGeneration } from '@/lib/generate/GenerationProvider';
+import { onGenerationFocus, consumePendingGenerationFocus, onGenerationsScroll, consumePendingGenerationsScroll, onCampaignsScroll, consumePendingCampaignsScroll } from '@/lib/generationFocus';
+
+function focusGenerationCard(id: string) {
+  let attempts = 0;
+  const tick = () => {
+    const el = document.querySelector(`[data-gen-id="${id}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('gen-highlight');
+      setTimeout(() => el.classList.remove('gen-highlight'), 3500);
+    } else if (attempts++ < 60) {
+      setTimeout(tick, 200);
+    }
+  };
+  tick();
+}
+
+function focusGenerationsSection() {
+  let attempts = 0;
+  const tick = () => {
+    const el = document.getElementById('home-section-generations');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (attempts++ < 60) {
+      setTimeout(tick, 200);
+    }
+  };
+  tick();
+}
+
+function focusCampaignsSection() {
+  let attempts = 0;
+  const tick = () => {
+    const el = document.getElementById('home-section-campaigns');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else if (attempts++ < 60) {
+      setTimeout(tick, 200);
+    }
+  };
+  tick();
+}
+
+function CampaignCard({ c, deleted, onDelete, onRestore, onErase }: { c: any; deleted?: boolean; onDelete: (id: string) => void; onRestore: (id: string) => void; onErase: (id: string) => void }) {
+  const router = useRouter();
+  const { t } = useTranslation();
+  const scrape = useScrape();
+  const [exportOpen, setExportOpen] = useState(false);
+  const totalLeads = c.leads?.filter((l: any) => !l.deleted)?.length || 0;
+  const avatarLeads = (c.leads || []).filter((l: any) => !l.deleted).slice(0, 5);
+  const avatarImg = (l: any) => {
+    // Featured photo first (skip session-gated Google URLs), then uploaded
+    // photos — letter avatar is strictly the last resort.
+    const discovered = (l.business?.scrapedImages || []).find((s: any) => s?.url && !/googleusercontent|\.google\.com/.test(s.url))?.url;
+    if (discovered) return discovered;
+    return (l.images || []).find((i: any) => !i.deleted)?.url;
+  };
+  const extraAvatarCount = totalLeads - avatarLeads.length;
+  const regions = c.regions || [];
+  const regionCount = regions.length;
+  const extraCount = regionCount - 1;
+  const isScraping = scrape.running && scrape.campaignId === c.id;
+  const [showAllRegions, setShowAllRegions] = useState(false);
+  const hasGeneratedSite = !!c.leads?.some((l: any) => l.landingPage || l.deployment);
+
+  return (
+    <div
+      className="group bg-white dark:bg-zinc-800/40 border border-gray-200 dark:border-zinc-700/50 rounded-xl p-5 transition-all cursor-pointer hover:border-emerald-500/50 hover:bg-gray-50 dark:hover:bg-zinc-800/80 shadow-sm dark:shadow-none"
+      onClick={() => router.push(`/campaign/${c.id}`)}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-gray-900 dark:text-white truncate">{c.keyword}</h3>
+          {regionCount > 1 ? (
+            <div className="text-sm text-zinc-400 leading-snug">
+              <span className="text-emerald-500 dark:text-emerald-400 font-medium">{regions[0].location}</span>
+              {showAllRegions ? (
+                <>
+                  {regions.slice(1).map((r: { keyword: string; location: string }, i: number) => (
+                    <span key={`${r.location}-${i}`}><span>, </span><span>{r.location}</span></span>
+                  ))}
+                  <span>, </span>
+                  <span onClick={e => { e.stopPropagation(); setShowAllRegions(false); }} className="text-zinc-600 dark:text-zinc-400 hover:text-emerald-400 cursor-pointer">
+                    {t('home.hideRegions')}
+                  </span>
+                </>
+              ) : (
+                <>
+                  {' '}
+                  <span onClick={e => { e.stopPropagation(); setShowAllRegions(true); }} className="text-zinc-600 dark:text-zinc-400 hover:text-emerald-400 cursor-pointer">
+                    {t('home.andMoreRegions', { count: extraCount })}
+                  </span>
+                </>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-400 truncate">{c.location}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button onClick={e => { e.stopPropagation(); setExportOpen(true); }} className="p-1.5 text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all" title={t('home.exportCampaign')}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+          </button>
+          {deleted ? (
+            <>
+              <button onClick={e => { e.stopPropagation(); onRestore(c.id); }} className="p-1.5 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all" title={t('home.restoreCampaign')}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a9 9 0 1 0 3-6.7M3 4v5h5" /></svg>
+              </button>
+              <button onClick={e => { e.stopPropagation(); onErase(c.id); }} className="p-1.5 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all" title={t('home.eraseCampaign')}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              </button>
+            </>
+          ) : !hasGeneratedSite && (
+            <button onClick={e => { e.stopPropagation(); onDelete(c.id); }} className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all" title={t('home.deleteCampaign')}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            </button>
+          )}
+        </div>
+      </div>
+      <CampaignExportModal open={exportOpen} onClose={() => setExportOpen(false)} campaign={c} />
+      <div className="flex items-center gap-3 text-sm">
+        {isScraping && (
+          <button onClick={(e) => { e.stopPropagation(); router.push(`/campaign/${c.id}`); }} className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-medium hover:bg-emerald-500/20 transition-all">
+            <span className="animate-spin w-3 h-3 rounded-full border-2 border-emerald-400 border-t-transparent shrink-0" />
+            {t('home.scrapingActive')}
+          </button>
+        )}
+        {totalLeads > 0 && (
+          <span className="flex items-center gap-1 text-zinc-300">
+            <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+            {t('home.leadsCount', { count: totalLeads })}
+          </span>
+        )}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-zinc-500">
+        {avatarLeads.length > 0 && (
+          <div className="flex items-center">
+            {avatarLeads.map((l: any, i: number) => {
+              const img = avatarImg(l);
+              const letter = (l.business?.name || '?').trim().charAt(0).toUpperCase() || '?';
+              return (
+                <SafeImg
+                  key={l.id}
+                  src={img}
+                  title={l.business?.name}
+                  className="w-8 h-8 rounded-full ring-2 ring-white dark:ring-zinc-800 overflow-hidden shrink-0 -ms-2 first:ms-0"
+                  style={{ zIndex: avatarLeads.length - i }}
+                  imgClassName="w-full h-full object-cover"
+                  fallback={
+                    <span className="w-full h-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs font-semibold">
+                      {letter}
+                    </span>
+                  }
+                />
+              );
+            })}
+            {extraAvatarCount > 0 && (
+              <span className="w-8 h-8 rounded-full bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 ring-2 ring-white dark:ring-zinc-800 flex items-center justify-center text-[10px] font-semibold -ms-2" style={{ zIndex: 0 }}>
+                +{extraAvatarCount}
+              </span>
+            )}
+          </div>
+        )}
+        <span className="ms-auto">{new Date(c.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+      </div>
+    </div>
+  );
+}
+
+function GenerationCard({ g }: { g: Generation }) {
+  const router = useRouter();
+  const { t } = useTranslation();
+  const goToCampaign = () => router.push(`/campaign/${g.campaignId}?lead=${encodeURIComponent(g.leadId)}&focus=${Date.now()}`);
+  return (
+    <div
+      data-gen-id={g.id}
+      className="group bg-white dark:bg-zinc-800/40 border border-gray-200 dark:border-zinc-700/50 rounded-xl p-5 transition-all cursor-pointer hover:border-emerald-500/50 hover:bg-gray-50 dark:hover:bg-zinc-800/80 shadow-sm dark:shadow-none"
+      onClick={goToCampaign}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-gray-900 dark:text-white truncate">{g.businessName}</h3>
+          <p className="text-sm text-zinc-400 truncate mt-0.5">{g.campaignName}</p>
+          {g.projectName && (
+            <p className="text-xs text-zinc-500 truncate mt-1">{t('generations.project')}: {g.projectName}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {g.deploymentUrl && (
+            <a
+              href={g.deploymentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              className="p-1.5 text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all"
+              title={t('generations.liveSite')}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+            </a>
+          )}
+          <button
+            onClick={e => { e.stopPropagation(); goToCampaign(); }}
+            className="p-1.5 text-zinc-500 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all"
+            title={t('generations.viewInCampaign')}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H5a2 2 0 01-2-2V7zm10 0a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2V7zM3 17a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4zm10 0a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2v-4z" /></svg>
+          </button>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+        <span>{new Date(g.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+      </div>
+    </div>
+  );
+}
+
+function ActiveGenerationCard({ job, campaignName, onDismiss }: {
+  job: { id: string; campaignId: string; leadId: string; leadName: string; phase: string; message: string };
+  campaignName: string;
+  onDismiss: () => void;
+}) {
+  const router = useRouter();
+  const { t } = useTranslation();
+  const goToCampaign = () => router.push(`/campaign/${job.campaignId}?lead=${encodeURIComponent(job.leadId)}&focus=${Date.now()}`);
+  return (
+    <div
+      className="group bg-white dark:bg-zinc-800/40 border border-zinc-500/30 rounded-xl p-5 transition-all cursor-pointer hover:border-emerald-500/50 hover:bg-gray-50 dark:hover:bg-zinc-800/80 shadow-sm dark:shadow-none"
+      onClick={goToCampaign}
+      title={t('generations.viewInCampaign')}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-gray-900 dark:text-white truncate flex items-center gap-2">
+            <span className="animate-spin w-3.5 h-3.5 rounded-full border-2 border-emerald-400 border-t-transparent shrink-0" />
+            {job.leadName}
+          </h3>
+          <p className="text-sm text-zinc-400 truncate mt-0.5">{campaignName}</p>
+        </div>
+        <button
+          onClick={e => { e.stopPropagation(); onDismiss(); }}
+          className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all shrink-0"
+          title={t('generations.dismiss')}
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-lg font-medium">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+          </span>
+          {t('generations.inProgress')}
+        </span>
+        {job.message && <span className="text-zinc-400 truncate">{job.message}</span>}
+      </div>
+    </div>
+  );
+}
+
+export default function Home() {
+  const router = useRouter();
+  const { t } = useTranslation();
+  const { toast, confirm } = useToast();
+  const { data, isLoading } = useAllCampaigns();
+  const { data: generationsData } = useGenerations();
+  const createMutation = useCreateCampaign();
+  const deleteMutation = useDeleteCampaign();
+  const restoreMutation = useRestoreCampaign();
+  const purgeMutation = usePurgeCampaign();
+  const generation = useGeneration();
+  const [campaignTab, setCampaignTab] = useState<'active' | 'deleted'>('active');
+  const [keyword, setKeyword] = useState('');
+  const [location, setLocation] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
+  const [wizardCompleted, setWizardCompleted] = useState(true);
+  const [showNewCampaign, setShowNewCampaign] = useState(false);
+  const [multi, setMulti] = useState(false);
+  const [rows, setRows] = useState([{ keyword: '', location: '' }]);
+  const [ownClients, setOwnClients] = useState(false);
+  const [manualName, setManualName] = useState('');
+  const [manualRows, setManualRows] = useState([{ name: '', mapsUrl: '' }]);
+  const [batch, setBatch] = useState<null | { campaigns: any[]; statuses: Record<string, string>; currentIndex: number; currentKeyword: string; currentLocation: string; processed: number; total: number }>(null);
+  const [batchCounts, setBatchCounts] = useState<Record<string, number>>({});
+  const [batchRunning, setBatchRunning] = useState(false);
+  const abortBatchRef = useRef<AbortController | null>(null);
+  const queryClient = useQueryClient();
+
+  useLockBodyScroll(showNewCampaign || batchRunning);
+
+  const campaigns = data?.campaigns || [];
+  const activeCampaigns = campaigns.filter((c: any) => !c.deleted);
+  const deletedCampaigns = campaigns.filter((c: any) => c.deleted);
+  const generations = generationsData || [];
+  const activeGenJobs = generation.activeJobs;
+  const campaignNameOf = (id: string) => campaigns.find((c: any) => c.id === id)?.displayName || 'Campaign';
+
+  useEffect(() => {
+    const pending = consumePendingGenerationFocus();
+    if (pending) focusGenerationCard(pending);
+    const offFocus = onGenerationFocus((id) => focusGenerationCard(id));
+    if (consumePendingCampaignsScroll()) focusCampaignsSection();
+    const offCampaigns = onCampaignsScroll(() => focusCampaignsSection());
+    if (consumePendingGenerationsScroll()) focusGenerationsSection();
+    const offScroll = onGenerationsScroll(() => focusGenerationsSection());
+    return () => {
+      offFocus();
+      offCampaigns();
+      offScroll();
+    };
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/settings').then(r => r.json()).then(data => {
+      setWizardCompleted(data.wizardCompleted);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!isLoading && activeCampaigns.length === 0 && !wizardCompleted) {
+      setShowWizard(true);
+    }
+  }, [isLoading, activeCampaigns.length, wizardCompleted]);
+
+  function updateRow(i: number, patch: Partial<(typeof rows)[number]>) {
+    setRows(prev => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r));
+  }
+  function addRow() {
+    setRows(prev => [...prev, { keyword: '', location: '' }]);
+  }
+  function removeRow(i: number) {
+    setRows(prev => prev.filter((_, idx) => idx !== i));
+  }
+  function duplicateRow(i: number) {
+    setRows(prev => {
+      const copy = { ...prev[i] };
+      const next = [...prev];
+      next.splice(i + 1, 0, copy);
+      return next;
+    });
+  }
+
+  async function createCampaign() {
+    let created: string | null = null;
+    if (ownClients) {
+      const valid = manualRows.filter(r => r.name.trim() && r.mapsUrl.trim());
+      if (!manualName.trim() || valid.length === 0) return;
+      setLoading(true);
+      try {
+        const res = await fetch('/api/campaigns', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'manual',
+            displayName: manualName.trim(),
+            entries: valid.map(r => ({ name: r.name.trim(), mapsUrl: r.mapsUrl.trim() })),
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to create campaign');
+        const failed = (data.resolveResults || []).filter((r: any) => !r.ok);
+        if (failed.length > 0) {
+          toast(t('home.manualPartial', { ok: valid.length - failed.length, failed: failed.length }), 'error');
+        }
+        created = data.id;
+      } catch (err: any) {
+        toast(err.message, 'error');
+      }
+    } else if (multi) {
+      const regionList = rows.filter(r => r.keyword && r.location);
+      if (regionList.length === 0) return;
+      setLoading(true);
+      try {
+        const c = await createMutation.mutateAsync({
+          keyword: regionList[0].keyword,
+          location: regionList[0].location,
+          regions: regionList.map(r => ({
+            keyword: r.keyword,
+            location: r.location,
+          })),
+        });
+        created = c.id;
+      } catch (err: any) {
+        toast(err.message, 'error');
+      }
+    } else {
+      if (!keyword || !location) return;
+      setLoading(true);
+      try {
+        const c = await createMutation.mutateAsync({ keyword, location });
+        created = c.id;
+      } catch (err: any) {
+        toast(err.message, 'error');
+      }
+    }
+    if (created) {
+      setShowNewCampaign(false);
+      setKeyword('');
+      setLocation('');
+      setMulti(false);
+      setRows([{ keyword: '', location: '' }]);
+      setOwnClients(false);
+      setManualName('');
+      setManualRows([{ name: '', mapsUrl: '' }]);
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      router.push(`/campaign/${created}`);
+    }
+    setLoading(false);
+  }
+
+  function updateManualRow(i: number, patch: Partial<(typeof manualRows)[number]>) {
+    setManualRows(prev => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r));
+  }
+  function addManualRow() {
+    setManualRows(prev => [...prev, { name: '', mapsUrl: '' }]);
+  }
+  function removeManualRow(i: number) {
+    setManualRows(prev => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
+  }
+
+  async function startBatch(createdCamps: any[]) {
+    const statuses: Record<string, string> = {};
+    const counts: Record<string, number> = {};
+    createdCamps.forEach(c => { statuses[c.id] = 'pending'; counts[c.id] = 0; });
+    setBatchCounts(counts);
+    setBatch({ campaigns: createdCamps, statuses, currentIndex: 0, currentKeyword: createdCamps[0]?.keyword || '', currentLocation: createdCamps[0]?.location || '', processed: 0, total: 0 });
+    setBatchRunning(true);
+    const ac = new AbortController();
+    abortBatchRef.current = ac;
+    try {
+      const response = await fetch('/api/scrape/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaigns: createdCamps.map(c => ({
+            campaignId: c.id,
+            keyword: c.keyword,
+            location: c.location,
+          })),
+        }),
+        signal: ac.signal,
+      });
+      if (!response.body) throw new Error('No body');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let done = false;
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          for (const line of chunk.split('\n').filter(l => l.trim())) {
+            try {
+              const data = JSON.parse(line);
+              if (data.type === 'campaign-start') {
+                setBatch(b => b ? { ...b, currentIndex: data.index, currentKeyword: data.keyword, currentLocation: data.location, processed: 0, total: 0, statuses: { ...b.statuses, [data.campaignId]: 'running' } } : b);
+              } else if (data.type === 'total') {
+                setBatch(b => b ? { ...b, total: data.total } : b);
+              } else if (data.type === 'progress') {
+                setBatch(b => b ? { ...b, processed: data.processed, total: data.total } : b);
+              } else if (data.type === 'lead') {
+                setBatchCounts(prev => ({ ...prev, [data.campaignId]: (prev[data.campaignId] || 0) + 1 }));
+              } else if (data.type === 'campaign-done') {
+                setBatch(b => b ? { ...b, processed: 0, total: 0, statuses: { ...b.statuses, [data.campaignId]: 'done' } } : b);
+              } else if (data.type === 'campaign-error') {
+                setBatch(b => b ? { ...b, statuses: { ...b.statuses, [data.campaignId]: 'failed' } } : b);
+              }
+            } catch { /* skip */ }
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') toast(err.message || 'Batch failed', 'error');
+    } finally {
+      setBatchRunning(false);
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    }
+  }
+
+  function cancelBatch() {
+    abortBatchRef.current?.abort();
+    setBatchRunning(false);
+  }
+
+  async function deleteCampaign(id: string) {
+    if (!(await confirm({ message: t('home.deleteConfirm') }))) return;
+    deleteMutation.mutate(id);
+  }
+
+  async function restoreCampaign(id: string) {
+    restoreMutation.mutate(id);
+  }
+
+  async function eraseCampaign(id: string) {
+    if (!(await confirm({ message: t('home.eraseConfirm') }))) return;
+    try {
+      await purgeMutation.mutateAsync(id);
+      toast(t('home.eraseDone'), 'success');
+    } catch (err: any) {
+      toast(err?.message || 'Erase failed', 'error');
+    }
+  }
+
+  return (
+    <div className="flex-1 bg-gradient-to-br from-gray-100 via-white to-gray-50 dark:from-zinc-900 dark:via-zinc-800 dark:to-zinc-900 transition-colors flex flex-col">
+      {showWizard && <OnboardingWizard onComplete={() => { setShowWizard(false); setWizardCompleted(true); }} />}
+      <SetNavbar title={t('home.dashboard')} />
+
+      <main className="app-page flex-1">
+        <button onClick={() => { setRows([{ keyword: '', location: '' }]); setOwnClients(false); setManualName(''); setManualRows([{ name: '', mapsUrl: '' }]); setShowNewCampaign(true); }} className="w-full mb-6 sm:mb-8 px-6 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-medium rounded-xl hover:from-emerald-400 hover:to-emerald-500 transition-all shadow-lg shadow-emerald-500/20 active:scale-[0.98] flex items-center justify-center gap-2">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          {t('home.newCampaignRequest')}
+        </button>
+
+          {showNewCampaign && (
+            <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-xl flex items-center justify-center p-4" onClick={() => setShowNewCampaign(false)}>
+              <div className="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-zinc-700">
+                  <h2 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                    <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                    {t('home.newCampaignRequest')}
+                  </h2>
+                  <button onClick={() => setShowNewCampaign(false)} className="p-1 text-zinc-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-all">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <div className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+                  <p className="text-xs text-gray-500 dark:text-zinc-400">{t('home.newCampaignDesc')}</p>
+
+                  {ownClients ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-[10px] font-medium text-gray-500 dark:text-zinc-400 mb-1.5 uppercase tracking-wider">{t('home.campaignName')}</label>
+                        <input
+                          value={manualName}
+                          onChange={e => setManualName(e.target.value)}
+                          placeholder={t('home.campaignNamePlaceholder')}
+                          className="w-full px-3 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
+                        />
+                      </div>
+                      {manualRows.map((r, i) => (
+                        <div key={i} className="flex gap-2 border border-gray-200 dark:border-zinc-700/60 bg-gray-50 dark:bg-zinc-900/40 rounded-xl p-3 items-end">
+                          <div className="flex-1 min-w-0">
+                            <div className="grid gap-3 items-end grid-cols-2">
+                              <div>
+                                <label className="block text-[10px] font-medium text-gray-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">{t('home.businessName')}</label>
+                                <input
+                                  value={r.name}
+                                  onChange={e => updateManualRow(i, { name: e.target.value })}
+                                  placeholder={t('home.businessNamePlaceholder')}
+                                  className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-medium text-gray-500 dark:text-zinc-400 mb-1 uppercase tracking-wide">{t('home.mapsLink')}</label>
+                                <input
+                                  value={r.mapsUrl}
+                                  onChange={e => updateManualRow(i, { mapsUrl: e.target.value })}
+                                  placeholder={t('home.mapsLinkPlaceholder')}
+                                  className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0 pb-1">
+                            <button onClick={() => removeManualRow(i)} disabled={manualRows.length === 1} className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed" title={t('home.removeBusiness')}>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      <button onClick={addManualRow} className="w-full px-4 py-2 text-sm font-medium text-emerald-500 border border-dashed border-emerald-500/40 rounded-xl hover:bg-emerald-500/10 transition-all flex items-center justify-center gap-2">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                        {t('home.addBusiness')}
+                      </button>
+                    </div>
+                  ) : !multi ? (
+                    <div className="grid gap-3 grid-cols-2">
+                        <div className="sm:col-span-1">
+                          <label className="block text-[10px] font-medium text-gray-500 dark:text-zinc-400 mb-1.5 uppercase tracking-wider">{t('home.keyword')}</label>
+                          <input
+                            value={keyword}
+                            onChange={e => setKeyword(e.target.value)}
+                            placeholder={t('home.keywordPlaceholder')}
+                            className="w-full px-3 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-medium text-gray-500 dark:text-zinc-400 mb-1.5 uppercase tracking-wider">{t('home.region')}</label>
+                          <input
+                            value={location}
+                            onChange={e => setLocation(e.target.value)}
+                            placeholder={t('home.regionPlaceholder')}
+                            className="w-full px-3 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
+                          />
+                        </div>
+                      </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {rows.map((r, i) => (
+                        <div key={i} className="flex gap-2 border border-gray-200 dark:border-zinc-700/60 bg-gray-50 dark:bg-zinc-900/40 rounded-xl p-3 items-end">
+                          <div className="flex-1 min-w-0">
+                          <div className="grid gap-3 items-end grid-cols-2">
+                            <div>
+                              <label className="block text-[10px] font-medium text-gray-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">{t('home.keyword')}</label>
+                              <input
+                                value={r.keyword}
+                                onChange={e => updateRow(i, { keyword: e.target.value })}
+                                placeholder={t('home.keywordPlaceholder')}
+                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-medium text-gray-500 dark:text-zinc-400 mb-1 uppercase tracking-wide">{t('home.region')}</label>
+                              <input
+                                value={r.location}
+                                onChange={e => updateRow(i, { location: e.target.value })}
+                                placeholder={t('home.regionPlaceholder')}
+                                className="w-full px-3 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
+                              />
+                            </div>
+                          </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0 pb-1">
+                            <button onClick={() => duplicateRow(i)} className="p-1.5 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-all" title={t('home.duplicateRegion')}>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="9" y="9" width="11" height="11" rx="2" strokeWidth={2} /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
+                            </button>
+                            <button onClick={() => removeRow(i)} disabled={rows.length === 1} className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed" title={t('home.removeRegion')}>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      <button onClick={addRow} className="w-full px-4 py-2 text-sm font-medium text-emerald-500 border border-dashed border-emerald-500/40 rounded-xl hover:bg-emerald-500/10 transition-all flex items-center justify-center gap-2">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                        {t('home.addRegion')}
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-gray-200 dark:border-zinc-700 pt-3">
+                    {!ownClients && (
+                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                        <input type="checkbox" checked={multi} onChange={e => setMulti(e.target.checked)} className="w-4 h-4 accent-emerald-500" />
+                        <span className="text-sm font-medium text-gray-700 dark:text-zinc-200">{t('home.multiRegional')}</span>
+                        <span className="text-xs text-zinc-400">{t('home.multiRegionalDesc')}</span>
+                      </label>
+                    )}
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input type="checkbox" checked={ownClients} onChange={e => { setOwnClients(e.target.checked); if (e.target.checked) setMulti(false); }} className="w-4 h-4 accent-emerald-500" />
+                      <span className="text-sm font-medium text-gray-700 dark:text-zinc-200">{t('home.ownClients')}</span>
+                      <span className="text-xs text-zinc-400">{t('home.ownClientsDesc')}</span>
+                    </label>
+                  </div>
+
+                  <button
+                    onClick={createCampaign}
+                    disabled={loading || (ownClients ? (!manualName.trim() || !manualRows.some(r => r.name.trim() && r.mapsUrl.trim())) : (multi ? rows.length === 0 || rows.some(r => !r.keyword || !r.location) : (!keyword || !location)))}
+                    className="w-full px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-medium rounded-xl hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
+                  >
+                    {loading ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                        {ownClients ? t('home.resolvingClients') : t('home.submitting')}
+                      </span>
+                    ) : t('home.submitRequest')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        {campaigns.length > 0 && (
+          <div id="home-section-campaigns" className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                {t('home.myCampaigns')}
+              </h2>
+              <div className="flex bg-gray-100 dark:bg-zinc-800 rounded-lg p-0.5 text-xs font-medium">
+                <button onClick={() => setCampaignTab('active')} className={`px-3 py-1.5 rounded-md transition-all ${campaignTab === 'active' ? 'bg-white dark:bg-zinc-700 text-emerald-500 shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'}`}>
+                  {t('home.tabActive')}
+                </button>
+                <button onClick={() => setCampaignTab('deleted')} className={`px-3 py-1.5 rounded-md transition-all ${campaignTab === 'deleted' ? 'bg-white dark:bg-zinc-700 text-red-500 shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'}`}>
+                  {t('home.tabDeleted', { count: deletedCampaigns.length })}
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {(campaignTab === 'deleted' ? deletedCampaigns : activeCampaigns).map((c: any) => (
+                <CampaignCard key={c.id} c={c} deleted={campaignTab === 'deleted'} onDelete={deleteCampaign} onRestore={restoreCampaign} onErase={eraseCampaign} />
+              ))}
+            </div>
+            {campaignTab === 'deleted' && deletedCampaigns.length === 0 && (
+              <div className="text-center text-sm text-zinc-400 dark:text-zinc-500 py-8">{t('home.noDeleted')}</div>
+            )}
+          </div>
+        )}
+
+        {(generations.length > 0 || activeGenJobs.length > 0) && (
+          <div id="home-section-generations" className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                {t('home.myGenerations')}
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {activeGenJobs.map(j => (
+                <ActiveGenerationCard
+                  key={j.id}
+                  job={j}
+                  campaignName={campaignNameOf(j.campaignId)}
+                  onDismiss={() => generation.dismissJob(j.id)}
+                />
+              ))}
+              {generations.map((g: any) => (
+                <GenerationCard key={g.id} g={g} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeCampaigns.length === 0 && deletedCampaigns.length === 0 && !isLoading && (
+          <div className="bg-gray-50 dark:bg-zinc-800/30 border border-dashed border-gray-200 dark:border-zinc-700/50 rounded-2xl p-8 sm:p-12 text-center">
+            <div className="text-5xl mb-4 text-zinc-400 dark:text-zinc-600">🌐</div>
+            <p className="text-gray-500 dark:text-zinc-400">{t('home.empty')}</p>
+          </div>
+        )}
+      </main>
+
+      {batchRunning && batch && (
+        <div className="fixed inset-0 z-[140] bg-black/80 backdrop-blur-xl flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-zinc-700 shrink-0">
+              <h2 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                {t('batch.title')}
+              </h2>
+              <button onClick={cancelBatch} className="p-1 text-zinc-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-zinc-700 rounded-lg transition-all">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4 overflow-y-auto">
+              <div className="flex items-center gap-3">
+                <svg className="w-4 h-4 text-emerald-400 animate-spin shrink-0" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                    {t('batch.current', { index: batch.currentIndex + 1, total: batch.campaigns.length })}
+                  </p>
+                  <p className="text-xs text-zinc-400 truncate">{batch.currentKeyword} — {batch.currentLocation}</p>
+                </div>
+                <span className="ms-auto shrink-0 text-xs font-medium text-emerald-400">
+                  {batch.total > 0 ? `${batch.processed} / ${batch.total}` : '...'}
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                {batch.campaigns.map((c, i) => {
+                  const st = batch.statuses[c.id] || 'pending';
+                  const count = batchCounts[c.id] || 0;
+                  const isCurrent = i === batch.currentIndex;
+                  return (
+                    <div key={c.id} className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm transition-all ${isCurrent ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-gray-50 dark:bg-zinc-900/40 border border-gray-200 dark:border-zinc-700/50'}`}>
+                      {st === 'done' ? (
+                        <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      ) : st === 'failed' ? (
+                        <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      ) : st === 'running' ? (
+                        <svg className="w-4 h-4 text-emerald-400 animate-spin shrink-0" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                      ) : (
+                        <span className="w-4 h-4 shrink-0" />
+                      )}
+                      <span className="truncate text-gray-700 dark:text-zinc-200">{c.keyword} — {c.location}</span>
+                      {st === 'pending' && <span className="ms-auto shrink-0 text-[11px] text-zinc-400">{t('batch.pending')}</span>}
+                      {st === 'failed' && <span className="ms-auto shrink-0 text-[11px] text-red-400">{t('batch.failed')}</span>}
+                      {(st === 'done' || st === 'running') && <span className="ms-auto shrink-0 text-[11px] text-zinc-400">({count})</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-gray-200 dark:border-zinc-700 shrink-0">
+              <button onClick={cancelBatch} className="w-full px-4 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-red-500 to-red-600 rounded-xl hover:from-red-400 hover:to-red-500 transition-all shadow-lg shadow-red-500/20 active:scale-[0.98]">
+                {t('batch.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

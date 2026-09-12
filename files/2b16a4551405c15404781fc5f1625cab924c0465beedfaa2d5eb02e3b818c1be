@@ -1,0 +1,38 @@
+'use client';
+
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+
+interface SafeImgProps {
+  src?: string | null;
+  alt?: string;
+  title?: string;
+  className?: string;
+  style?: CSSProperties;
+  imgClassName?: string;
+  fallback: ReactNode;
+}
+
+/**
+ * Image with graceful degradation: renders `fallback` when there is no src
+ * or when loading fails (404, deleted files, session-gated URLs…).
+ */
+export default function SafeImg({ src, alt = '', title, className = '', style, imgClassName = '', fallback }: SafeImgProps) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  return (
+    <span className={className} style={style} title={title}>
+      {!src || failed ? (
+        fallback
+      ) : (
+        <img
+          src={src}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          onError={() => setFailed(true)}
+          className={imgClassName}
+        />
+      )}
+    </span>
+  );
+}

@@ -1,0 +1,44 @@
+export interface ImgxxResult {
+  url: string;
+  delete_url: string;
+}
+
+const IMGXX_UPLOAD_URL = 'https://leadmaximguploadmechanism.vercel.app/api/1/upload';
+
+export async function uploadToImgxx(base64Image: string, apiKey: string): Promise<ImgxxResult> {
+  const params = new URLSearchParams();
+  params.append('key', apiKey);
+  params.append('image', base64Image);
+
+  let res: Response;
+  try {
+    res = await fetch(IMGXX_UPLOAD_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+  } catch (err) {
+    throw new Error(`ImgXX upload network error: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  let json: any = null;
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error(`ImgXX upload failed (HTTP ${res.status}, non-JSON response)`);
+  }
+  if (!res.ok || !json.success) {
+    const detail = json?.error?.message || json?.error || `HTTP ${res.status}`;
+    const message = `ImgXX upload failed (HTTP ${res.status}): ${typeof detail === 'string' ? detail : JSON.stringify(detail).slice(0, 200)}`;
+    const error = new Error(message) as Error & { code?: string };
+    if (res.status === 401 || res.status === 403 || /(?:invalid|incorrect|unauthorized|expired).*(?:api\s*)?key|(?:api\s*)?key.*(?:invalid|incorrect|unauthorized|expired)/i.test(String(detail))) {
+      error.code = 'IMGXX_KEY_INVALID';
+    }
+    throw error;
+  }
+
+  if (!json.data?.url) {
+    throw new Error('ImgXX upload failed (HTTP 200): response missing image URL');
+  }
+  return { url: json.data.url, delete_url: json.data.delete_url };
+}

@@ -1,0 +1,8 @@
+var R=require("../../../chunks/[turbopack]_runtime.js")("server/app/api/check-name/route.js")
+R.c("server/chunks/[root-of-the-server]__09_vb0o._.js")
+R.c("server/chunks/_019a5-8._.js")
+R.c("server/chunks/node_modules_next_04~_e52._.js")
+R.c("server/chunks/[root-of-the-server]__0op9af~._.js")
+R.c("server/chunks/_next-internal_server_app_api_check-name_route_actions_0x.a4wr.js")
+R.m(140049)
+module.exports=R.m(140049).exports

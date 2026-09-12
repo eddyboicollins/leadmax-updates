@@ -1,3 +1,0 @@
-module.exports=[45408,a=>{"use strict";async function b(a){if(!a.trim())return{valid:!1,error:"Token is empty"};try{let b=await fetch("https://api.vercel.com/v2/user",{headers:{Authorization:`Bearer ${a.trim()}`}});if(b.ok)return{valid:!0};if(403===b.status)return{valid:!1,error:"Token is invalid or expired"};if(401===b.status)return{valid:!1,error:"Token is unauthorized"};return{valid:!1,error:`Vercel API returned ${b.status}`}}catch{return{valid:!1,error:"Could not reach Vercel API — check your internet connection"}}}async function c(a){return a.trim()?{valid:!0}:{valid:!1,error:"Key is empty"}}a.s(["verifyImgxxKey",0,c,"verifyVercelToken",0,b])}];
-
-//# sourceMappingURL=src_lib_verify-tokens_ts_04z5_vr._.js.map

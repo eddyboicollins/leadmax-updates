@@ -1,0 +1,177 @@
+export interface ScrapedImage {
+  id: string;
+  url: string;
+  width?: number;
+  height?: number;
+}
+
+export interface BusinessData {
+  id: string;
+  name: string;
+  rating: number;
+  ratingCount: number;
+  address: string;
+  phone: string;
+  website: string;
+  category: string;
+  reviews: { author: string; text: string; rating: number; date: string; avatar?: string }[];
+  latitude: number;
+  longitude: number;
+  placeId: string;
+  googleUrl: string;
+  hours: string[];
+  scrapedImages?: ScrapedImage[];
+  scrapedAt: string;
+}
+
+export type LeadStatus = 'pending' | 'contacted' | 'negotiating' | 'not_interested' | 'sold';
+
+export interface Lead {
+  id: string;
+  business: BusinessData;
+  status: LeadStatus;
+  notes: string;
+  deleted?: boolean;
+  deletedAt?: string;
+  deploymentName?: string;
+  landingPage?: LeadLandingPage;
+  images?: LeadImage[];
+  deployment?: LeadDeployment;
+  deploymentHistory?: DeploymentEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LeadLandingPage {
+  tsx: string;                        // FULL React component source string
+  generatedAt: string;
+  version: number;
+  sections: LandingPageSection[];     // stored but never rendered
+}
+
+export interface LeadImage {
+  id: string;
+  url: string;
+  alt: string;
+  width?: number;
+  height?: number;
+  deleteUrl?: string;
+  /** AI-generated description of what the photo shows, e.g. "a pepperoni pizza on a wooden board" */
+  aiCaption?: string;
+  /** Soft-delete flag: hidden everywhere but restorable from the Deleted tab. */
+  deleted?: boolean;
+  deletedAt?: string;
+}
+
+export interface LeadDeployment {
+  provider: 'vercel' | 'ftp';
+  url: string;
+  deployedAt: string;
+  projectName?: string;
+}
+
+export interface DeploymentEntry {
+  id: string;
+  vercelDeploymentId: string;
+  url: string;
+  aliasUrl: string;
+  deployedAt: string;
+  userPrompt?: string;
+  isMain: boolean;
+  comingSoon?: boolean;
+  tsx: string;
+}
+
+export interface LandingPageSection {
+  id: string;
+  type: string;
+  sortOrder: number;
+  content: Record<string, unknown>;
+  styles: Record<string, string>;
+}
+
+export interface CampaignRegion {
+  keyword: string;
+  location: string;
+}
+
+export interface Campaign {
+  id: string;
+  keyword: string;
+  location: string;
+  displayName: string;
+  /** 'scrape' (default) or 'manual' (user's own clients, resolved via proxy). */
+  source?: 'scrape' | 'manual';
+  leads: Lead[];
+  regions?: CampaignRegion[];
+  deleted?: boolean;
+  deletedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScrapeJob {
+  id: string;
+  campaignId: string;
+  status: 'running' | 'completed' | 'failed';
+  progress: number;
+  message: string;
+  createdAt: string;
+}
+
+export interface LeadGeneration {
+  id: string;
+  leadId: string;
+  campaignId: string;
+  landingPageCode?: string;
+  deploymentUrl?: string;
+  projectName?: string;
+  createdAt: string;
+}
+
+export interface GlobalSettings {
+  vercelToken?: string;
+  imgbbKey?: string;
+  geminiApiKey?: string;
+  geminiModel: string;
+  geminiSource?: 'proxy' | 'api';
+  systemPrompt: string;
+  assistantSystemPrompt?: string;
+  /** Vision source for photo analysis: cookie-based proxy (default) or official Gemini API. */
+  visionSource?: 'proxy' | 'api';
+  /** __Secure-1PSID cookie value powering proxy vision. */
+  gemini1PSID?: string;
+  /** __Secure-1PSIDTS cookie value powering proxy vision. */
+  gemini1PSIDTS?: string;
+  /** Companion cookies (NID, SID, …) captured from Google responses. */
+  geminiSessionExtra?: Record<string, string>;
+  /** Persistent extra instructions applied to every site generate/regenerate (never to modify). */
+  generationInstructions?: string;
+  wizardCompleted?: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+export interface BusinessProfile {
+  name: string;
+  category: string;
+  address: string;
+  rating: number;
+  ratingCount: number;
+  website?: string | null;
+  websiteInsight?: string | null;
+}
+
+export interface Chat {
+  id: string;
+  title: string;
+  profile?: BusinessProfile;
+  ended?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

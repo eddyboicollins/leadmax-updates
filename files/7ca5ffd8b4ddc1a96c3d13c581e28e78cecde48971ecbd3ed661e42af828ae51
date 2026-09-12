@@ -1,0 +1,58 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaign, addLeads, ensureFreshVisionCreds } from '@/lib/store';
+import { resolveManualBusiness } from '@/lib/manualResolve';
+import { v4 as uuidv4 } from 'uuid';
+
+export const maxDuration = 300;
+
+/**
+ * Add more own-clients to a manual campaign: resolves each
+ * {name, mapsUrl} through the proxy and saves the resulting leads.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    if (campaign.source !== 'manual') {
+      return NextResponse.json({ error: 'Not a manual campaign' }, { status: 400 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const list = Array.isArray(body.entries)
+      ? body.entries
+          .filter((e: any) => e && typeof e.name === 'string' && e.name.trim() && typeof e.mapsUrl === 'string' && e.mapsUrl.trim())
+          .map((e: any) => ({ name: e.name.trim(), mapsUrl: e.mapsUrl.trim() }))
+      : [];
+    if (list.length === 0) {
+      return NextResponse.json({ error: 'at least one business with a Maps link required' }, { status: 400 });
+    }
+
+    const creds = await ensureFreshVisionCreds();
+    if (!creds) {
+      return NextResponse.json({ error: 'Gemini session expired and could not be renewed. Paste fresh cookie values in Settings → AI Vision.' }, { status: 400 });
+    }
+
+    const results: { name: string; ok: boolean; error?: string }[] = [];
+    for (const entry of list) {
+      try {
+        const business = await resolveManualBusiness(entry.name, entry.mapsUrl, creds);
+        await addLeads(id, [{ leadId: uuidv4(), business }]);
+        results.push({ name: entry.name, ok: true });
+      } catch (err: any) {
+        results.push({ name: entry.name, ok: false, error: err?.message || 'Resolve failed' });
+      }
+    }
+    return NextResponse.json({
+      added: results.filter(r => r.ok).length,
+      failed: results.filter(r => !r.ok).length,
+      results,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'Failed to add clients' }, { status: 500 });
+  }
+}

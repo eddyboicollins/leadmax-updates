@@ -1,0 +1,34 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { ensureFreshVisionCreds } from '@/lib/store';
+import { sendProxyChat } from '@/lib/proxyVision';
+
+export const maxDuration = 120;
+
+/**
+ * Test the Gemini session: verifies the cookies (explicitly provided or stored)
+ * with one tiny text chat. Used by the Settings vision card and the onboarding
+ * step so the user knows immediately whether AI is configured correctly.
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json().catch(() => ({}) as Record<string, unknown>);
+
+    let creds: { psid: string; psidts: string } | null = null;
+    const psid = typeof body.psid === 'string' ? body.psid.trim() : '';
+    const psidts = typeof body.psidts === 'string' ? body.psidts.trim() : '';
+    if (psid && psidts) {
+      creds = { psid, psidts };
+    } else {
+      creds = await ensureFreshVisionCreds();
+    }
+
+    if (!creds) {
+      return NextResponse.json({ error: 'No session cookies to test. Paste both values first.' }, { status: 400 });
+    }
+
+    const reply = await sendProxyChat('Reply with the exact word: OK', [], creds);
+    return NextResponse.json({ ok: true, reply });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Vision test failed' }, { status: 500 });
+  }
+}

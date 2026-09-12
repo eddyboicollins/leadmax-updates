@@ -1,0 +1,356 @@
+import { retryAskGemini, type ProxyVisionCreds } from '@/lib/gemini';
+import type { BusinessProfile } from './types';
+
+export function formatRating(rating: number): string {
+  return rating.toFixed(1).replace('.', ',');
+}
+
+export function profileTitle(profile: BusinessProfile): string {
+  return `${profile.name} (${formatRating(profile.rating)} | ${profile.ratingCount})`;
+}
+
+const CATEGORIES: { key: string; label: string; names: string[] }[] = [
+  {
+    key: 'restaurant',
+    label: 'Restaurant',
+    names: [
+      'Restaurant El Bahja',
+      'Restaurant Dar Nour',
+      'Restaurant Le Pêcheur',
+      'Restaurant El Andalous',
+      'Restaurant Dar El Jeld',
+      'Restaurant Chez Lina',
+      'Restaurant La Gazelle',
+      'Restaurant Sidi Bou',
+    ],
+  },
+  {
+    key: 'patisserie',
+    label: 'Pâtisserie',
+    names: [
+      'Pâtisserie Chez Fathi',
+      'Pâtisserie El Baraka',
+      'Pâtisserie Zitouna',
+      'Pâtisserie Douceurs de Tunis',
+      'Pâtisserie El Amel',
+      'Pâtisserie Sucré Salé',
+    ],
+  },
+  {
+    key: 'cafe',
+    label: 'Café',
+    names: [
+      'Café El Balad',
+      'Café Sidi Bou',
+      'Café Panorama',
+      'Café El Mouradi',
+      'Café de la Place',
+      'Café Les Palmiers',
+    ],
+  },
+  {
+    key: 'barbershop',
+    label: 'Barbershop',
+    names: [
+      'Salon Anes Coiffure',
+      'Barbier El Amel',
+      'Salon Class Coiffure',
+      'Barbier El Medina',
+      'Salon Modern Cut',
+      'Barbier Sidi Mansour',
+    ],
+  },
+  {
+    key: 'beauty',
+    label: 'Beauty Salon',
+    names: [
+      'Salon de Beauté Mouna',
+      'Coiffure Lina',
+      'Institut de Beauté Nour',
+      'Salon Nessma',
+      'Institut Zina Beauté',
+    ],
+  },
+  {
+    key: 'pharmacy',
+    label: 'Pharmacie',
+    names: [
+      'Pharmacie Ben Ali',
+      'Pharmacie du Centre',
+      'Pharmacie El Menzah',
+      'Pharmacie Ibn Sina',
+      'Pharmacie de la Paix',
+      'Pharmacie El Nasr',
+    ],
+  },
+  {
+    key: 'garage',
+    label: 'Auto Repair',
+    names: [
+      'Garage Tunis',
+      'Garage El Amen',
+      'Mécanique Générale Trabelsi',
+      'Auto Service Carthage',
+      'Garage El Feth',
+      'Mécanique Mourad',
+    ],
+  },
+  {
+    key: 'electronics',
+    label: 'Electronics Shop',
+    names: [
+      'Boutique Électronique El Wifak',
+      'Electro Sfax',
+      'Magasin Voltage',
+      'Électro Cité',
+      'Electro El Khalil',
+    ],
+  },
+  {
+    key: 'clothing',
+    label: 'Clothing Store',
+    names: [
+      'Boutique Femme Chic',
+      'Magasin El Jawhara',
+      'Boutique Lella',
+      'Textile Sousse',
+      'Boutique Ancienne Médina',
+      'Mode El Wafa',
+    ],
+  },
+  {
+    key: 'bakery',
+    label: 'Boulangerie',
+    names: [
+      'Boulangerie El Fouladh',
+      'Boulangerie Anis',
+      "Boulangerie L'Épi d'Or",
+      'Boulangerie du Marché',
+      'Boulangerie El Iman',
+    ],
+  },
+  {
+    key: 'grocery',
+    label: 'Épicerie',
+    names: [
+      'Épicerie El Moez',
+      'Épicerie du Quartier',
+      'Supérette Carthage',
+      'Épicerie El Habib',
+      'Mini Marché El Yasmine',
+    ],
+  },
+  {
+    key: 'mobile',
+    label: 'Mobile Repair',
+    names: [
+      'Réparation Mobile Tunis',
+      'Phone Zone',
+      'Mobile Care',
+      'Smartphone Service',
+      'Réparation 24h',
+    ],
+  },
+  {
+    key: 'optician',
+    label: 'Optician',
+    names: [
+      'Optique Vision',
+      'Optique El Medina',
+      'Optique de la Corniche',
+      'Lunetterie El Feth',
+    ],
+  },
+  {
+    key: 'tailor',
+    label: 'Couture & Tailor',
+    names: [
+      'Couture Zina',
+      'Tailleur El Habib',
+      'Atelier Couture Sana',
+      'Couture Fidèle',
+    ],
+  },
+  {
+    key: 'florist',
+    label: 'Fleuriste',
+    names: [
+      'Fleuriste Jasmin',
+      'Fleurs de Tunis',
+      'Jardin des Fleurs',
+      'Bouquet Sidi Bou',
+    ],
+  },
+];
+
+const STREETS: { city: string; streets: string[] }[] = [
+  {
+    city: 'Tunis',
+    streets: [
+      'Avenue Habib Bourguiba',
+      'Rue de Marseille',
+      'Rue du Caire',
+      'Avenue de Carthage',
+      'Rue Ibn Khaldoun',
+      'Rue des Salines',
+      'Rue de la Kasbah',
+      'Avenue de Paris',
+    ],
+  },
+  {
+    city: 'Sfax',
+    streets: ['Avenue de la République', 'Rue Mongi Slim', 'Avenue Habib Thameur', 'Rue de la Mer', 'Rue Omar Ibn El Khattab'],
+  },
+  {
+    city: 'Sousse',
+    streets: ['Boulevard du 14 Janvier', 'Avenue Abdelhamid El Kadhi', "Rue de l'Environnement", 'Rue de la Corniche', 'Avenue Mohamed V'],
+  },
+  {
+    city: 'Monastir',
+    streets: ['Avenue Habib Bourguiba', 'Rue du 7 Novembre', 'Avenue de la Liberté'],
+  },
+  {
+    city: 'Bizerte',
+    streets: ['Avenue Habib Bourguiba', 'Rue de la Liberté', 'Rue du Port', 'Avenue Taïeb Mhiri'],
+  },
+  {
+    city: 'Nabeul',
+    streets: ['Avenue Habib Bourguiba', 'Rue de la République', 'Avenue du 20 Mars'],
+  },
+  {
+    city: 'Hammamet',
+    streets: ['Avenue de la République', 'Rue du Port', 'Avenue Habib Bourguiba', 'Rue des Jasmins'],
+  },
+  {
+    city: 'La Marsa',
+    streets: ['Rue des Palmiers', 'Avenue de la République', 'Rue du Dr Cartier'],
+  },
+  {
+    city: 'Kairouan',
+    streets: ['Avenue de la République', 'Rue Mokhtar Kallel', 'Avenue de la Médina'],
+  },
+  {
+    city: 'Gabès',
+    streets: ['Avenue Habib Bourguiba', 'Rue Ali Belhouane', 'Avenue de la Liberté'],
+  },
+  {
+    city: 'Ariana',
+    streets: ['Avenue de la Jeunesse', 'Rue de la Liberté', 'Avenue Ibn Khaldoun'],
+  },
+  {
+    city: 'Menzah',
+    streets: ['Avenue de la Palestine', "Rue de l'Église", 'Avenue Hédi Nouira'],
+  },
+];
+
+const RATINGS = [3.5, 3.8, 4.0, 4.1, 4.2, 4.3, 4.5, 4.6, 4.7, 4.8, 4.9, 5.0];
+
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function randomRatingCount(): number {
+  const r = Math.random();
+  if (r < 0.25) return 3 + Math.floor(Math.random() * 18); // small new business
+  if (r < 0.75) return 24 + Math.floor(Math.random() * 180); // established
+  return 220 + Math.floor(Math.random() * 480); // well known
+}
+
+/** Builds a realistic random Tunisian business profile (name, category, address, rating, reviews). */
+export function generateBusinessProfile(existingNames: string[] = []): BusinessProfile {
+  const used = new Set(existingNames.map(n => n.trim().toLowerCase()));
+  const freshCategories = CATEGORIES
+    .map(c => ({ ...c, names: c.names.filter(n => !used.has(n.toLowerCase())) }))
+    .filter(c => c.names.length > 0);
+  const pool = freshCategories.length > 0 ? freshCategories : CATEGORIES;
+  const category = pick(pool);
+  const location = pick(STREETS);
+  const hasWebsite = Math.random() < 0.4;
+  const slug = pick(category.names).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return {
+    name: pick(category.names),
+    category: category.label,
+    address: `${pick(location.streets)}, ${location.city}`,
+    rating: pick(RATINGS),
+    ratingCount: randomRatingCount(),
+    website: hasWebsite ? `https://www.${slug}.tn` : null,
+    websiteInsight: hasWebsite
+      ? pick(['Outdated design', 'Lacks contact info', 'Bad mobile layout', 'URL not working', 'Missing prices', 'Basic one-page site'])
+      : 'No website',
+  };
+}
+
+function buildProfilePrompt(usedNames: string[]): string {
+  const usedLine = usedNames.length > 0
+    ? `\nALREADY-USED business names (NEVER reuse any of these, pick something completely different):\n${usedNames.map(n => `- ${n}`).join('\n')}`
+    : '';
+  return `You are generating the business profile of a prospect for a cold-calling training simulation in Tunisia.
+
+Create ONE realistic small local business. Pick a business type at random from a WIDE variety: restaurant, café, pâtisserie, boucherie (butcher), épicerie (grocery), boulangerie, barbershop, coiffeur, institut de beauté, pharmacie, garage auto, menuiserie, plomberie, électricien, boutique de vêtements, cordonnier, fleuriste, optique, quincaillerie, salon de thé, fast-food, pizzeria, bijouterie, déco, librairie, pressing...${usedLine}
+
+Return ONLY valid JSON with exactly these fields — nothing before or after, no markdown:
+{"name":"business name","category":"short category like Restaurant or Barbier","address":"street and city, Tunisia","rating":4.6,"ratingCount":87,"website":"https://..." or null,"websiteInsight":"short note"}
+
+Rules:
+- name: realistic, Tunisian-flavored (mix of Arabic/French, e.g. "Restaurant Dar Nour", "Barbier El Amel", "Pâtisserie Chez Fathi", "Salon de Thé Ksar El Yasmine"). Make it feel like a real Google Maps listing a small shop owner would have. Never reuse a name from the ALREADY-USED list.
+- category: short label, 1-3 words.
+- address: a real street plus one of these cities: Tunis, Sfax, Sousse, Monastir, Bizerte, Nabeul, Hammamet, Kairouan, Gabès, La Marsa, Ariana, Mahdia, Djerba, Gafsa.
+- rating: a number from 3.2 to 5.0 with exactly one decimal (e.g. 3.4, 4.1, 4.9).
+- ratingCount: a realistic number of Google reviews — VARY the magnitude wildly: sometimes 4-15 (tiny shop), sometimes 50-200 (established), sometimes 300-2000 (very popular). Do NOT always stay in the 100-150 range.
+- website: about 40% of the time the business HAS a website (a realistic URL ending in .tn, .com or .com.tn). The rest of the time it is null.
+- websiteInsight: a short 2-4 word note about the website. If website is null use "No website". If it has one, use a problem note a salesperson would spot, e.g. "Outdated design", "Lacks contact info", "URL not working", "Bad mobile layout", "Missing prices", "Basic one-page site".
+- Vary the city, category, name, rating and ratingCount every time. Never invent a phone or email field.`;
+}
+
+export function parseProfileResponse(raw: string): BusinessProfile | null {
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = (fenced ? fenced[1] : raw).trim();
+  const start = candidate.indexOf('{');
+  const end = candidate.lastIndexOf('}');
+  if (start === -1 || end === -1) return null;
+  try {
+    const obj = JSON.parse(candidate.slice(start, end + 1));
+    const name = typeof obj.name === 'string' ? obj.name.trim() : '';
+    const category = typeof obj.category === 'string' ? obj.category.trim() : '';
+    const address = typeof obj.address === 'string' ? obj.address.trim() : '';
+    const rating = typeof obj.rating === 'number' && Number.isFinite(obj.rating) ? Math.min(5, Math.max(1, obj.rating)) : 0;
+    const ratingCount = typeof obj.ratingCount === 'number' && Number.isFinite(obj.ratingCount) ? Math.max(1, Math.floor(obj.ratingCount)) : 0;
+    if (!name || !address || rating <= 0 || ratingCount <= 0) return null;
+    let website: string | null = null;
+    if (typeof obj.website === 'string' && obj.website.trim()) {
+      let w = obj.website.trim();
+      const md = w.match(/\[([^\]]*)\]\(([^)]+)\)/);
+      if (md) w = md[2];
+      w = w.replace(/[`'"\s]/g, '').trim();
+      if (/^https?:\/\//i.test(w)) website = w;
+      else if (/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(w)) website = `https://${w}`;
+    }
+    const websiteInsight =
+      typeof obj.websiteInsight === 'string' && obj.websiteInsight.trim()
+        ? obj.websiteInsight.trim().slice(0, 80)
+        : website
+          ? 'Needs improvement'
+          : 'No website';
+    return {
+      name,
+      category: category || 'Business',
+      address,
+      rating: Math.round(rating * 10) / 10,
+      ratingCount,
+      website,
+      websiteInsight,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Asks Gemini to invent the prospect's profile. Returns null on failure (caller can fall back). */
+export async function generateProfileWithAI(existingNames: string[] = [], creds?: ProxyVisionCreds): Promise<BusinessProfile | null> {
+  try {
+    const raw = await retryAskGemini(buildProfilePrompt(existingNames), 2, undefined, [], creds);
+    return parseProfileResponse(raw || '');
+  } catch {
+    return null;
+  }
+}

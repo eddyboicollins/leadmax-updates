@@ -1,0 +1,47 @@
+import { NextResponse } from 'next/server';
+import { startBrowserLogin, pollBrowserLogin } from '@/lib/browserSession';
+import { persistBrowserJar } from '@/lib/store';
+import { fetchVisionSession } from '@/lib/proxyVision';
+
+/** Open a visible browser window for manual Google sign-in. */
+export async function POST() {
+  try {
+    await startBrowserLogin();
+    return NextResponse.json({ started: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Could not open browser' }, { status: 500 });
+  }
+}
+
+/**
+ * Poll sign-in state. When the browser jar shows a signed-in session it is
+ * verified, persisted, and reported ready (browser already closed by then).
+ */
+export async function GET() {
+  try {
+    const st = await pollBrowserLogin();
+    if (st.status !== 'ready') {
+      return NextResponse.json(
+        st.status === 'failed'
+          ? { status: 'failed', error: st.error }
+          : { status: st.status },
+      );
+    }
+    const jar = st.jar;
+    const psid = jar['__Secure-1PSID'] || '';
+    const psidts = jar['__Secure-1PSIDTS'] || '';
+    if (!psid || !psidts) {
+      return NextResponse.json({ status: 'failed', error: 'Signed-in session has no usable cookies.' }, { status: 400 });
+    }
+    const checked = await fetchVisionSession(psid, psidts).catch(() => null);
+    if (!checked?.session) {
+      return NextResponse.json({ status: 'failed', error: 'Signed-in session did not verify. Try again.' }, { status: 400 });
+    }
+    const merged = { ...jar };
+    if (checked.rotatedPsidts) merged['__Secure-1PSIDTS'] = checked.rotatedPsidts;
+    await persistBrowserJar(merged);
+    return NextResponse.json({ status: 'ready' });
+  } catch (err) {
+    return NextResponse.json({ status: 'failed', error: err instanceof Error ? err.message : 'Sign-in check failed' }, { status: 500 });
+  }
+}

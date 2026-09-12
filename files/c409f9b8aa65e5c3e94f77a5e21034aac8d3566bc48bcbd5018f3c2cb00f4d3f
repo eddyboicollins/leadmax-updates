@@ -1,0 +1,219 @@
+/**
+ * Cookie-based Gemini web vision (no official API key required).
+ *
+ * Replicates the Gemini web upload + StreamGenerate flow server-side:
+ *   1. INIT   GET gemini.google.com/app with __Secure-1PSID/1PSIDTS
+ *             -> scrape SNlM0e (at), cfb2h (bl), FdrFJe (f.sid), qKIAYe (push_id)
+ *   2. UPLOAD POST content-push.googleapis.com/upload (multipart file part)
+ *             -> file identifier (e.g. /contrib_service/ttl_1d/...)
+ *   3. ASK    POST BardChatUi StreamGenerate with f.req[0][3] = [[[fileId], name]]
+ *             -> parse the wrb.fr reply text
+ *
+ * Server runtime only (uses undici fetch/FormData/Blob available in Node 18+).
+ */
+
+const UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+const DEFAULT_PUSH_ID = 'feeds/mcudyrk2a4khkz';
+
+function grab(html: string, re: RegExp): string | null {
+  return re.exec(html)?.[1] ?? null;
+}
+
+function parseReply(streamText: string): string {
+  let best = '';
+  for (const raw of streamText.replace(")]}'", '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || !line.includes('wrb.fr')) continue;
+    let arr: unknown;
+    try {
+      arr = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const list = Array.isArray(arr) ? arr : [];
+    const entries = list[0] === 'wrb.fr' ? [list] : list.filter((x) => Array.isArray(x) && x[0] === 'wrb.fr');
+    for (const e of entries as unknown[][]) {
+      if (typeof e[2] !== 'string') continue;
+      let inner: unknown;
+      try {
+        inner = JSON.parse(e[2] as string);
+      } catch {
+        continue;
+      }
+      if (Array.isArray(inner) && Array.isArray(inner[4])) {
+        for (const c of inner[4]) {
+          if (Array.isArray(c) && Array.isArray(c[1])) {
+            const t = (c[1] as unknown[]).filter((p): p is string => typeof p === 'string').join('').trim();
+            if (t.length > best.length) best = t;
+          }
+        }
+      }
+    }
+  }
+  return best;
+}
+
+export interface ProxyVisionCreds {
+  psid: string;
+  psidts: string;
+}
+
+/** True when an AI failure means "session not configured" (→ send to Settings). */
+export function isVisionSetupError(message: string): boolean {
+  return /session cookies|AI Vision|not authenticated|fresh cookie/i.test(message || '');
+}
+
+/** Pull a single cookie value out of Set-Cookie response headers. */
+function extractSetCookie(headers: Headers, name: string): string | null {
+  const all = typeof headers.getSetCookie === 'function' ? headers.getSetCookie() : [];
+  for (const c of all) {
+    const m = new RegExp(`^${name}=([^;]*)`).exec(c.trim());
+    if (m && m[1]) return m[1];
+  }
+  return null;
+}
+
+export interface VisionSessionResult {
+  /** Null when the cookies are dead (no SNlM0e) — NOT an error, caller may rotate. */
+  session: VisionSession | null;
+  /** Fresh 1PSIDTS Google set on this visit, if any (persist it when present). */
+  rotatedPsidts: string | null;
+}
+
+/**
+ * Pure session check with the two primaries only (the proven 10/10 shape —
+ * companion cookies are deliberately NOT sent: mixed-vintage jars get the
+ * session treated as anonymous and SNlM0e disappears).
+ * Returns null session when unauthenticated; throws only on network/headers.
+ */
+export async function fetchVisionSession(psid: string, psidts: string): Promise<VisionSessionResult> {
+  const cookie = `__Secure-1PSID=${psid}; __Secure-1PSIDTS=${psidts}`;
+  let initRes: Response;
+  try {
+    initRes = await fetch('https://gemini.google.com/app', {
+      headers: { accept: 'text/html', cookie, 'user-agent': UA },
+      signal: AbortSignal.timeout(60000),
+    });
+  } catch {
+    throw new Error('proxy init failed (network/headers) — restart the server so the --max-http-header-size flag applies, then retry');
+  }
+  if (initRes.status === 429) throw new Error('Gemini web rate-limited this IP (429). Try again later.');
+  const html = initRes.ok ? await initRes.text() : '';
+  const at = grab(html, /"SNlM0e":\s*"(.*?)"/);
+  const rotatedPsidts = extractSetCookie(initRes.headers, '__Secure-1PSIDTS');
+  if (!initRes.ok || !at) return { session: null, rotatedPsidts };
+  return {
+    session: {
+      at,
+      bl: grab(html, /"cfb2h":\s*"(.*?)"/),
+      sid: grab(html, /"FdrFJe":\s*"(.*?)"/),
+      pushId: grab(html, /"qKIAYe":\s*"(.*?)"/) || DEFAULT_PUSH_ID,
+      cookie,
+    },
+    rotatedPsidts,
+  };
+}
+
+export interface ProxyChatImage {
+  bytes: Buffer;
+  mimeType: string;
+  filename: string;
+}
+
+interface VisionSession {
+  at: string;
+  bl: string | null;
+  sid: string | null;
+  pushId: string;
+  cookie: string;
+}
+
+async function uploadVisionFile(session: VisionSession, image: ProxyChatImage): Promise<string> {
+  const form = new FormData();
+  form.append('file', new Blob([new Uint8Array(image.bytes)], { type: image.mimeType }), image.filename);
+  let upRes: Response;
+  try {
+    upRes = await fetch('https://content-push.googleapis.com/upload', {
+      method: 'POST',
+      headers: {
+        origin: 'https://gemini.google.com',
+        referer: 'https://gemini.google.com/',
+        'X-Tenant-Id': 'bard-storage',
+        'Push-ID': session.pushId,
+        cookie: session.cookie,
+        'user-agent': UA,
+      },
+      body: form,
+      signal: AbortSignal.timeout(90000),
+    });
+  } catch {
+    throw new Error('proxy upload failed (network) — photo could not be sent to Gemini web');
+  }
+  const fileId = (await upRes.text()).trim();
+  if (!upRes.ok || !fileId.startsWith('/')) throw new Error('Photo upload to Gemini web failed (HTTP ' + upRes.status + ').');
+  return fileId;
+}
+
+/**
+ * Send one prompt (+ optional images) to Gemini web as a FRESH chat.
+ * Every call starts a new conversation, so business data, prompt and images
+ * land together in the first turn — visible as such in the Gemini account.
+ *
+ * Credentials are passed in (read them from Settings on the server) so this
+ * module never imports the store and stays safe to import from anywhere.
+ */
+export async function sendProxyChat(prompt: string, images: ProxyChatImage[] = [], creds: ProxyVisionCreds): Promise<string> {
+  if (!creds?.psid || !creds?.psidts) {
+    throw new Error('Gemini session cookies are missing. Add them in Settings → AI Vision to enable AI features.');
+  }
+  const checked = await fetchVisionSession(creds.psid, creds.psidts);
+  if (!checked.session) throw new Error('Gemini web session is not authenticated. Paste fresh cookie values in Settings.');
+  const session = checked.session;
+
+  const refs: [[string], string][] = [];
+  for (const image of images) {
+    const fileId = await uploadVisionFile(session, image);
+    refs.push([[fileId], image.filename]);
+  }
+
+  const inner: unknown[] = new Array(81).fill(null);
+  inner[0] = [prompt, 0, null, refs.length > 0 ? refs : null, null, null, 0];
+  inner[1] = ['en'];
+  inner[2] = ['', '', '', null, null, null, null, null, null, ''];
+  inner[6] = [1]; inner[7] = 1; inner[10] = 1; inner[11] = 0;
+  inner[17] = [[0]]; inner[18] = 0;
+  inner[27] = 1; inner[30] = [4]; inner[41] = [1]; inner[53] = 0;
+  const uuid = () => globalThis.crypto.randomUUID().toUpperCase();
+  inner[59] = uuid();
+  inner[61] = []; inner[68] = 1; inner[79] = 1; inner[80] = 1;
+  const params = new URLSearchParams({ hl: 'en', _reqid: String(Math.floor(100000 + Math.random() * 900000)), rt: 'c' });
+  if (session.bl) params.set('bl', session.bl);
+  if (session.sid) params.set('f.sid', session.sid);
+  let genRes: Response;
+  try {
+    genRes = await fetch(`https://gemini.google.com/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate?${params}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        origin: 'https://gemini.google.com',
+        referer: 'https://gemini.google.com/',
+        'x-same-domain': '1',
+        'x-goog-ext-525005358-jspb': `["${uuid()}",1]`,
+        cookie: session.cookie,
+        'user-agent': UA,
+      },
+      body: new URLSearchParams({ at: session.at, 'f.req': JSON.stringify([null, JSON.stringify(inner)]) }).toString(),
+      signal: AbortSignal.timeout(300000),
+    });
+  } catch {
+    throw new Error('proxy chat request failed (network)');
+  }
+  if (genRes.status === 429) throw new Error('Gemini web rate-limited this IP (429). Try again later.');
+  if (!genRes.ok) throw new Error('Gemini web chat request failed (HTTP ' + genRes.status + ').');
+  const text = parseReply(await genRes.text()).trim();
+  if (!text) throw new Error('Gemini returned an empty response.');
+  return text;
+}
+
+

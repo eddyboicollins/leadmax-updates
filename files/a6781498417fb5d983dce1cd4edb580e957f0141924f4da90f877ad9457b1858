@@ -1,0 +1,158 @@
+'use client';
+
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+interface Campaign {
+  id: string;
+  keyword: string;
+  location: string;
+  displayName: string;
+  source?: 'scrape' | 'manual';
+  leads: any[];
+  deleted?: boolean;
+  deletedAt?: string;
+  createdAt: string;
+}
+
+export function useCampaigns() {
+  return useQuery<{ campaigns: Campaign[] }>({
+    queryKey: ['campaigns'],
+    queryFn: async () => {
+      const res = await fetch('/api/campaigns');
+      if (!res.ok) throw new Error('Failed to load campaigns');
+      return res.json();
+    },
+  });
+}
+
+export function useAllCampaigns() {
+  return useQuery<{ campaigns: Campaign[] }>({
+    queryKey: ['campaigns', 'all'],
+    queryFn: async () => {
+      const res = await fetch('/api/campaigns?deleted=all');
+      if (!res.ok) throw new Error('Failed to load campaigns');
+      return res.json();
+    },
+  });
+}
+
+export interface Generation {
+  id: string;
+  leadId: string;
+  campaignId: string;
+  landingPageCode?: string;
+  deploymentUrl?: string;
+  projectName?: string;
+  createdAt: string;
+  businessName: string;
+  campaignName: string;
+}
+
+export function useGenerations() {
+  return useQuery<Generation[]>({
+    queryKey: ['generations'],
+    queryFn: async () => {
+      const res = await fetch('/api/generations');
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+}
+
+export interface ChatLite {
+  id: string;
+  title: string;
+  ended?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function useChats() {
+  return useQuery<ChatLite[]>({
+    queryKey: ['chats'],
+    queryFn: async () => {
+      const res = await fetch('/api/chats');
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.chats ?? [];
+    },
+  });
+}
+
+export function useCreateChat() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<ChatLite> => {
+      const res = await fetch('/api/chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ generateProfile: true }),
+      });
+      if (!res.ok) throw new Error('Failed to start chat');
+      const data = await res.json();
+      if (!data.chat) throw new Error('Failed to start chat');
+      return data.chat;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['chats'] }),
+  });
+}
+
+export function useCreateCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ keyword, location, regions }: { keyword: string; location: string; regions?: { keyword: string; location: string }[] }) => {
+      const res = await fetch('/api/campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword, location, regions }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['campaigns'] }),
+  });
+}
+
+export function useDeleteCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/campaigns?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Delete failed');
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['campaigns'] });
+    },
+  });
+}
+
+export function useRestoreCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch('/api/campaigns/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      if (!res.ok) throw new Error('Restore failed');
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['campaigns'] });
+    },
+  });
+}
+
+export function usePurgeCampaign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/campaigns/purge?id=${id}`, { method: 'DELETE' });
+      if (!res.ok) { const e = await res.json().catch(() => null); throw new Error(e?.error || 'Erase failed'); }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['campaigns'] });
+      qc.invalidateQueries({ queryKey: ['campaigns', 'all'] });
+    },
+  });
+}

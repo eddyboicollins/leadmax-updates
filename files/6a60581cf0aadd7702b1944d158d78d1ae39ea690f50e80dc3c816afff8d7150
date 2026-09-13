@@ -1,0 +1,305 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import type { AgentInfo, AgentPalette } from '@/lib/types';
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  onSave: (info: AgentInfo) => Promise<void>;
+  initial?: AgentInfo | null;
+  campaignName?: string;
+  lead?: {
+    business: { name: string; address?: string; website?: string };
+    images?: { id: string; url: string; alt?: string; deleted?: boolean }[];
+  } | null;
+}
+
+const PALETTES: { name: string; primary: string; secondary: string; background: string }[] = [
+  { name: 'Gold Noir', primary: '#d4af37', secondary: '#8c6b1a', background: '#121212' },
+  { name: 'Emerald Night', primary: '#10b981', secondary: '#065f46', background: '#0f172a' },
+  { name: 'Royal Violet', primary: '#8b5cf6', secondary: '#4c1d95', background: '#0f0a1e' },
+  { name: 'Ocean', primary: '#0ea5e9', secondary: '#075985', background: '#0c1a2a' },
+  { name: 'Crimson', primary: '#ef4444', secondary: '#991b1b', background: '#1a0a0a' },
+  { name: 'Sunset', primary: '#f97316', secondary: '#9a3412', background: '#1a110a' },
+  { name: 'Teal', primary: '#14b8a6', secondary: '#115e59', background: '#0a1a18' },
+  { name: 'Rose', primary: '#ec4899', secondary: '#9d174d', background: '#1a0a14' },
+  { name: 'Amber', primary: '#f59e0b', secondary: '#92400e', background: '#1a150a' },
+  { name: 'Slate', primary: '#94a3b8', secondary: '#475569', background: '#0f172a' },
+  { name: 'Deep Blue', primary: '#3b82f6', secondary: '#1e40af', background: '#0a1020' },
+  { name: 'Forest', primary: '#22c55e', secondary: '#166534', background: '#0a1a0f' },
+  { name: 'Graphite Gold', primary: '#eab308', secondary: '#854d0e', background: '#18181b' },
+  { name: 'Berry', primary: '#a855f7', secondary: '#6b21a8', background: '#150a1a' },
+  { name: 'Mint', primary: '#06b6d4', secondary: '#0e7490', background: '#0a1a1e' },
+  { name: 'Coral', primary: '#fb7185', secondary: '#9f1239', background: '#1a0a10' },
+];
+
+const DEFAULT_PALETTE: AgentPalette = { primary: '#d4af37', secondary: '#8c6b1a', background: '#121212' };
+
+export default function AgentInfoModal({ open, onClose, onSave, initial, campaignName, lead }: Props) {
+  const [form, setForm] = useState<AgentInfo>({
+    fullName: '',
+    title: '',
+    agency: '',
+    phone: '',
+    email: '',
+    website: '',
+    avatarUrl: '',
+    coverUrl: '',
+    officeAddress: '',
+    aboutText: '',
+    languages: 'English, Arabic',
+    tagline: '',
+    palette: DEFAULT_PALETTE,
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const [showMorePalettes, setShowMorePalettes] = useState(false);
+  const [showCustomColors, setShowCustomColors] = useState(false);
+
+  const samePalette = (a: AgentPalette | undefined, b: AgentPalette | undefined) =>
+    !!a && !!b && a.primary === b.primary && a.secondary === b.secondary && a.background === b.background;
+
+  useEffect(() => {
+    if (open) {
+      if (initial) setForm({ palette: DEFAULT_PALETTE, ...initial } as AgentInfo);
+      else {
+        setForm({
+          fullName: '',
+          title: '',
+          agency: '',
+          phone: '',
+          email: '',
+          website: '',
+          avatarUrl: '',
+          coverUrl: '',
+          officeAddress: '',
+          aboutText: '',
+          languages: 'English, Arabic',
+          tagline: '',
+          palette: DEFAULT_PALETTE,
+        });
+      }
+      if (initial) {
+        const selIdx = PALETTES.findIndex(p => samePalette(p, initial.palette));
+        setShowMorePalettes(selIdx === -1 || selIdx > 7);
+        setShowCustomColors(selIdx === -1);
+      }
+      setErr('');
+    }
+  }, [open, initial]);
+
+  if (!open) return null;
+
+  const set = (k: keyof AgentInfo, v: string) => setForm(prev => ({ ...prev, [k]: v }));
+  const setPalette = (p: AgentPalette) => setForm(prev => ({ ...prev, palette: p }));
+  const activeImages = (lead?.images || []).filter(i => !i.deleted);
+
+  async function handleSave() {
+    if (!form.fullName.trim() || !form.phone.trim() || !form.email.trim()) {
+      setErr('Full name, phone and email are required');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      setErr('Invalid email');
+      return;
+    }
+    if (!form.palette?.primary || !form.palette?.secondary || !form.palette?.background) {
+      setErr('Pick a color palette');
+      return;
+    }
+    setSaving(true);
+    setErr('');
+    try {
+      const newAvatar = form.avatarUrl?.trim();
+      const newCover = form.coverUrl?.trim();
+      await onSave({
+        ...form,
+        fullName: form.fullName.trim(),
+        title: (form.title || form.fullName).trim(),
+        agency: lead?.business.name || form.agency || '',
+        website: lead?.business.website || form.website || '',
+        officeAddress: lead?.business.address || form.officeAddress || '',
+        phone: form.phone.trim(),
+        email: form.email.trim(),
+        avatarUrl: newAvatar,
+        coverUrl: newCover,
+        previousAvatarUrl: newAvatar && initial?.avatarUrl && newAvatar !== initial.avatarUrl ? initial.avatarUrl : initial?.previousAvatarUrl,
+        previousCoverUrl: newCover && initial?.coverUrl && newCover !== initial.coverUrl ? initial.coverUrl : initial?.previousCoverUrl,
+        aboutText: form.aboutText?.trim(),
+        languages: form.languages?.trim(),
+        tagline: form.tagline?.trim(),
+        fullNameAr: form.fullNameAr?.trim(),
+        titleAr: form.titleAr?.trim(),
+        palette: form.palette,
+      });
+      onClose();
+    } catch (e: any) {
+      setErr(e.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const cur = form.palette || DEFAULT_PALETTE;
+
+  return (
+    <div className="fixed inset-0 z-[130] bg-black/80 backdrop-blur-xl flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-700">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Agent information</h2>
+            {campaignName && <p className="text-xs text-zinc-500">{campaignName}</p>}
+            <p className="text-[11px] text-zinc-500 mt-1">Business: <span className="font-medium">{lead?.business.name || '—'}</span> {lead?.business.address ? `• ${lead.business.address}` : ''}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <div className="p-5 space-y-4 overflow-y-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-medium text-zinc-500 mb-1">Full name *</label>
+              <input value={form.fullName} onChange={e => set('fullName', e.target.value)} placeholder="John Doe" className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-zinc-500 mb-1">Title *</label>
+              <input value={form.title} onChange={e => set('title', e.target.value)} placeholder="Real Estate Agent" className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-zinc-500 mb-1">Phone *</label>
+              <input value={form.phone} onChange={e => set('phone', e.target.value)} placeholder="+216 12 345 678" className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-zinc-500 mb-1">Email *</label>
+              <input value={form.email} onChange={e => set('email', e.target.value)} placeholder="agent@example.com" className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-[11px] font-medium text-zinc-500 mb-1">Tagline / Bio short</label>
+              <input value={form.tagline || ''} onChange={e => set('tagline', e.target.value)} placeholder="Helping you find your dream home" className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-[11px] font-medium text-zinc-500 mb-1">About (long)</label>
+              <textarea value={form.aboutText || ''} onChange={e => set('aboutText', e.target.value)} rows={3} placeholder="Long bio..." className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-zinc-500 mb-1">Languages</label>
+              <input value={form.languages || ''} onChange={e => set('languages', e.target.value)} placeholder="English, Arabic, French" className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-zinc-500 mb-1">WhatsApp (optional)</label>
+              <input value={form.whatsapp || ''} onChange={e => set('whatsapp', e.target.value)} placeholder="21612345678" className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-sm" />
+            </div>
+          </div>
+
+          {/* Palette picker */}
+          <div className="space-y-3 border-t border-zinc-200 dark:border-zinc-700 pt-4">
+            <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Card colors — pick a palette or make custom</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {(showMorePalettes ? PALETTES : PALETTES.slice(0, 8)).map(p => {
+                const sel = cur.primary === p.primary && cur.secondary === p.secondary && cur.background === p.background;
+                return (
+                  <button key={p.name} onClick={() => setPalette(p)} className={`p-2 rounded-xl border text-left ${sel ? 'border-emerald-500 ring-2 ring-emerald-500/30 bg-emerald-50 dark:bg-emerald-900/20' : 'border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 hover:border-zinc-300'}`}>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="w-4 h-4 rounded-full border border-black/10" style={{ background: p.primary }} />
+                      <span className="w-4 h-4 rounded-full border border-black/10" style={{ background: p.secondary }} />
+                      <span className="w-4 h-4 rounded-full border border-black/10" style={{ background: p.background }} />
+                    </div>
+                    <span className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300">{p.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button type="button" onClick={() => setShowMorePalettes(v => !v)} className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300">
+              <svg className={`w-3.5 h-3.5 transition-transform ${showMorePalettes ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              {showMorePalettes ? 'Show fewer palettes' : `Show ${PALETTES.length - 8} more palettes`}
+            </button>
+
+            <div className="border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
+              <button type="button" onClick={() => setShowCustomColors(v => !v)} className="w-full flex items-center justify-between px-3 py-2.5 text-[11px] font-medium text-zinc-600 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-900">
+                <span>Custom colors</span>
+                <svg className={`w-3.5 h-3.5 transition-transform ${showCustomColors ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {showCustomColors && (
+                <div className="p-3 space-y-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-medium text-zinc-500 mb-1">Primary</label>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={cur.primary} onChange={e => setPalette({ ...cur, primary: e.target.value })} className="w-8 h-8 rounded-lg p-0 border border-zinc-200 dark:border-zinc-700" />
+                        <input value={cur.primary} onChange={e => setPalette({ ...cur, primary: e.target.value })} placeholder="#d4af37" className="flex-1 px-2 py-1.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-medium text-zinc-500 mb-1">Secondary</label>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={cur.secondary} onChange={e => setPalette({ ...cur, secondary: e.target.value })} className="w-8 h-8 rounded-lg p-0 border border-zinc-200 dark:border-zinc-700" />
+                        <input value={cur.secondary} onChange={e => setPalette({ ...cur, secondary: e.target.value })} placeholder="#8c6b1a" className="flex-1 px-2 py-1.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-medium text-zinc-500 mb-1">Background</label>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={cur.background} onChange={e => setPalette({ ...cur, background: e.target.value })} className="w-8 h-8 rounded-lg p-0 border border-zinc-200 dark:border-zinc-700" />
+                        <input value={cur.background} onChange={e => setPalette({ ...cur, background: e.target.value })} placeholder="#121212" className="flex-1 px-2 py-1.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+                    <span className="w-10 h-6 rounded-lg border border-black/10" style={{ background: cur.background }} />
+                    <span className="w-6 h-6 rounded-full border border-black/10" style={{ background: cur.primary }} />
+                    <span className="w-6 h-6 rounded-full border border-black/10" style={{ background: cur.secondary }} />
+                    <span>Preview</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Avatar / Cover pickers from uploaded lead photos */}
+          <div className="space-y-3 border-t border-zinc-200 dark:border-zinc-700 pt-4">
+            <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Pick avatar & cover from lead photos (won’t be reused in gallery)</p>
+            {activeImages.length === 0 ? (
+              <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2">No uploaded photos yet — upload images to this lead first, then pick avatar/cover here. (Leave empty to skip)</p>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-[11px] font-medium text-zinc-500 mb-1">Avatar photo (round profile)</label>
+                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                    {activeImages.map(img => (
+                      <button key={img.id} onClick={() => set('avatarUrl', img.url)} className={`relative rounded-xl overflow-hidden border-2 aspect-square ${form.avatarUrl === img.url ? 'border-emerald-500 ring-2 ring-emerald-500/30' : 'border-zinc-200 dark:border-zinc-700'}`}>
+                        <img src={img.url} alt={img.alt} className="w-full h-full object-cover" />
+                        {form.avatarUrl === img.url && <span className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center"><span className="bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">✓</span></span>}
+                      </button>
+                    ))}
+                  </div>
+                  {form.avatarUrl && <button onClick={() => set('avatarUrl', '')} className="text-[11px] text-zinc-500 hover:text-zinc-700 mt-1">Clear avatar</button>}
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-zinc-500 mb-1">Cover photo (banner behind avatar)</label>
+                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                    {activeImages.map(img => (
+                      <button key={img.id} onClick={() => set('coverUrl', img.url)} className={`relative rounded-xl overflow-hidden border-2 aspect-[16/10] ${form.coverUrl === img.url ? 'border-emerald-500 ring-2 ring-emerald-500/30' : 'border-zinc-200 dark:border-zinc-700'}`}>
+                        <img src={img.url} alt={img.alt} className="w-full h-full object-cover" />
+                        {form.coverUrl === img.url && <span className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center"><span className="bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">✓</span></span>}
+                      </button>
+                    ))}
+                  </div>
+                  {form.coverUrl && <button onClick={() => set('coverUrl', '')} className="text-[11px] text-zinc-500 hover:text-zinc-700 mt-1">Clear cover</button>}
+                </div>
+              </>
+            )}
+          </div>
+
+          {err && <p className="text-xs text-red-500">{err}</p>}
+        </div>
+        <div className="px-5 py-4 border-t border-zinc-200 dark:border-zinc-700 flex gap-2">
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 text-sm font-medium bg-zinc-100 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 rounded-xl hover:bg-zinc-200 dark:hover:bg-zinc-600">Cancel</button>
+          <button onClick={handleSave} disabled={saving} className="flex-1 px-4 py-2.5 text-sm font-medium bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 disabled:opacity-50">
+            {saving ? 'Saving...' : 'Save agent info'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

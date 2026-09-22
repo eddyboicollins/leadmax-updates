@@ -1,0 +1,353 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaign, getLead, updateLeadLandingPage, getSettings, updateLeadBusinessEnrichment, getAgentCards, updateAgentCard } from '@/lib/store';
+import { buildPromptData, renderPrompt, DEFAULT_SYSTEM_PROMPT, askGeminiAndValidate, getBizCardTemplate, renderBizCardPrompt, buildBizCardEnrichmentPrompt, parseEnrichmentJson } from '@/lib/prompts';
+import { retryAskGemini, DEFAULT_GEMINI_MODEL, type GeminiModel, type GeminiSource } from '@/lib/gemini';
+import { getLeadImageSources } from '@/lib/prompts';
+
+export const maxDuration = 120;
+
+const DEFAULT_SECTIONS = [
+  { id: 'navbar', type: 'navbar', sortOrder: 0, content: {}, styles: {} },
+  { id: 'hero', type: 'hero', sortOrder: 1, content: {}, styles: {} },
+  { id: 'services', type: 'services', sortOrder: 2, content: {}, styles: {} },
+  { id: 'testimonials', type: 'testimonials', sortOrder: 3, content: {}, styles: {} },
+  { id: 'faq', type: 'faq', sortOrder: 4, content: {}, styles: {} },
+  { id: 'contact', type: 'contact', sortOrder: 5, content: {}, styles: {} },
+  { id: 'map', type: 'map', sortOrder: 6, content: {}, styles: {} },
+  { id: 'footer', type: 'footer', sortOrder: 7, content: {}, styles: {} },
+];
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { id, leadId } = await params;
+
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    const body = await request.json().catch(() => ({}));
+    const extraInstructions = body.extraInstructions || '';
+    const agentCardId = body.agentCardId || undefined;
+
+    const settings = await getSettings();
+    const apiKey = settings.geminiApiKey || '';
+    const model = (settings.geminiModel as GeminiModel) || DEFAULT_GEMINI_MODEL;
+    const source = (settings.geminiSource as GeminiSource) || 'proxy';
+
+    const isBizCard = (campaign as any).assetType === 'bizcard';
+    let cleanTsx: string;
+
+    if (isBizCard && agentCardId) {
+      // ── Multi-agent card flow (source lives on the card, not the lead) ──
+      const cards = getAgentCards(lead);
+      const card = cards.find(c => c.id === agentCardId);
+      if (!card) return NextResponse.json({ error: 'Agent card not found' }, { status: 404 });
+      const agent = card.agentInfo;
+      if (!agent?.fullName || !agent?.email || !agent?.phone) {
+        return NextResponse.json({ error: 'Agent information missing. Open the card and set agent info before generating.' }, { status: 400 });
+      }
+      // Enrichment is shared per lead and runs once ever (non-blocking).
+      // Guard: skip entirely when the fields already contain anything.
+      let enriched = {
+        email: (lead.business as any).enrichedEmail as string | undefined,
+        instagram: (lead.business as any).enrichedSocials?.instagram,
+        linkedin: (lead.business as any).enrichedSocials?.linkedin,
+        facebook: (lead.business as any).enrichedSocials?.facebook,
+        twitter: (lead.business as any).enrichedSocials?.twitter,
+        tiktok: (lead.business as any).enrichedSocials?.tiktok,
+        youtube: (lead.business as any).enrichedSocials?.youtube,
+      };
+      const hasEnrichedData = !!(
+        enriched.email ||
+        enriched.instagram ||
+        enriched.linkedin ||
+        enriched.facebook ||
+        enriched.twitter ||
+        enriched.tiktok ||
+        enriched.youtube
+      );
+      if (!(lead.business as any).enrichmentDone && !hasEnrichedData) {
+        try {
+          console.log(`[bizcard] enriching ${lead.business.name}...`);
+          const enrichPrompt = buildBizCardEnrichmentPrompt({
+            name: lead.business.name,
+            address: lead.business.address,
+            website: lead.business.website,
+            googleUrl: (lead.business as any).googleUrl,
+          });
+          const raw = await retryAskGemini(enrichPrompt, apiKey, model, 4, undefined, source);
+          const parsed = parseEnrichmentJson(raw);
+          console.log(`[bizcard] enrichment result`, parsed);
+          enriched = {
+            email: parsed.email || enriched.email,
+            instagram: parsed.instagram || enriched.instagram,
+            linkedin: parsed.linkedin || enriched.linkedin,
+            facebook: parsed.facebook || enriched.facebook,
+            twitter: parsed.twitter || enriched.twitter,
+            tiktok: parsed.tiktok || enriched.tiktok,
+            youtube: parsed.youtube || enriched.youtube,
+          };
+          await updateLeadBusinessEnrichment(leadId, {
+            enrichedEmail: enriched.email,
+            enrichedSocials: {
+              instagram: enriched.instagram,
+              linkedin: enriched.linkedin,
+              facebook: enriched.facebook,
+              twitter: enriched.twitter,
+              tiktok: enriched.tiktok,
+              youtube: enriched.youtube,
+            },
+            enrichmentDone: true,
+          });
+        } catch (e) {
+          console.error('[bizcard] enrichment failed, continuing without it', e);
+          await updateLeadBusinessEnrichment(leadId, { enrichmentDone: true });
+        }
+      }
+
+      const bizCtx = {
+        name: lead.business.name,
+        address: lead.business.address,
+        latitude: (lead.business as any).latitude,
+        longitude: (lead.business as any).longitude,
+        placeId: (lead.business as any).placeId,
+        googleUrl: (lead.business as any).googleUrl,
+        website: lead.business.website,
+        phone: lead.business.phone,
+      };
+      const sources = getLeadImageSources(lead).filter(s => s.url !== agent.avatarUrl && s.url !== agent.coverUrl);
+      const galleryJson = JSON.stringify(sources.map(s => ({ url: s.url, alt: s.alt })));
+      const persistent = (settings.generationInstructions || '').trim();
+      const combinedBiz = [extraInstructions, persistent].filter(Boolean).join('\n\n');
+
+      // Always a fresh render from the template — previous code is NEVER fed
+      // here (regen or first gen alike). Only Modify sees existing source.
+      const bizTemplate = await getBizCardTemplate();
+      let bizPrompt = renderBizCardPrompt(bizTemplate, agent as any, bizCtx, enriched, galleryJson);
+      if (combinedBiz) bizPrompt = `EXTRA INSTRUCTIONS FROM USER (priority):\n${combinedBiz}\n\n${bizPrompt}`;
+      cleanTsx = await askGeminiAndValidate(bizPrompt, apiKey, model, 4, undefined, source);
+
+      const updated = await updateAgentCard(leadId, card.id, {
+        tsx: cleanTsx,
+        version: (card.version || 0) + 1,
+        generatedAt: new Date().toISOString(),
+      });
+      return NextResponse.json({ success: true, version: updated?.version || 1 });
+    }
+
+    if (isBizCard) {
+      const agent = (lead as any).agentInfo || (campaign as any).agentInfo;
+      if (!agent?.fullName || !agent?.email || !agent?.phone) {
+        return NextResponse.json({ error: 'Agent information missing. Open the card and set agent info before generating.' }, { status: 400 });
+      }
+      // Step 1: enrichment on first gen only
+      let enriched = {
+        email: (lead.business as any).enrichedEmail as string | undefined,
+        instagram: (lead.business as any).enrichedSocials?.instagram,
+        linkedin: (lead.business as any).enrichedSocials?.linkedin,
+        facebook: (lead.business as any).enrichedSocials?.facebook,
+        twitter: (lead.business as any).enrichedSocials?.twitter,
+        tiktok: (lead.business as any).enrichedSocials?.tiktok,
+        youtube: (lead.business as any).enrichedSocials?.youtube,
+      };
+      const hasEnrichedDataLegacy = !!(
+        enriched.email ||
+        enriched.instagram ||
+        enriched.linkedin ||
+        enriched.facebook ||
+        enriched.twitter ||
+        enriched.tiktok ||
+        enriched.youtube
+      );
+      const needsEnrich = !(lead.business as any).enrichmentDone && !lead.landingPage && !hasEnrichedDataLegacy;
+      if (needsEnrich) {
+        try {
+          console.log(`[bizcard] enriching ${lead.business.name}...`);
+          const enrichPrompt = buildBizCardEnrichmentPrompt({
+            name: lead.business.name,
+            address: lead.business.address,
+            website: lead.business.website,
+            googleUrl: (lead.business as any).googleUrl,
+          });
+          const raw = await retryAskGemini(enrichPrompt, apiKey, model, 4, undefined, source);
+          const parsed = parseEnrichmentJson(raw);
+          console.log(`[bizcard] enrichment result`, parsed);
+          enriched = {
+            email: parsed.email || enriched.email,
+            instagram: parsed.instagram || enriched.instagram,
+            linkedin: parsed.linkedin || enriched.linkedin,
+            facebook: parsed.facebook || enriched.facebook,
+            twitter: parsed.twitter || enriched.twitter,
+            tiktok: parsed.tiktok || enriched.tiktok,
+            youtube: parsed.youtube || enriched.youtube,
+          };
+          await updateLeadBusinessEnrichment(leadId, {
+            enrichedEmail: enriched.email,
+            enrichedSocials: {
+              instagram: enriched.instagram,
+              linkedin: enriched.linkedin,
+              facebook: enriched.facebook,
+              twitter: enriched.twitter,
+              tiktok: enriched.tiktok,
+              youtube: enriched.youtube,
+            },
+            enrichmentDone: true,
+          });
+        } catch (e) {
+          console.error('[bizcard] enrichment failed, continuing without it', e);
+          await updateLeadBusinessEnrichment(leadId, { enrichmentDone: true });
+        }
+      }
+
+      // Step 2: build biz card — images as URLs (classic proxy mode, no binary upload)
+      const bizTemplate = await getBizCardTemplate();
+      const sources = getLeadImageSources(lead).filter(s => s.url !== agent.avatarUrl && s.url !== agent.coverUrl);
+      const galleryJson = JSON.stringify(sources.map(s => ({ url: s.url, alt: s.alt })));
+      let bizPrompt = renderBizCardPrompt(bizTemplate, agent, {
+        name: lead.business.name,
+        address: lead.business.address,
+        latitude: (lead.business as any).latitude,
+        longitude: (lead.business as any).longitude,
+        placeId: (lead.business as any).placeId,
+        googleUrl: (lead.business as any).googleUrl,
+        website: lead.business.website,
+        phone: lead.business.phone,
+      }, enriched, galleryJson);
+
+      const persistent = (settings.generationInstructions || '').trim();
+      const combinedBiz = [extraInstructions, persistent].filter(Boolean).join('\n\n');
+      if (combinedBiz) bizPrompt = `EXTRA INSTRUCTIONS FROM USER (priority):\n${combinedBiz}\n\n${bizPrompt}`;
+
+      cleanTsx = await askGeminiAndValidate(bizPrompt, apiKey, model, 4, undefined, source);
+    } else {
+      // Optional enrichment for site-gen too (non-blocking — must not stop generation loop).
+      // Guard: skip when the fields already contain anything.
+      const siteHasEnriched = !!(
+        (lead.business as any).enrichedEmail ||
+        (lead.business as any).enrichedSocials?.instagram ||
+        (lead.business as any).enrichedSocials?.linkedin ||
+        (lead.business as any).enrichedSocials?.facebook ||
+        (lead.business as any).enrichedSocials?.twitter ||
+        (lead.business as any).enrichedSocials?.tiktok ||
+        (lead.business as any).enrichedSocials?.youtube
+      );
+      if (!(lead.business as any).enrichmentDone && !lead.landingPage && !siteHasEnriched) {
+        try {
+          console.log(`[site-gen] searching for business social medias and email: ${lead.business.name}...`);
+          const enrichPrompt = buildBizCardEnrichmentPrompt({
+            name: lead.business.name,
+            address: lead.business.address,
+            website: lead.business.website,
+            googleUrl: (lead.business as any).googleUrl,
+          });
+          const raw = await retryAskGemini(enrichPrompt, apiKey, model, 2, undefined, source);
+          const parsed = parseEnrichmentJson(raw);
+          const hasAny = parsed.email || parsed.instagram || parsed.linkedin || parsed.facebook || parsed.twitter || parsed.tiktok || parsed.youtube;
+          if (hasAny) {
+            await updateLeadBusinessEnrichment(leadId, {
+              enrichedEmail: parsed.email,
+              enrichedSocials: {
+                instagram: parsed.instagram,
+                linkedin: parsed.linkedin,
+                facebook: parsed.facebook,
+                twitter: parsed.twitter,
+                tiktok: parsed.tiktok,
+                youtube: parsed.youtube,
+              },
+              enrichmentDone: true,
+            });
+            console.log(`[site-gen] enrichment result`, parsed);
+          } else {
+            await updateLeadBusinessEnrichment(leadId, { enrichmentDone: true });
+          }
+        } catch (e) {
+          console.error('[site-gen] enrichment failed, continuing without it', e);
+          try { await updateLeadBusinessEnrichment(leadId, { enrichmentDone: true }); } catch {}
+        }
+      }
+      const data = buildPromptData(lead);
+      const template = settings.systemPrompt || DEFAULT_SYSTEM_PROMPT;
+      const persistent = (settings.generationInstructions || '').trim();
+      const combined = [extraInstructions, persistent].filter(Boolean).join('\n\n');
+      const finalTemplate = combined
+        ? `EXTRA INSTRUCTIONS FROM USER (these take priority over everything):\n${combined}\n\n${template}`
+        : template;
+      const prompt = renderPrompt(finalTemplate, data);
+      cleanTsx = await askGeminiAndValidate(prompt, apiKey, model, 4, undefined, source);
+    }
+
+    const landingPage = {
+      tsx: cleanTsx,
+      generatedAt: new Date().toISOString(),
+      version: 1,
+      sections: DEFAULT_SECTIONS,
+    };
+
+    await updateLeadLandingPage(leadId, landingPage);
+
+    return NextResponse.json({ success: true, version: 1 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to generate landing page';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { id, leadId } = await params;
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    if (!lead.landingPage) {
+      return NextResponse.json({ error: 'No landing page generated yet' }, { status: 404 });
+    }
+
+    return NextResponse.json(lead.landingPage);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Request failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { id, leadId } = await params;
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    const body = await request.json();
+    const existingLp = lead.landingPage;
+    const tx = body.tsx || existingLp?.tsx;
+
+    const landingPage = {
+      tsx: tx,
+      generatedAt: existingLp?.generatedAt || new Date().toISOString(),
+      version: (existingLp?.version || 0) + 1,
+      sections: body.sections || existingLp?.sections || [],
+    };
+
+    await updateLeadLandingPage(leadId, landingPage);
+
+    return NextResponse.json({ success: true, version: landingPage.version });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Request failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

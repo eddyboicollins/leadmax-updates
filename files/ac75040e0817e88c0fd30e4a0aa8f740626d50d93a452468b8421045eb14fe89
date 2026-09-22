@@ -1,8 +1,0 @@
-var R=require("../../../../../../../chunks/[turbopack]_runtime.js")("server/app/api/campaigns/[id]/leads/[leadId]/restore/route.js")
-R.c("server/chunks/[root-of-the-server]__0q5~f4t._.js")
-R.c("server/chunks/src_lib_store_ts_0bogt-u._.js")
-R.c("server/chunks/[root-of-the-server]__0op9af~._.js")
-R.c("server/chunks/node_modules_next_04~_e52._.js")
-R.c("server/chunks/0zjb_server_app_api_campaigns_[id]_leads_[leadId]_restore_route_actions_03~crv9.js")
-R.m(877306)
-module.exports=R.m(877306).exports

@@ -1,0 +1,156 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+
+export interface NominatimResult {
+  displayName: string;
+  lat: string;
+  lon: string;
+  osmId: number;
+  osmType: string;
+  type: string;
+  class: string;
+  address?: Record<string, string>;
+}
+
+interface Props {
+  value: string;
+  onChange: (value: string, selectedResult?: NominatimResult | null) => void;
+  placeholder?: string;
+  className?: string;
+  // when true, parent considers the field invalid unless a suggestion was picked
+  onValidatedChange?: (isValid: boolean) => void;
+}
+
+export default function LocationAutocomplete({ value, onChange, placeholder, className, onValidatedChange }: Props) {
+  const [open, setOpen] = useState(false);
+  const [results, setResults] = useState<NominatimResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const [hasPicked, setHasPicked] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const lastPickedValue = useRef<string>('');
+  const validatedCbRef = useRef(onValidatedChange);
+  validatedCbRef.current = onValidatedChange;
+  const lastSentValid = useRef<boolean | null>(null);
+
+  // Notify parent about validity: valid only if user picked a suggestion and hasn't edited since.
+  // Guarded: only fires when computed validity actually changes, and the callback
+  // is read via ref so an unstable inline parent handler can't cause a loop.
+  useEffect(() => {
+    if (!validatedCbRef.current) return;
+    const isValid = hasPicked && value === lastPickedValue.current && value.trim().length > 0;
+    if (lastSentValid.current !== isValid) {
+      lastSentValid.current = isValid;
+      validatedCbRef.current(isValid);
+    }
+  }, [hasPicked, value]);
+
+  // Debounced fetch
+  useEffect(() => {
+    if (value.trim().length < 2) {
+      setResults([]);
+      setOpen(false);
+      return;
+    }
+    // If the value is exactly the last picked value, don't re-search
+    if (hasPicked && value === lastPickedValue.current) {
+      setOpen(false);
+      return;
+    }
+    setHasPicked(false);
+    const q = value.trim();
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/nominatim?q=${encodeURIComponent(q)}`);
+        const data = await res.json().catch(() => ({ results: [] }));
+        const list: NominatimResult[] = Array.isArray(data.results) ? data.results : [];
+        setResults(list);
+        setOpen(list.length > 0);
+        setHighlight(0);
+      } catch {
+        setResults([]);
+        setOpen(false);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [value, hasPicked]);
+
+  // Close on outside click
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!wrapperRef.current) return;
+      if (!wrapperRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  const pick = (r: NominatimResult) => {
+    lastPickedValue.current = r.displayName;
+    setHasPicked(true);
+    setOpen(false);
+    setResults([]);
+    onChange(r.displayName, r);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open || results.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlight(h => Math.min(h + 1, results.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlight(h => Math.max(h - 1, 0));
+    } else if (e.key === 'Enter') {
+      if (results[highlight]) {
+        e.preventDefault();
+        pick(results[highlight]);
+      }
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <div className="relative">
+        <input
+          ref={inputRef}
+          value={value}
+          onChange={e => onChange(e.target.value, null)}
+          onFocus={() => { if (results.length > 0) setOpen(true); }}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          className={className ?? 'w-full px-3 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all'}
+          autoComplete="off"
+          spellCheck={false}
+        />
+        {loading && (
+          <span className="absolute right-3 top-1/2 -translate-y-1/2">
+            <svg className="animate-spin w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+          </span>
+        )}
+      </div>
+      {open && results.length > 0 && (
+        <div className="absolute z-[140] left-0 right-0 mt-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto">
+          {results.map((r, idx) => (
+            <button
+              key={`${r.osmType}-${r.osmId}-${idx}`}
+              type="button"
+              onClick={() => pick(r)}
+              className={`w-full text-left px-3 py-2.5 flex gap-2 items-start hover:bg-emerald-500/10 transition-colors ${idx === highlight ? 'bg-emerald-500/10' : ''} ${idx !== results.length - 1 ? 'border-b border-gray-100 dark:border-zinc-700/50' : ''}`}
+            >
+              <svg className="w-4 h-4 mt-0.5 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              <span className="text-xs leading-snug text-zinc-700 dark:text-zinc-200 line-clamp-2">{r.displayName}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

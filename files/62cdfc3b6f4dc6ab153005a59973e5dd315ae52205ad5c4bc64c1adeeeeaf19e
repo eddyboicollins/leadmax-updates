@@ -1,0 +1,42 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getSettings } from '@/lib/store';
+import { DEFAULT_GEMINI_MODEL, type GeminiModel, type GeminiSource } from '@/lib/gemini';
+import { checkGulfRegion } from '@/lib/gulfCheck';
+
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const locations: string[] = Array.isArray(body.locations)
+      ? body.locations
+      : typeof body.location === 'string'
+        ? [body.location]
+        : [];
+    const cleaned = locations.map(l => (typeof l === 'string' ? l.trim() : '')).filter(Boolean);
+    if (cleaned.length === 0) {
+      return NextResponse.json({ error: 'location required' }, { status: 400 });
+    }
+    if (cleaned.length > 10) {
+      return NextResponse.json({ error: 'too many locations' }, { status: 400 });
+    }
+    const settings = await getSettings();
+    const apiKey = settings.geminiApiKey || '';
+    const model = (settings.geminiModel as GeminiModel) || DEFAULT_GEMINI_MODEL;
+    const source = (settings.geminiSource as GeminiSource) || 'proxy';
+
+    const results = [];
+    for (const loc of cleaned) {
+      try {
+        const r = await checkGulfRegion(loc, apiKey, model, source);
+        results.push({ location: loc, isGulf: r.isGulf, country: r.country });
+      } catch (err: any) {
+        results.push({ location: loc, isGulf: false, country: '', error: err?.message || 'check failed' });
+      }
+    }
+    return NextResponse.json({ results });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'Gulf check failed' }, { status: 500 });
+  }
+}

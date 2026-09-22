@@ -1,0 +1,3 @@
+{
+  "/api/nominatim/route": "app/api/nominatim/route.js"
+}

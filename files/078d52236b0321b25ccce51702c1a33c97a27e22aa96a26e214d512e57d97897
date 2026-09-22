@@ -1,0 +1,83 @@
+import { NextRequest, NextResponse } from 'next/server';
+import {
+  getCampaign,
+  getLead,
+  getAgentCards,
+  addAgentCard,
+  duplicateAgentCard,
+  setMainAgentCard,
+  deleteAgentCard,
+} from '@/lib/store';
+import type { AgentInfo } from '@/lib/types';
+
+export const maxDuration = 60;
+
+/**
+ * Agent-card management (biz-card campaigns only).
+ * POST { action: 'list' } → { cards }
+ * POST { action: 'add', agentInfo } → { card, cards }
+ * POST { action: 'duplicate', cardId } → { card, cards } (copies agent data + SOURCE CODE only)
+ * POST { action: 'set-main', cardId } → { cards }
+ * POST { action: 'delete', cardId } → { cards }
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { id, leadId } = await params;
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    if ((campaign as any)?.assetType !== 'bizcard') {
+      return NextResponse.json({ error: 'Agent cards are only available for business-card campaigns' }, { status: 400 });
+    }
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    const body = await request.json().catch(() => ({}));
+    const { action, cardId, agentInfo } = body as { action: string; cardId?: string; agentInfo?: AgentInfo };
+
+    if (action === 'list') {
+      return NextResponse.json({ cards: getAgentCards(lead) });
+    }
+
+    if (action === 'add') {
+      const a = agentInfo as AgentInfo;
+      if (!a || !a.fullName || !a.email || !a.phone) {
+        return NextResponse.json({ error: 'agentInfo requires fullName, email, phone' }, { status: 400 });
+      }
+      const card = await addAgentCard(leadId, a);
+      const fresh = await getLead(leadId);
+      return NextResponse.json({ card, cards: fresh ? getAgentCards(fresh) : [] });
+    }
+
+    if (action === 'duplicate') {
+      if (!cardId) return NextResponse.json({ error: 'cardId required' }, { status: 400 });
+      const card = await duplicateAgentCard(leadId, String(cardId));
+      if (!card) return NextResponse.json({ error: 'Agent card not found' }, { status: 404 });
+      const fresh = await getLead(leadId);
+      return NextResponse.json({ card, cards: fresh ? getAgentCards(fresh) : [] });
+    }
+
+    if (action === 'set-main') {
+      if (!cardId) return NextResponse.json({ error: 'cardId required' }, { status: 400 });
+      const card = await setMainAgentCard(leadId, String(cardId));
+      if (!card) return NextResponse.json({ error: 'Agent card not found' }, { status: 404 });
+      const fresh = await getLead(leadId);
+      return NextResponse.json({ card, cards: fresh ? getAgentCards(fresh) : [] });
+    }
+
+    if (action === 'delete') {
+      if (!cardId) return NextResponse.json({ error: 'cardId required' }, { status: 400 });
+      const ok = await deleteAgentCard(leadId, String(cardId));
+      if (!ok) return NextResponse.json({ error: 'Agent card not found' }, { status: 404 });
+      const fresh = await getLead(leadId);
+      return NextResponse.json({ cards: fresh ? getAgentCards(fresh) : [] });
+    }
+
+    return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Agent card action failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

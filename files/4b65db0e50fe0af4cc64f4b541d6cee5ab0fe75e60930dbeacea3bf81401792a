@@ -1,0 +1,167 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaigns, saveCampaign, saveManualCampaign, addLeads, deleteCampaign, getSettings } from '@/lib/store';
+import { resolveManualBusiness } from '@/lib/manualResolve';
+import { v4 as uuidv4 } from 'uuid';
+import { DEFAULT_GEMINI_MODEL, type GeminiModel, type GeminiSource } from '@/lib/gemini';
+import { FORCED_BIZCARD_KEYWORD, checkGulfRegion } from '@/lib/gulfCheck';
+import type { AgentInfo, CampaignAssetType } from '@/lib/types';
+
+function normalizeAssetType(v: unknown): CampaignAssetType {
+  return v === 'bizcard' ? 'bizcard' : 'landing';
+}
+
+function normalizeAgentInfo(v: unknown): AgentInfo | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const o = v as Record<string, unknown>;
+  const fullName = typeof o.fullName === 'string' ? o.fullName.trim() : '';
+  const title = typeof o.title === 'string' ? o.title.trim() : '';
+  const phone = typeof o.phone === 'string' ? o.phone.trim() : '';
+  const email = typeof o.email === 'string' ? o.email.trim() : '';
+  const agency = typeof o.agency === 'string' ? o.agency.trim() : '';
+  if (!fullName || !phone || !email) return undefined;
+  const str = (k: string) => typeof o[k] === 'string' ? (o[k] as string).trim() : undefined;
+  return {
+    fullName,
+    title: title || fullName,
+    agency: agency || '',
+    phone,
+    email,
+    fullNameAr: str('fullNameAr'),
+    titleAr: str('titleAr'),
+    agencyAr: str('agencyAr'),
+    tagline: str('tagline'),
+    taglineAr: str('taglineAr'),
+    whatsapp: str('whatsapp'),
+    website: str('website'),
+    avatarUrl: str('avatarUrl'),
+    coverUrl: str('coverUrl'),
+    officeAddress: str('officeAddress'),
+    officeAddressAr: str('officeAddressAr'),
+    aboutText: str('aboutText'),
+    aboutTextAr: str('aboutTextAr'),
+    languages: str('languages'),
+    regulatedText: str('regulatedText'),
+    whatsappMessage: str('whatsappMessage'),
+    smsBody: str('smsBody'),
+  };
+}
+
+export const maxDuration = 300;
+
+export async function GET(request: NextRequest) {
+  const deletedParam = request.nextUrl.searchParams.get('deleted');
+  const campaigns = await getCampaigns();
+  if (deletedParam === 'all') {
+    return NextResponse.json({ campaigns });
+  }
+  if (deletedParam === 'true') {
+    return NextResponse.json({ campaigns: campaigns.filter(c => c.deleted) });
+  }
+  return NextResponse.json({ campaigns: campaigns.filter(c => !c.deleted) });
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { keyword, location, regions, mode, displayName, entries, assetType, agentInfo } = body;
+    const normAssetType = normalizeAssetType(assetType);
+    const normAgent = normalizeAgentInfo(agentInfo) ?? (agentInfo ? undefined : undefined);
+    // allow raw agentInfo even if partial (for update) — store as provided if it has at least fullName
+    const finalAgent = normAgent || (agentInfo && typeof agentInfo === 'object' ? agentInfo as AgentInfo : undefined);
+
+    // Manual mode: user's own clients. The proxy visits each Maps link and
+    // extracts full business data — no scraping involved.
+    // Not allowed for business-card campaigns.
+    if (mode === 'manual') {
+      if (normAssetType === 'bizcard') {
+        return NextResponse.json({ error: 'Own-clients mode is not available for business card campaigns' }, { status: 400 });
+      }
+      const name = typeof displayName === 'string' ? displayName.trim() : '';
+      const list = Array.isArray(entries)
+        ? entries
+            .filter((e: any) => e && typeof e.name === 'string' && e.name.trim() && typeof e.mapsUrl === 'string' && e.mapsUrl.trim())
+            .map((e: any) => ({ name: e.name.trim(), mapsUrl: e.mapsUrl.trim() }))
+        : [];
+      if (!name) {
+        return NextResponse.json({ error: 'campaign name required' }, { status: 400 });
+      }
+      if (list.length === 0) {
+        return NextResponse.json({ error: 'at least one business with a Maps link required' }, { status: 400 });
+      }
+      const settings = await getSettings();
+      const apiKey = settings.geminiApiKey || '';
+      const model = (settings.geminiModel as GeminiModel) || DEFAULT_GEMINI_MODEL;
+      const source = (settings.geminiSource as GeminiSource) || 'proxy';
+      const campaign = await saveManualCampaign(name, { assetType: normAssetType, agentInfo: finalAgent });
+      const results: { name: string; ok: boolean; error?: string }[] = [];
+      for (const entry of list) {
+        try {
+          const business = await resolveManualBusiness(entry.name, entry.mapsUrl, apiKey, model, source);
+          await addLeads(campaign.id, [{ leadId: uuidv4(), business }]);
+          results.push({ name: entry.name, ok: true });
+        } catch (err: any) {
+          results.push({ name: entry.name, ok: false, error: err?.message || 'Resolve failed' });
+        }
+      }
+      return NextResponse.json({ ...campaign, resolveResults: results });
+    }
+
+    if (!keyword || !location) {
+      return NextResponse.json({ error: 'keyword and location required' }, { status: 400 });
+    }
+    let regionList = regions;
+    if (Array.isArray(regionList)) {
+      regionList = regionList.filter(
+        (r: any) => r && typeof r.keyword === 'string' && r.keyword && typeof r.location === 'string' && r.location
+      );
+      regionList = regionList.map((r: any) => ({
+        keyword: r.keyword,
+        location: r.location,
+      }));
+    }
+    // Business-card campaigns: forced query + Gulf-region only (AI verified, whatever AI source)
+    if (normAssetType === 'bizcard') {
+      const forced = FORCED_BIZCARD_KEYWORD.toLowerCase();
+      if (String(keyword).trim().toLowerCase() !== forced) {
+        return NextResponse.json({ error: `Business card campaigns must use query "${FORCED_BIZCARD_KEYWORD}"` }, { status: 400 });
+      }
+      const badRegion = (Array.isArray(regionList) ? regionList : []).find(
+        (r: any) => String(r.keyword || '').trim().toLowerCase() !== forced,
+      );
+      if (badRegion) {
+        return NextResponse.json({ error: `Business card campaigns must use query "${FORCED_BIZCARD_KEYWORD}"` }, { status: 400 });
+      }
+      const settings = await getSettings();
+      const apiKey = settings.geminiApiKey || '';
+      const model = (settings.geminiModel as GeminiModel) || DEFAULT_GEMINI_MODEL;
+      const source = (settings.geminiSource as GeminiSource) || 'proxy';
+      const locsToCheck: string[] = Array.isArray(regionList) && regionList.length > 0
+        ? regionList.map((r: any) => String(r.location || '').trim()).filter(Boolean)
+        : [String(location || '').trim()];
+      for (const loc of [...new Set(locsToCheck)]) {
+        let res;
+        try {
+          res = await checkGulfRegion(loc, apiKey, model, source);
+        } catch (err: any) {
+          return NextResponse.json({ error: `Could not verify Gulf region for "${loc}": ${err?.message || 'AI check failed'}` }, { status: 400 });
+        }
+        if (!res.isGulf) {
+          return NextResponse.json({ error: `Business card campaigns are Gulf-region only — "${loc}" is not in the Gulf (${res.country || 'unknown country'})` }, { status: 400 });
+        }
+      }
+    }
+    const campaign = await saveCampaign(keyword, location, Array.isArray(regionList) && regionList.length > 0 ? regionList : undefined, { assetType: normAssetType, agentInfo: finalAgent });
+    return NextResponse.json(campaign);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const id = request.nextUrl.searchParams.get('id');
+  if (!id) {
+    return NextResponse.json({ error: 'id required' }, { status: 400 });
+  }
+  await deleteCampaign(id);
+  return NextResponse.json({ success: true });
+}

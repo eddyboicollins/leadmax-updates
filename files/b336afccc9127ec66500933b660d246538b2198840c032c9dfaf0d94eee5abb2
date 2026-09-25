@@ -1,0 +1,118 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaign, getLead, getSettings, updateLeadBusinessEnrichment } from '@/lib/store';
+import { runEnrichment } from '@/lib/prompts';
+import { DEFAULT_GEMINI_MODEL, type GeminiModel, type GeminiSource } from '@/lib/gemini';
+
+export const maxDuration = 120;
+
+/**
+ * Live web search for a lead's contact email + socials. Runs independently of
+ * landing-page generation so findings can be surfaced on the lead card
+ * immediately, then reused by generation / regenerate / modify.
+ */
+export async function POST(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { id, leadId } = await params;
+
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    const b = lead.business as any;
+    const existing = {
+      email: b?.enrichedEmail as string | undefined,
+      instagram: b?.enrichedSocials?.instagram,
+      linkedin: b?.enrichedSocials?.linkedin,
+      facebook: b?.enrichedSocials?.facebook,
+      twitter: b?.enrichedSocials?.twitter,
+      tiktok: b?.enrichedSocials?.tiktok,
+      youtube: b?.enrichedSocials?.youtube,
+    };
+    const hasData = !!(
+      existing.email ||
+      existing.instagram ||
+      existing.linkedin ||
+      existing.facebook ||
+      existing.twitter ||
+      existing.tiktok ||
+      existing.youtube
+    );
+
+    // Already searched (or data present): return what we have, no new search.
+    if (b?.enrichmentDone || hasData) {
+      return NextResponse.json({ success: true, enriched: existing, alreadyDone: true });
+    }
+
+    const settings = await getSettings();
+    const apiKey = settings.geminiApiKey || '';
+    const model = (settings.geminiModel as GeminiModel) || DEFAULT_GEMINI_MODEL;
+    const source = (settings.geminiSource as GeminiSource) || 'proxy';
+
+    let enriched: typeof existing = existing;
+    try {
+      const parsed = await runEnrichment(
+        {
+          name: lead.business.name,
+          address: lead.business.address,
+          website: lead.business.website,
+          googleUrl: b?.googleUrl,
+        },
+        apiKey,
+        model,
+        source,
+        2,
+      );
+      enriched = {
+        email: parsed.email || existing.email,
+        instagram: parsed.instagram || existing.instagram,
+        linkedin: parsed.linkedin || existing.linkedin,
+        facebook: parsed.facebook || existing.facebook,
+        twitter: parsed.twitter || existing.twitter,
+        tiktok: parsed.tiktok || existing.tiktok,
+        youtube: parsed.youtube || existing.youtube,
+      };
+      const foundAny = !!(
+        enriched.email ||
+        enriched.instagram ||
+        enriched.linkedin ||
+        enriched.facebook ||
+        enriched.twitter ||
+        enriched.tiktok ||
+        enriched.youtube
+      );
+      // Only mark the lead as searched when the search actually returned something.
+      // Persisting enrichmentDone on failure/empty permanently blocks future attempts.
+      if (!foundAny) {
+        return NextResponse.json({ success: false, enriched, error: 'No contacts found' });
+      }
+      await updateLeadBusinessEnrichment(leadId, {
+        enrichedEmail: enriched.email,
+        enrichedSocials: {
+          instagram: enriched.instagram,
+          linkedin: enriched.linkedin,
+          facebook: enriched.facebook,
+          twitter: enriched.twitter,
+          tiktok: enriched.tiktok,
+          youtube: enriched.youtube,
+        },
+        enrichmentDone: true,
+      });
+    } catch (e) {
+      // Best-effort: never poison enrichmentDone on failure, so the next
+      // generate (and the generation fallback below) retries the search.
+      console.error('[enrich] search failed', e);
+      const message = e instanceof Error ? e.message : 'Enrichment failed';
+      return NextResponse.json({ success: false, enriched, error: message }, { status: 502 });
+    }
+
+    return NextResponse.json({ success: true, enriched });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Enrichment failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

@@ -1,0 +1,47 @@
+// fakepass_test.js
+const URL = "https://maparatunisie.tn/wp-login.php";
+
+const HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Content-Type": "application/x-www-form-urlencoded"
+};
+
+async function testFakeLogin() {
+    console.log("[*] Sending a login request with a fake password...");
+
+    const params = new URLSearchParams();
+    params.append("log", "chamsboussama"); // Your real username
+    params.append("pwd", "this_is_a_fake_password_123!"); // Fake password
+    params.append("wp-submit", "Se connecter");
+    params.append("testcookie", "1");
+
+    const startTime = Date.now();
+
+    try {
+        const response = await fetch(URL, {
+            method: "POST",
+            headers: HEADERS,
+            body: params.toString(),
+            redirect: "manual" // Prevents automatic redirects
+        });
+
+        const elapsed = (Date.now() - startTime) / 1000;
+        const responseText = await response.text();
+        
+        console.log(`    -> Status Code: ${response.status}`);
+        console.log(`    -> Time taken: ${elapsed.toFixed(2)} seconds`);
+        
+        // Check if WordPress returned the standard error message
+        if (responseText.includes("Erreur") || responseText.includes("incorrect")) {
+            console.log("    -> Result: Login FAILED as expected. Server returned the standard error page.");
+        } else {
+            console.log("    -> Result: Unexpected response. Something else happened.");
+            console.log("    -> Response preview: ", responseText.substring(0, 200));
+        }
+
+    } catch (error) {
+        console.log(`    -> Request failed: ${error.message}`);
+    }
+}
+
+testFakeLogin();

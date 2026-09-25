@@ -1,0 +1,1320 @@
+
+============================================================
+Campaign: restaurant - Bali, Indonesia - Lead: Asri Dining by Samanvaya (Restaurant) - Lead ID: 31721f7a-274c-4246-9485-4078e0435244 - Type: landing - Modify | Attempt 1
+============================================================
+The truncated code:
+
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+
+export default function Component() {
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("all");
+  const [openFaq, setOpenFaq] = useState(null);
+  const [toastMessage, setToastMessage] = useState("");
+
+  // Handle Navbar Background on Scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 50) {
+        setIsScrolled(true);
+      } else {
+        setIsScrolled(false);
+      }
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Smooth Scroll Anchor Navigation
+  const scrollTo = useCallback((id) => {
+    setMobileMenuOpen(false);
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
+
+  // Contact Form Mailto Handler
+  const handleContactSubmit = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    
+    const name = formData.get("name") || "";'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+
+export default function Component() {
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("all");
+  const [openFaq, setOpenFaq] = useState(null);
+  const [toastMessage, setToastMessage] = useState("");
+
+  // Handle Navbar Background on Scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 50) {
+        setIsScrolled(true);
+      } else {
+        setIsScrolled(false);
+      }
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Smooth Scroll Anchor Navigation
+  const scrollTo = useCallback((id) => {
+    setMobileMenuOpen(false);
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
+
+  // Contact Form Mailto Handler
+  const handleContactSubmit = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    
+    const name = formData.get("name") || "";
+    const email = formData.get("email") || "";
+    const phone = formData.get("phone") || "";
+    const date = formData.get("date") || "";
+    const guests = formData.get("guests") || "";
+    const message = formData.get("message") || "";
+
+    const lines = [
+      "Name: " + name,
+      "Email: " + email,
+      "Phone: " + phone,
+      "Preferred Date/Time: " + date,
+      "Number of Guests: " + guests,
+      "Special Requests / Message: " + message
+    ];
+
+    const body = lines.join("\n") + "\n\n— Sent from the Asri Dining by Samanvaya website contact form";
+    const subject = name ? "New Dining Reservation / Inquiry from " + name : "New Inquiry — Asri Dining by Samanvaya";
+    
+    window.location.href = "mailto:samanvaya@samanvaya-bali.com?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+    setToastMessage("Opening your email client to send the reservation request...");
+    setTimeout(() => setToastMessage(""), 5000);
+  };
+
+  const menuItems = [
+    {
+      id: "m1",
+      category: "mains",
+      title: "Slow-Cooked Balinese Duck Breast",
+      price: "IDR 240K",
+      desc: "Pan-roasted local duck breast, heritage black rice cake, smoked coconut lawar, and rich aromatic kaffir lime jus.",
+      highlight: "Chef's Signature"
+    },
+    {
+      id: "m2",
+      category: "mains",
+      title: "Sidemen Valley Barramundi",
+      price: "IDR 220K",
+      desc: "Wild-caught barramundi with crisp skin, lemon basil dabu-dabu salsa, charred baby bok choy, and turmeric coconut foam.",
+      highlight: "Locally Sourced"
+    },
+    {
+      id: "m3",
+      category: "starters",
+      title: "Smoked Plant-Based Rendang Croquettes",
+      price: "IDR 135K",
+      desc: "Crispy heirloom potato croquettes filled with rich jackfruit rendang, served with fermented chili emulsion.",
+      highlight: "Vegan Specialty"
+    },
+    {
+      id: "m4",
+      category: "mains",
+      title: "Wagyu Beef Ribeye Sambal Hijau",
+      price: "IDR 380K",
+      desc: "200g Grade 7+ Australian Wagyu, charred green chili sambal, cassava leaf purée, and garlic-infused bone marrow jus.",
+      highlight: "Premium Cut"
+    },
+    {
+      id: "m5",
+      category: "drinks",
+      title: "Telaga Tawang Botanical Elixir",
+      price: "IDR 95K",
+      desc: "Artisanal gin infused with torch ginger, fresh lime juice, muddled wild lemongrass, and homemade kaffir syrup.",
+      highlight: "Craft Cocktail"
+    },
+    {
+      id: "m6",
+      category: "desserts",
+      title: "Organic Bamboo Charcoal Coconut Tart",
+      price: "IDR 110K",
+      desc: "Handcrafted charcoal crust, young coconut curd, mango-passionfruit reduction, and house-made palm sugar gelato.",
+      highlight: "Organic"
+    }
+  ];
+
+  const filteredMenuItems = activeTab === "all" ? menuItems : menuItems.filter(item => item.category === activeTab);
+
+  const reviews = [
+    {
+      name: "Marcus Vance",
+      location: "Melbourne, Australia",
+      rating: 5,
+      date: "August 2026",
+      text: "An absolute must-visit in Sidemen! We had dinner here today and were truly impressed from start to finish. The atmosphere is beautiful – stylish, cozy, and incredibly welcoming, making you feel comfortable right away. The flavors in every dish were distinct and remarkably balanced."
+    },
+    {
+      name: "Evelyn Thorne",
+      location: "London, UK",
+      rating: 5,
+      date: "September 2026",
+      text: "It has the best food quality among the restaurants in the area. There are hardly any local spices spared in crafting genuine depth. And you can really taste high-quality food on every dish you order. The bamboo architecture overlooking the valley takes it to another level."
+    },
+    {
+      name: "Sophie & Pierre Laurent",
+      location: "Paris, France",
+      rating: 5,
+      date: "July 2026",
+      text: "We had a lovely experience at Asri Dining by Samanvaya in Sidemen. The setting is absolutely beautiful, surrounded by lush greenery, it feels peaceful and intimate. The service was discrete yet warm, true Balinese hospitality at its finest."
+    }
+  ];
+
+  const faqs = [
+    {
+      q: "What is the dress code for dining at Asri Dining?",
+      a: "We embrace a 'Smart Resort Casual' dress code. We kindly ask our guests to refrain from wearing swimwear or sleeveless shirts for gentlemen during dinner service to preserve our refined, tranquil ambiance."
+    },
+    {
+      q: "Do you cater to vegetarian, vegan, or gluten-free dietary requirements?",
+      a: "Absolutely. Our culinary philosophy celebrates botanical richness. Over 40% of our menu consists of thoughtfully crafted plant-based and gluten-free creations, utilizing organic herbs from our private garden."
+    },
+    {
+      q: "Are reservations mandatory for non-resort guests?",
+      a: "While we welcome walk-ins based on availability, we highly recommend reserving at least 24 to 48 hours in advance due to limited intimate table settings overlooking the rice terraces."
+    },
+    {
+      q: "Is Asri Dining suitable for romantic private celebrations?",
+      a: "Yes. We offer customized romantic candlelit dining experiences, bespoke tasting menus, and florist arrangements upon request for anniversaries, proposals, and special milestones."
+    }
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#111612] text-[#E8EAE3] font-['Outfit'] selection:bg-[#C2A366] selection:text-[#111612] antialiased">
+      {/* Editorial Luxury Typography Pairings */}
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800&family=Outfit:wght@200;300;400;500;600;700&family=Prata&display=swap" />
+
+      {/* Floating Notification Toast */}
+      {toastMessage && (
+        <div className="fixed bottom-24 right-6 z-50 bg-[#C2A366] text-[#111612] px-6 py-3.5 rounded-2xl shadow-2xl font-medium text-sm flex items-center space-x-3 transition-all duration-300">
+          <i className="fas fa-info-circle text-base"></i>
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* NAVBAR */}
+      <nav className={`sticky top-0 z-50 transition-all duration-500 ${isScrolled ? "bg-[#111612]/92 backdrop-blur-lg border-b border-[#2A342B]/60 py-4 shadow-2xl" : "bg-transparent py-7"}`}>
+        <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between">
+          
+          {/* Logo */}
+          <button onClick={() => scrollTo("hero")} className="text-left group focus:outline-none">
+            <span className="block font-['Cinzel'] text-2xl md:text-3xl font-normal tracking-[0.25em] text-[#E8EAE3] group-hover:text-[#C2A366] transition-colors">
+              ASRI DINING
+            </span>
+            <span className="block text-[9px] uppercase tracking-[0.4em] text-[#C2A366] mt-0.5 font-semibold">
+              BY SAMANVAYA • SIDEMEN
+            </span>
+          </button>
+
+          {/* Desktop Nav Links */}
+          <div className="hidden lg:flex items-center space-x-10 text-[11px] uppercase tracking-[0.28em] font-medium text-[#A2ADA3]">
+            <button onClick={() => scrollTo("about")} className="hover:text-[#C2A366] transition-colors focus:outline-none">Story</button>
+            <button onClick={() => scrollTo("gallery")} className="hover:text-[#C2A366] transition-colors focus:outline-none">Ambiance</button>
+            <button onClick={() => scrollTo("philosophy")} className="hover:text-[#C2A366] transition-colors focus:outline-none">Culinary</button>
+            <button onClick={() => scrollTo("menu")} className="hover:text-[#C2A366] transition-colors focus:outline-none">Menu</button>
+            <button onClick={() => scrollTo("reviews")} className="hover:text-[#C2A366] transition-colors focus:outline-none">Reviews</button>
+            <button onClick={() => scrollTo("faq")} className="hover:text-[#C2A366] transition-colors focus:outline-none">FAQ</button>
+            <button onClick={() => scrollTo("contact")} className="hover:text-[#C2A366] transition-colors focus:outline-none">Contact</button>
+          </div>
+
+          {/* Reserve CTA Button */}
+          <div className="hidden lg:flex items-center space-x-4">
+            <button 
+              onClick={() => scrollTo("contact")}
+              className="px-7 py-2.5 rounded-full border border-[#C2A366] text-[#C2A366] hover:bg-[#C2A366] hover:text-[#111612] transition-all duration-300 text-[11px] font-semibold uppercase tracking-[0.2em] shadow-lg hover:shadow-[#C2A366]/20"
+            >
+              Reserve Table
+            </button>
+          </div>
+
+          {/* Mobile Hamburger Button */}
+          <button 
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)} 
+            className="lg:hidden text-[#E8EAE3] hover:text-[#C2A366] focus:outline-none text-2xl p-2"
+            aria-label="Toggle Navigation Menu"
+          >
+            <i className={`fas ${mobileMenuOpen ? "fa-times" : "fa-bars"}`}></i>
+          </button>
+        </div>
+      </nav>
+
+      {/* MOBILE MENU SIBLING OVERLAY */}
+      {mobileMenuOpen && (
+        <>
+          <div 
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] lg:hidden transition-opacity" 
+            onClick={() => setMobileMenuOpen(false)} 
+          />
+          <div className="fixed top-0 right-0 bottom-0 w-[min(100%,22rem)] z-[70] bg-[#161C17] border-l border-[#2A342B] lg:hidden shadow-2xl p-8 flex flex-col justify-between overflow-y-auto">
+            <div>
+              <div className="flex items-center justify-between pb-8 border-b border-[#2A342B]">
+                <span className="font-['Cinzel'] text-xl tracking-[0.25em] text-[#E8EAE3]">
+                  ASRI DINING
+                </span>
+                <button 
+                  onClick={() => setMobileMenuOpen(false)} 
+                  className="text-[#A2ADA3] hover:text-[#C2A366] text-xl"
+                >
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+
+              <div className="flex flex-col space-y-6 pt-8 text-xs uppercase tracking-[0.25em] text-[#A2ADA3] font-medium">
+                <button onClick={() => scrollTo("about")} className="text-left hover:text-[#C2A366] transition-colors">Our Story</button>
+                <button onClick={() => scrollTo("gallery")} className="text-left hover:text-[#C2A366] transition-colors">Ambiance</button>
+                <button onClick={() => scrollTo("philosophy")} className="text-left hover:text-[#C2A366] transition-colors">Philosophy</button>
+                <button onClick={() => scrollTo("menu")} className="text-left hover:text-[#C2A366] transition-colors">Curated Menu</button>
+                <button onClick={() => scrollTo("reviews")} className="text-left hover:text-[#C2A366] transition-colors">Guest Experiences</button>
+                <button onClick={() => scrollTo("faq")} className="text-left hover:text-[#C2A366] transition-colors">Frequently Asked</button>
+                <button onClick={() => scrollTo("contact")} className="text-left hover:text-[#C2A366] transition-colors">Reservations</button>
+              </div>
+            </div>
+
+            <div className="pt-8 border-t border-[#2A342B] space-y-4">
+              <button 
+                onClick={() => scrollTo("contact")}
+                className="w-full py-3.5 rounded-2xl bg-[#C2A366] text-[#111612] text-xs font-semibold uppercase tracking-[0.2em] shadow-lg text-center block"
+              >
+                Book a Table
+              </button>
+              <div className="text-center text-xs text-[#A2ADA3] flex justify-center space-x-6 pt-2">
+                <a href="https://instagram.com/asri.dining" target="_blank" rel="noopener noreferrer" className="hover:text-[#C2A366]"><i className="fab fa-instagram text-lg"></i></a>
+                <a href="https://facebook.com/100066844657072" target="_blank" rel="noopener noreferrer" className="hover:text-[#C2A366]"><i className="fab fa-facebook text-lg"></i></a>
+                <a href="tel:+6285606635597" className="hover:text-[#C2A366]"><i className="fas fa-phone text-lg"></i></a>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* FLOATING WHATSAPP CTA */}
+      <a 
+        href="https://wa.me/6285606635597" 
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Contact us via WhatsApp" 
+        className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-[#C2A366] text-[#111612] rounded-full flex items-center justify-center shadow-2xl hover:scale-110 hover:bg-[#D4B578] transition-all duration-300"
+      >
+        <i className="fab fa-whatsapp text-2xl"></i>
+      </a>
+
+      {/* HERO SECTION */}
+      <section id="hero" className="relative min-h-[100dvh] w-full flex items-center justify-center py-16 overflow-hidden">
+        {/* Background Visual Layer with 3:4/9:16 portrait orientation image on mobile for 100% full cover, landscape wide on desktop */}
+        <div className="absolute inset-0 w-full h-full z-0 overflow-hidden">
+          {/* Mobile Image (3:4 aspect ratio portrait view) */}
+          <img 
+            src="https://fxdymkgwxrudbm27.public.blob.vercel-storage.com/uploads/82231f0b-360c-4538-97c6-5d7352d93032/1790327910242-image-ocBisj0BIZpMDRNpCOrdXtFoNSNjmz.webp" 
+            alt="Asri Dining Mobile Valley View" 
+            className="block md:hidden w-full h-full object-cover object-center filter brightness-[0.65]"
+          />
+          {/* Desktop Image (Untouched original wide aspect image) */}
+          <img 
+            src="https://fxdymkgwxrudbm27.public.blob.vercel-storage.com/uploads/82231f0b-360c-4538-97c6-5d7352d93032/1790327910769-image-MWo1saNjLDgWpW1n2z0U9rlwKH3F3a.webp" 
+            alt="Asri Dining Valley View" 
+            className="hidden md:block w-full h-full object-cover object-center filter brightness-[0.7]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#111612] via-[#111612]/75 to-[#111612]/50 z-10" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-[#111612]/60 to-[#111612] z-10" />
+          
+          {/* Subtle Ambient Decorative Blobs */}
+          <div className="absolute -top-40 -left-40 w-96 h-96 bg-[#C2A366]/15 rounded-full blur-[120px] pointer-events-none z-10" />
+          <div className="absolute top-1/2 -right-40 w-96 h-96 bg-[#2A342B]/40 rounded-full blur-[100px] pointer-events-none z-10" />
+        </div>
+
+        <div className="relative z-20 max-w-5xl mx-auto px-6 text-center space-y-8 my-auto">
+          
+          {/* Location Badge */}
+          <div className="inline-flex items-center space-x-3 px-5 py-2 rounded-full bg-[#161C17]/80 border border-[#C2A366]/30 backdrop-blur-md shadow-2xl">
+            <span className="w-2 h-2 rounded-full bg-[#C2A366] animate-ping" />
+            <span className="text-[11px] uppercase tracking-[0.3em] text-[#C2A366] font-semibold">
+              Sidemen Valley • Bali
+            </span>
+          </div>
+
+          {/* Hero Main Headline */}
+          <h1 className="font-['Prata'] text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-normal tracking-normal text-[#E8EAE3] leading-[1.1] max-w-4xl mx-auto">
+            Sensory Fine Dining directly in the <span className="italic font-light text-[#C2A366]">Heart of Sidemen</span>
+          </h1>
+
+          {/* Subtitle */}
+          <p className="max-w-2xl mx-auto text-base md:text-lg text-[#A2ADA3] font-light leading-relaxed tracking-wide">
+            Where local Balinese botanical tradition meets contemporary culinary mastery. Immerse yourself in panoramic emerald valley views and unmatched architectural tranquility.
+          </p>
+
+          {/* CTAs & Rating */}
+          <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-5">
+            <button 
+              onClick={() => scrollTo("contact")}
+              className="w-full sm:w-auto px-9 py-4 rounded-full bg-[#C2A366] text-[#111612] font-semibold text-xs uppercase tracking-[0.25em] hover:bg-[#D4B578] transition-all duration-300 shadow-xl shadow-[#C2A366]/15 hover:scale-105"
+            >
+              Reserve Your Table
+            </button>
+
+            <button 
+              onClick={() => scrollTo("menu")}
+              className="w-full sm:w-auto px-9 py-4 rounded-full border border-[#2A342B] bg-[#161C17]/60 text-[#E8EAE3] font-semibold text-xs uppercase tracking-[0.25em] hover:border-[#C2A366] hover:text-[#C2A366] transition-all duration-300 backdrop-blur-sm"
+            >
+              Explore Menu
+            </button>
+          </div>
+
+          {/* Trust Rating Strip */}
+          <div className="pt-10 flex flex-wrap items-center justify-center gap-8 border-t border-[#2A342B]/50 max-w-xl mx-auto text-left">
+            <div className="flex items-center space-x-3">
+              <div className="text-3xl font-['Prata'] text-[#E8EAE3]">4.9</div>
+              <div>
+                <div className="flex text-[#C2A366] text-xs">
+                  <i className="fas fa-star"></i>
+                  <i className="fas fa-star"></i>
+                  <i className="fas fa-star"></i>
+                  <i className="fas fa-star"></i>
+                  <i className="fas fa-star"></i>
+                </div>
+                <div className="text-[10px] uppercase tracking-widest text-[#A2ADA3] mt-0.5 font-medium">3,778 Verified Reviews</div>
+              </div>
+            </div>
+
+            <div className="h-8 w-px bg-[#2A342B] hidden sm:block" />
+
+            <div className="flex items-center space-x-3">
+              <i className="fas fa-award text-2xl text-[#C2A366]"></i>
+              <div className="text-[11px] text-[#A2ADA3] uppercase tracking-widest leading-tight font-medium">
+                Rated #1 Fine Dining <br /><span className="text-[#E8EAE3]">In Sidemen, Karangasem</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* BRAND STORY & PHILOSOPHY SECTION */}
+      <section id="about" className="py-24 bg-[#161C17] border-y border-[#2A342B]/40 relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+          
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+            
+            {/* Story Content Left */}
+            <div className="lg:col-span-7 space-y-6">
+              <div className="inline-flex items-center space-x-2 text-xs uppercase tracking-[0.3em] text-[#C2A366] font-semibold">
+                <span className="w-8 h-px bg-[#C2A366]" />
+                <span>The Sanctuary</span>
+              </div>
+
+              <h2 className="font-['Prata'] text-3xl sm:text-4xl md:text-5xl font-normal leading-tight text-[#E8EAE3]">
+                An Unhurried Epicurean Sanctuary <br />
+                <span className="italic text-[#C2A366]">Surrounded by Emerald Terraces</span>
+              </h2>
+
+              <p className="text-[#A2ADA3] leading-relaxed font-light text-base md:text-lg">
+                Nestled within the unspoiled valley of Banjar Tabola, Asri Dining by Samanvaya represents an homage to the soul of East Bali. Designed with soaring sustainable bamboo architecture, our open-air venue gazes directly over ancient rice fields and tropical forests.
+              </p>
+
+              <p className="text-[#A2ADA3] leading-relaxed font-light text-base">
+                Every dish tells a narrative of local heritage—elevating indigenous Indonesian botanicals and Balinese spices with contemporary Western culinary precision. We source our produce daily from local Sidemen farmers and our private organic garden, ensuring uncompromised fresh brilliance in every bite.
+              </p>
+
+              <div className="pt-4 grid grid-cols-2 md:grid-cols-3 gap-6 text-left">
+                <div className="p-5 rounded-2xl bg-[#111612] border border-[#2A342B]">
+                  <div className="text-3xl font-['Prata'] text-[#C2A366]">100%</div>
+                  <div className="text-[11px] uppercase tracking-wider text-[#A2ADA3] mt-1 font-medium">Organic Sourced</div>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-[#111612] border border-[#2A342B]">
+                  <div className="text-3xl font-['Prata'] text-[#C2A366]">360°</div>
+                  <div className="text-[11px] uppercase tracking-wider text-[#A2ADA3] mt-1 font-medium">Valley Vistas</div>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-[#111612] border border-[#2A342B] col-span-2 md:col-span-1">
+                  <div className="text-3xl font-['Prata'] text-[#C2A366]">Zero</div>
+                  <div className="text-[11px] uppercase tracking-wider text-[#A2ADA3] mt-1 font-medium">Single-Use Plastics</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Visual Media Right */}
+            <div className="lg:col-span-5 space-y-6">
+              <div className="relative rounded-3xl overflow-hidden border border-[#2A342B] shadow-2xl group">
+                <img 
+                  src="https://fxdymkgwxrudbm27.public.blob.vercel-storage.com/uploads/82231f0b-360c-4538-97c6-5d7352d93032/1790327910242-image-ocBisj0BIZpMDRNpCOrdXtFoNSNjmz.webp" 
+                  alt="Asri Dining Bamboo Architecture and Terrace View" 
+                  className="w-full h-[420px] object-cover group-hover:scale-105 transition-transform duration-700"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#111612] via-transparent to-transparent opacity-80" />
+                <div className="absolute bottom-6 left-6 right-6 p-6 rounded-2xl bg-[#111612]/90 border border-[#2A342B] backdrop-blur-md">
+                  <p className="font-['Prata'] text-base text-[#E8EAE3] italic font-normal">
+                    "A dining experience that transcends simple food—it's genuine peace."
+                  </p>
+                  <p className="text-[10px] text-[#C2A366] uppercase tracking-widest mt-2 font-semibold">
+                    — Food & Travel Indochine Review
+                  </p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+      {/* PHOTO GALLERY / AMBIANCE SHOWCASE SECTION */}
+      <section id="gallery" className="py-24 bg-[#111612] relative overflow-hidden border-b border-[#2A342B]/40">
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+          
+          <div className="text-center max-w-2xl mx-auto space-y-4 mb-16">
+            <div className="inline-flex items-center space-x-2 text-xs uppercase tracking-[0.3em] text-[#C2A366] font-semibold">
+              <span>The Setting</span>
+            </div>
+            <h2 className="font-['Prata'] text-3xl sm:text-4xl md:text-5xl font-normal text-[#E8EAE3]">
+              Immersed in Sidemen's Natural Beauty
+            </h2>
+            <p className="text-[#A2ADA3] text-sm md:text-base font-light">
+              Explore the open-air bamboo structure, intimate seating corners, and natural botanical ambiance.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="rounded-3xl overflow-hidden border border-[#2A342B] bg-[#161C17] group relative h-80">
+              <img 
+                src="https://fxdymkgwxrudbm27.public.blob.vercel-storage.com/uploads/82231f0b-360c-4538-97c6-5d7352d93032/1790327911258-image-y1WlJTtjhtVf6dYyNI0UBxjVromvwy.webp" 
+                alt="Asri Dining Interior Setting" 
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#111612] via-transparent to-transparent opacity-60" />
+              <div className="absolute bottom-5 left-6 right-6">
+                <span className="text-[10px] uppercase tracking-widest text-[#C2A366] font-semibold">Intimate Atmosphere</span>
+                <h3 className="font-['Prata'] text-xl text-[#E8EAE3] mt-0.5">Crafted Bamboo Spaces</h3>
+              </div>
+            </div>
+
+            <div className="rounded-3xl overflow-hidden border border-[#2A342B] bg-[#161C17] group relative h-80">
+              <img 
+                src="https://fxdymkgwxrudbm27.public.blob.vercel-storage.com/uploads/82231f0b-360c-4538-97c6-5d7352d93032/1790327918753-image-IOAdZBbLES4bahfCyWjXChLG9MNdvM.webp" 
+                alt="Botanical Interior Decor" 
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#111612] via-transparent to-transparent opacity-60" />
+              <div className="absolute bottom-5 left-6 right-6">
+                <span className="text-[10px] uppercase tracking-widest text-[#C2A366] font-semibold">Botanical Design</span>
+                <h3 className="font-['Prata'] text-xl text-[#E8EAE3] mt-0.5">Natural Harmony</h3>
+              </div>
+            </div>
+
+            <div className="rounded-3xl overflow-hidden border border-[#2A342B] bg-[#161C17] group relative h-80">
+              <img 
+                src="https://fxdymkgwxrudbm27.public.blob.vercel-storage.com/uploads/82231f0b-360c-4538-97c6-5d7352d93032/1790327921376-image-RyKn2gqPcvWNXGcVaRbH5D5FG2Mmw7.webp" 
+                alt="Fine Dining Decor" 
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#111612] via-transparent to-transparent opacity-60" />
+              <div className="absolute bottom-5 left-6 right-6">
+                <span className="text-[10px] uppercase tracking-widest text-[#C2A366] font-semibold">Serene Evening</span>
+                <h3 className="font-['Prata'] text-xl text-[#E8EAE3] mt-0.5">Candlelit Evenings</h3>
+              </div>
+            </div>
+
+            <div className="rounded-3xl overflow-hidden border border-[#2A342B] bg-[#161C17] group relative h-80">
+              <img 
+                src="https://fxdymkgwxrudbm27.public.blob.vercel-storage.com/uploads/82231f0b-360c-4538-97c6-5d7352d93032/1790327917873-image-Rus5cUwjphFUNHip3NO1XRqfKRENW5.webp" 
+                alt="Culinary Creation Presentation" 
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#111612] via-transparent to-transparent opacity-60" />
+              <div className="absolute bottom-5 left-6 right-6">
+                <span className="text-[10px] uppercase tracking-widest text-[#C2A366] font-semibold">Culinary Art</span>
+                <h3 className="font-['Prata'] text-xl text-[#E8EAE3] mt-0.5">Signature Creations</h3>
+              </div>
+            </div>
+
+            <div className="rounded-3xl overflow-hidden border border-[#2A342B] bg-[#161C17] group relative h-80">
+              <img 
+                src="https://fxdymkgwxrudbm27.public.blob.vercel-storage.com/uploads/82231f0b-360c-4538-97c6-5d7352d93032/1790327915538-image-zV70YzaWsMN9QisZXZbuNbU3ak6asp.webp" 
+                alt="Fresh Locally Sourced Ingredients" 
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#111612] via-transparent to-transparent opacity-60" />
+              <div className="absolute bottom-5 left-6 right-6">
+                <span className="text-[10px] uppercase tracking-widest text-[#C2A366] font-semibold">Fresh Flavors</span>
+                <h3 className="font-['Prata'] text-xl text-[#E8EAE3] mt-0.5">Locally Sourced Delicacies</h3>
+              </div>
+            </div>
+
+            <div className="rounded-3xl overflow-hidden border border-[#2A342B] bg-[#161C17] group relative h-80">
+              <img 
+                src="https://fxdymkgwxrudbm27.public.blob.vercel-storage.com/uploads/82231f0b-360c-4538-97c6-5d7352d93032/1790327924219-image-JWItDc2oFVBZAz3bA3MawEnAtB5ZTB.webp" 
+                alt="Premium Dining Dish" 
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#111612] via-transparent to-transparent opacity-60" />
+              <div className="absolute bottom-5 left-6 right-6">
+                <span className="text-[10px] uppercase tracking-widest text-[#C2A366] font-semibold">Gourmet Selection</span>
+                <h3 className="font-['Prata'] text-xl text-[#E8EAE3] mt-0.5">Exquisite Craftsmanship</h3>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      {/* CULINARY PHILOSOPHY / PILLARS SECTION */}
+      <section id="philosophy" className="py-24 bg-[#111612] relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+          
+          <div className="text-center max-w-2xl mx-auto space-y-4 mb-16">
+            <div className="inline-flex items-center space-x-2 text-xs uppercase tracking-[0.3em] text-[#C2A366] font-semibold">
+              <span>Craft & Craftsmanship</span>
+            </div>
+            <h2 className="font-['Prata'] text-3xl sm:text-4xl md:text-5xl font-normal text-[#E8EAE3]">
+              The Pillars of Asri Dining
+            </h2>
+            <p className="text-[#A2ADA3] text-sm md:text-base font-light">
+              Rooted in balance, seasonality, and deep respect for the sacred agricultural land of Karangasem.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            
+            {/* Pillar 1 */}
+            <div className="p-8 rounded-3xl bg-[#161C17] border border-[#2A342B] hover:border-[#C2A366]/50 transition-all duration-300 space-y-5 group">
+              <div className="w-14 h-14 rounded-2xl bg-[#111612] border border-[#2A342B] flex items-center justify-center text-[#C2A366] text-2xl group-hover:scale-110 transition-transform">
+                <i className="fas fa-leaf"></i>
+              </div>
+              <h3 className="font-['Prata'] text-2xl font-normal text-[#E8EAE3]">
+                Farm-to-Table Integrity
+              </h3>
+              <p className="text-[#A2ADA3] text-sm leading-relaxed font-light">
+                Our vegetables, microgreens, and herbs are harvested daily within hours of service from Sidemen’s rich volcanic soils.
+              </p>
+            </div>
+
+            {/* Pillar 2 */}
+            <div className="p-8 rounded-3xl bg-[#161C17] border border-[#2A342B] hover:border-[#C2A366]/50 transition-all duration-300 space-y-5 group">
+              <div className="w-14 h-14 rounded-2xl bg-[#111612] border border-[#2A342B] flex items-center justify-center text-[#C2A366] text-2xl group-hover:scale-110 transition-transform">
+                <i className="fas fa-wine-glass-alt"></i>
+              </div>
+              <h3 className="font-['Prata'] text-2xl font-normal text-[#E8EAE3]">
+                Artisanal Mixology
+              </h3>
+              <p className="text-[#A2ADA3] text-sm leading-relaxed font-light">
+                Handcrafted elixirs infused with native Balinese roots, ginger, lemongrass, and small-batch sustainable spirits.
+              </p>
+            </div>
+
+            {/* Pillar 3 */}
+            <div className="p-8 rounded-3xl bg-[#161C17] border border-[#2A342B] hover:border-[#C2A366]/50 transition-all duration-300 space-y-5 group">
+              <div className="w-14 h-14 rounded-2xl bg-[#111612] border border-[#2A342B] flex items-center justify-center text-[#C2A366] text-2xl group-hover:scale-110 transition-transform">
+                <i className="fas fa-heart"></i>
+              </div>
+              <h3 className="font-['Prata'] text-2xl font-normal text-[#E8EAE3]">
+                Heartfelt Hospitality
+              </h3>
+              <p className="text-[#A2ADA3] text-sm leading-relaxed font-light">
+                Unpretentious, intuitive service delivered with genuine Balinese warmth that makes every guest feel like family.
+              </p>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+      {/* CURATED MENU SECTION */}
+      <section id="menu" className="py-24 bg-[#161C17] border-t border-[#2A342B]/40 relative">
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+          
+          <div className="text-center max-w-2xl mx-auto space-y-4 mb-12">
+            <div className="inline-flex items-center space-x-2 text-xs uppercase tracking-[0.3em] text-[#C2A366] font-semibold">
+              <span>Culinary Expressions</span>
+            </div>
+            <h2 className="font-['Prata'] text-3xl sm:text-4xl md:text-5xl font-normal text-[#E8EAE3]">
+              Curated A La Carte Highlights
+            </h2>
+            <p className="text-[#A2ADA3] text-sm md:text-base font-light">
+              A brief preview of our evolving seasonal offerings. Prices are in Indonesian Rupiah (K = '000).
+            </p>
+
+            {/* Category Filter Tabs */}
+            <div className="pt-6 flex flex-wrap items-center justify-center gap-3">
+              {[
+                { id: "all", label: "All Offerings" },
+                { id: "starters", label: "Starters" },
+                { id: "mains", label: "Mains" },
+                { id: "desserts", label: "Desserts" },
+                { id: "drinks", label: "Elixirs" }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-5 py-2 rounded-full text-xs font-medium uppercase tracking-wider transition-all duration-300 ${
+                    activeTab === tab.id
+                      ? "bg-[#C2A366] text-[#111612] shadow-lg"
+                      : "bg-[#111612] text-[#A2ADA3] hover:text-[#E8EAE3] border border-[#2A342B]"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Menu Grid - Pure Text Cards without Images */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {filteredMenuItems.map(item => (
+              <div 
+                key={item.id} 
+                className="p-8 rounded-3xl bg-[#111612] border border-[#2A342B] hover:border-[#C2A366]/40 transition-all duration-300 flex flex-col justify-between group"
+              >
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase tracking-[0.2em] text-[#C2A366] font-semibold bg-[#161C17] px-3 py-1 rounded-full border border-[#C2A366]/30 inline-block">
+                      {item.highlight}
+                    </span>
+                    <span className="font-['Cinzel'] text-lg font-semibold text-[#C2A366] whitespace-nowrap">
+                      {item.price}
+                    </span>
+                  </div>
+
+                  <h3 className="font-['Prata'] text-2xl font-normal text-[#E8EAE3] group-hover:text-[#C2A366] transition-colors leading-tight">
+                    {item.title}
+                  </h3>
+
+                  <p className="text-xs text-[#A2ADA3] font-light leading-relaxed">
+                    {item.desc}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-12 text-center">
+            <p className="text-xs text-[#A2ADA3] italic mb-6">
+              * Full dietary menus including Vegan, Plant-Based, and Gluten-Free variations are readily provided upon arrival.
+            </p>
+            <button 
+              onClick={() => scrollTo("contact")}
+              className="px-8 py-3.5 rounded-full border border-[#C2A366] text-[#C2A366] hover:bg-[#C2A366] hover:text-[#111612] transition-all text-xs font-semibold uppercase tracking-[0.2em]"
+            >
+              Reserve Table For Full Experience
+            </button>
+          </div>
+
+        </div>
+      </section>
+
+      {/* REVIEWS & SOCIAL PROOF SECTION */}
+      <section id="reviews" className="py-24 bg-[#111612] relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+          
+          <div className="text-center max-w-2xl mx-auto space-y-4 mb-16">
+            <div className="inline-flex items-center space-x-2 text-xs uppercase tracking-[0.3em] text-[#C2A366] font-semibold">
+              <span>Verified Guest Reflections</span>
+            </div>
+            <h2 className="font-['Prata'] text-3xl sm:text-4xl md:text-5xl font-normal text-[#E8EAE3]">
+              Loved by 3,700+ Travelers
+            </h2>
+            <p className="text-[#A2ADA3] text-sm md:text-base font-light">
+              Real excerpts from our Google Business Profile reviews.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {reviews.map((rev, idx) => (
+              <div 
+                key={idx} 
+                className="p-8 rounded-3xl bg-[#161C17] border border-[#2A342B] flex flex-col justify-between space-y-6 shadow-xl relative"
+              >
+                <div className="space-y-4">
+                  <div className="flex text-[#C2A366] text-xs">
+                    {[...Array(rev.rating)].map((_, i) => (
+                      <i key={i} className="fas fa-star mr-1"></i>
+                    ))}
+                  </div>
+
+                  <p className="text-sm text-[#E8EAE3] font-light leading-relaxed italic">
+                    "{rev.text}"
+                  </p>
+                </div>
+
+                <div className="pt-4 border-t border-[#2A342B] flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-medium text-[#E8EAE3]">{rev.name}</h4>
+                    <span className="text-[11px] text-[#A2ADA3]">{rev.location}</span>
+                  </div>
+                  <span className="text-[10px] text-[#C2A366] uppercase tracking-wider font-semibold">{rev.date}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* GOOGLE REVIEW CTA BUTTON */}
+          <div className="mt-16 text-center bg-[#161C17] p-8 rounded-3xl border border-[#2A342B] max-w-3xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div className="text-left space-y-1">
+              <h3 className="font-['Prata'] text-2xl text-[#E8EAE3]">Have you dined with us recently?</h3>
+              <p className="text-xs text-[#A2ADA3]">Help fellow travelers discover Sidemen's culinary hidden gem.</p>
+            </div>
+            <a 
+              href="https://search.google.com/local/writereview?placeid=ChIJu_qOPVQR0i0RakIDyqqGB50" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="px-6 py-3 rounded-full bg-[#C2A366] text-[#111612] font-semibold text-xs uppercase tracking-wider hover:bg-[#D4B578] transition-all whitespace-nowrap flex items-center space-x-2"
+            >
+              <span>Write a Google Review</span>
+              <i className="fas fa-external-link-alt text-xs"></i>
+            </a>
+          </div>
+
+        </div>
+      </section>
+
+      {/* FAQ SECTION */}
+      <section id="faq" className="py-24 bg-[#161C17] border-t border-[#2A342B]/40">
+        <div className="max-w-4xl mx-auto px-6">
+          
+          <div className="text-center space-y-4 mb-16">
+            <div className="inline-flex items-center space-x-2 text-xs uppercase tracking-[0.3em] text-[#C2A366] font-semibold">
+              <span>Essential Details</span>
+            </div>
+            <h2 className="font-['Prata'] text-3xl sm:text-4xl md:text-5xl font-normal text-[#E8EAE3]">
+              Frequently Asked Questions
+            </h2>
+          </div>
+
+          <div className="space-y-4">
+            {faqs.map((faq, index) => (
+              <div 
+                key={index} 
+                className="rounded-2xl bg-[#111612] border border-[#2A342B] overflow-hidden transition-all duration-300"
+              >
+                <button
+                  onClick={() => setOpenFaq(openFaq === index ? null : index)}
+                  className="w-full p-6 text-left flex items-center justify-between text-[#E8EAE3] font-medium text-base focus:outline-none hover:text-[#C2A366] transition-colors"
+                >
+                  <span className="font-['Prata'] text-lg md:text-xl font-normal">{faq.q}</span>
+                  <i className={`fas fa-chevron-down text-xs text-[#C2A366] transition-transform duration-300 ${openFaq === index ? "rotate-180" : ""}`}></i>
+                </button>
+
+                {openFaq === index && (
+                  <div className="px-6 pb-6 text-sm text-[#A2ADA3] font-light leading-relaxed border-t border-[#2A342B]/40 pt-4">
+                    {faq.a}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+        </div>
+      </section>
+
+      {/* CONTACT & RESERVATION SECTION + GOOGLE MAPS */}
+      <section id="contact" className="py-24 bg-[#111612] relative">
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+          
+          <div className="text-center max-w-2xl mx-auto space-y-4 mb-16">
+            <div className="inline-flex items-center space-x-2 text-xs uppercase tracking-[0.3em] text-[#C2A366] font-semibold">
+              <span>Begin Your Experience</span>
+            </div>
+            <h2 className="font-['Prata'] text-3xl sm:text-4xl md:text-5xl font-normal text-[#E8EAE3]">
+              Reserve Your Table
+            </h2>
+            <p className="text-[#A2ADA3] text-sm md:text-base font-light">
+              For immediate table requests or special dietary arrangements, complete the form below.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-stretch">
+            
+            {/* Contact Form Column */}
+            <div className="bg-[#161C17] p-8 md:p-10 rounded-3xl border border-[#2A342B] shadow-2xl flex flex-col justify-between">
+              <form onSubmit={handleContactSubmit} className="space-y-5">
+                
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-[#A2ADA3] mb-2 font-medium">Your Name *</label>
+                  <input 
+                    type="text" 
+                    name="name" 
+                    required 
+                    placeholder="e.g. Alexander Wright"
+                    className="w-full px-4 py-3 rounded-xl bg-[#111612] border border-[#2A342B] text-[#E8EAE3] text-sm focus:outline-none focus:border-[#C2A366] transition-colors"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-[#A2ADA3] mb-2 font-medium">Email Address *</label>
+                    <input 
+                      type="email" 
+                      name="email" 
+                      required 
+                      placeholder="alexander@example.com"
+                      className="w-full px-4 py-3 rounded-xl bg-[#111612] border border-[#2A342B] text-[#E8EAE3] text-sm focus:outline-none focus:border-[#C2A366] transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-[#A2ADA3] mb-2 font-medium">Phone / WhatsApp *</label>
+                    <input 
+                      type="tel" 
+                      name="phone" 
+                      required 
+                      placeholder="+62 812 3456 789"
+                      className="w-full px-4 py-3 rounded-xl bg-[#111612] border border-[#2A342B] text-[#E8EAE3] text-sm focus:outline-none focus:border-[#C2A366] transition-colors"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-[#A2ADA3] mb-2 font-medium">Preferred Date & Time *</label>
+                    <input 
+                      type="text" 
+                      name="date" 
+                      required 
+                      placeholder="Tomorrow at 7:00 PM"
+                      className="w-full px-4 py-3 rounded-xl bg-[#111612] border border-[#2A342B] text-[#E8EAE3] text-sm focus:outline-none focus:border-[#C2A366] transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs uppercase tracking-wider text-[#A2ADA3] mb-2 font-medium">Number of Guests *</label>
+                    <select 
+                      name="guests" 
+                      className="w-full px-4 py-3 rounded-xl bg-[#111612] border border-[#2A342B] text-[#E8EAE3] text-sm focus:outline-none focus:border-[#C2A366] transition-colors"
+                    >
+                      <option value="2 Guests">2 Guests</option>
+                      <option value="3-4 Guests">3-4 Guests</option>
+                      <option value="5-8 Guests">5-8 Guests</option>
+                      <option value="9+ Large Party">9+ Large Party</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-[#A2ADA3] mb-2 font-medium">Special Requests or Dietary Notes</label>
+                  <textarea 
+                    name="message" 
+                    rows={3} 
+                    placeholder="e.g. Celebrating an anniversary, requiring gluten-free options..."
+                    className="w-full px-4 py-3 rounded-xl bg-[#111612] border border-[#2A342B] text-[#E8EAE3] text-sm focus:outline-none focus:border-[#C2A366] transition-colors resize-none"
+                  ></textarea>
+                </div>
+
+                <button 
+                  type="submit" 
+                  className="w-full py-4 rounded-xl bg-[#C2A366] text-[#111612] font-semibold text-xs uppercase tracking-[0.2em] hover:bg-[#D4B578] transition-all shadow-xl shadow-[#C2A366]/10"
+                >
+                  Send Reservation Request
+                </button>
+              </form>
+            </div>
+
+            {/* Map & Location Column */}
+            <div className="flex flex-col justify-between space-y-6">
+              
+              <div className="rounded-3xl overflow-hidden border border-[#2A342B] shadow-2xl bg-[#161C17] h-full min-h-[340px] flex flex-col">
+                <iframe
+                  src="https://maps.google.com/maps?q=-8.4747729,115.4407987&z=16&output=embed&hl=en"
+                  title="Map showing Asri Dining by Samanvaya location"
+                  className="w-full h-full min-h-[300px] border-0 flex-grow"
+                  loading="lazy"
+                  allowFullScreen
+                  referrerPolicy="no-referrer-when-downgrade"
+                />
+
+                <div className="p-6 bg-[#161C17] border-t border-[#2A342B] space-y-4">
+                  <div className="flex items-start space-x-3 text-sm text-[#E8EAE3]">
+                    <i className="fas fa-map-marker-alt text-[#C2A366] mt-1 text-base"></i>
+                    <div>
+                      <p className="font-medium">Asri Dining by Samanvaya</p>
+                      <p className="text-xs text-[#A2ADA3] mt-0.5">Banjar Tabola, Telaga Tawang, Kec. Sidemen, Kabupaten Karangasem, Bali 80864, Indonesia</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-4 pt-2 text-xs border-t border-[#2A342B]/50">
+                    <a 
+                      href="https://www.google.com/maps/place/Asri+Dining+by+Samanvaya/data=!4m7!3m6!1s0x2dd211543d8efabb:0x9d0786aaca03426a!8m2!3d-8.4747729!4d115.4407987!16s%2Fg%2F11mhh35tcn!19sChIJu_qOPVQR0i0RakIDyqqGB50?authuser=0&hl=en" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-[#C2A366] hover:underline flex items-center space-x-1 font-medium"
+                    >
+                      <span>Open in Google Maps</span>
+                      <i className="fas fa-external-link-alt text-[10px]"></i>
+                    </a>
+
+                    <a 
+                      href="tel:+6285606635597" 
+                      className="text-[#E8EAE3] hover:text-[#C2A366] flex items-center space-x-1"
+                    >
+                      <i className="fas fa-phone text-[#C2A366]"></i>
+                      <span>+62 856-0663-5597</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer id="footer" className="bg-[#0C0F0C] text-[#A2ADA3] border-t border-[#2A342B]/60 pt-16 pb-12">
+        <div className="max-w-7xl mx-auto px-6 md:px-12">
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 pb-12 border-b border-[#2A342B]/50">
+            
+            {/* Col 1: Brand Info */}
+            <div className="space-y-4">
+              <span className="block font-[#Cinzel] text-2xl font-normal tracking-[0.25em] text-[#E8EAE3]">
+                ASRI DINING
+              </span>
+              <p className="text-xs font-light leading-relaxed">
+                Elevated culinary dining experience nestled amidst the tranquil rice terraces of Sidemen, East Bali. Part of Samanvaya Luxury Resort.
+              </p>
+              <div className="flex space-x-4 pt-2">
+                <a href="https://instagram.com/asri.dining" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="w-9 h-9 rounded-full bg-[#161C17] border border-[#2A342B] flex items-center justify-center text-[#C2A366] hover:bg-[#C2A366] hover:text-[#111612] transition-colors">
+                  <i className="fab fa-instagram text-sm"></i>
+                </a>
+                <a href="https://facebook.com/100066844657072" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="w-9 h-9 rounded-full bg-[#161C17] border border-[#2A342B] flex items-center justify-center text-[#C2A366] hover:bg-[#C2A366] hover:text-[#111612] transition-colors">
+                  <i className="fab fa-facebook-f text-sm"></i>
+                </a>
+                <a href="https://wa.me/6285606635597" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp" className="w-9 h-9 rounded-full bg-[#161C17] border border-[#2A342B] flex items-center justify-center text-[#C2A366] hover:bg-[#C2A366] hover:text-[#111612] transition-colors">
+                  <i className="fab fa-whatsapp text-sm"></i>
+                </a>
+              </div>
+            </div>
+
+            {/* Col 2: Navigation Links */}
+            <div className="space-y-3">
+              <h4 className="text-xs uppercase tracking-[0.25em] text-[#E8EAE3] font-semibold">Navigation</h4>
+              <ul className="space-y-2 text-xs font-light">
+                <li><button onClick={() => scrollTo("hero")} className="hover:text-[#C2A366] transition-colors">Home</button></li>
+                <li><button onClick={() => scrollTo("about")} className="hover:text-[#C2A366] transition-colors">Our Story</button></li>
+                <li><button onClick={() => scrollTo("gallery")} className="hover:text-[#C2A366] transition-colors">Ambiance</button></li>
+                <li><button onClick={() => scrollTo("philosophy")} className="hover:text-[#C2A366] transition-colors">Culinary Philosophy</button></li>
+                <li><button onClick={() => scrollTo("menu")} className="hover:text-[#C2A366] transition-colors">Curated Menu</button></li>
+                <li><button onClick={() => scrollTo("reviews")} className="hover:text-[#C2A366] transition-colors">Guest Reviews</button></li>
+                <li><button onClick={() => scrollTo("contact")} className="hover:text-[#C2A366] transition-colors">Reservations</button></li>
+              </ul>
+            </div>
+
+            {/* Col 3: Hours & Dining */}
+            <div className="space-y-3">
+              <h4 className="text-xs uppercase tracking-[0.25em] text-[#E8EAE3] font-semibold">Opening Hours</h4>
+              <ul className="space-y-2 text-xs font-light">
+                <li className="flex justify-between">
+                  <span>Breakfast:</span>
+                  <span className="text-[#E8EAE3]">7:00 AM – 10:30 AM</span>
+                </li>
+                <li className="flex justify-between">
+                  <span>Lunch:</span>
+                  <span className="text-[#E8EAE3]">12:00 PM – 4:00 PM</span>
+                </li>
+                <li className="flex justify-between">
+                  <span>Dinner:</span>
+                  <span className="text-[#E8EAE3]">5:30 PM – 10:00 PM</span>
+                </li>
+                <li className="pt-2 text-[11px] text-[#C2A366] italic">
+                  * Open 7 days a week year-round
+                </li>
+              </ul>
+            </div>
+
+            {/* Col 4: Contact Direct */}
+            <div className="space-y-3">
+              <h4 className="text-xs uppercase tracking-[0.25em] text-[#E8EAE3] font-semibold">Contact</h4>
+              <div className="space-y-2 text-xs font-light">
+                <p className="flex items-center space-x-2">
+                  <i className="fas fa-envelope text-[#C2A366]"></i>
+                  <a href="mailto:samanvaya@samanvaya-bali.com" className="hover:text-[#C2A366] transition-colors">samanvaya@samanvaya-bali.com</a>
+                </p>
+                <p className="flex items-center space-x-2">
+                  <i className="fas fa-phone text-[#C2A366]"></i>
+                  <a href="tel:+6285606635597" className="hover:text-[#C2A366] transition-colors">+62 856-0663-5597</a>
+                </p>
+                <p className="flex items-center space-x-2">
+                  <i className="fas fa-globe text-[#C2A366]"></i>
+                  <a href="https://samanvaya-bali.com/restaurant-sidemen-asri/" target="_blank" rel="noopener noreferrer" className="hover:text-[#C2A366] transition-colors">samanvaya-bali.com</a>
+                </p>
+              </div>
+            </div>
+
+          </div>
+
+          <div className="pt-8 flex flex-col md:flex-row items-center justify-between text-[11px] font-light text-[#A2ADA3] gap-4">
+            <p>© {new Date().getFullYear()} Asri Dining by Samanvaya. All rights reserved.</p>
+            <p className="text-center md:text-right">Banjar Tabola, Telaga Tawang, Sidemen, Karangasem, Bali 80864</p>
+          </div>
+
+        </div>
+      </footer>
+
+    </div>
+  );
+}
+
+
+============================================================
+Campaign: restaurant - Bali, Indonesia - Lead: Asri Dining by Samanvaya (Restaurant) - Lead ID: 31721f7a-274c-4246-9485-4078e0435244 - Type: landing - Modify | Attempt 2
+============================================================
+The truncated code:
+
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+
+export default function Component() {
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("all");
+  const [openFaq, setOpenFaq] = useState(null);
+  const [toastMessage, setToastMessage] = useState("");
+
+  // Handle Navbar Background on Scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 50) {
+        setIsScrolled(true);
+      } else {
+        setIsScrolled(false);
+      }
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Smooth Scroll Anchor Navigation
+  const scrollTo = useCallback((id) => {
+    setMobileMenuOpen(false);
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
+
+  // Contact Form Mailto Handler
+  const handleContactSubmit = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    
+    const name = formData.get("name") || "";
+    const email = formData.get("email") || "";
+    const phone = formData.get("phone") || "";
+    const date = formData.get("date") || "";
+    const guests = formData.get("guests") || "";
+    const message = formData.get("message") || "";
+
+    const lines = [
+      "Name: " + name,
+      "Email: " + email,
+      "Phone: " + phone,
+      "Preferred Date/Time: " + date,
+      "Number of Guests: " + guests,
+      "Special Requests / Message: " + message
+    ];
+
+    const body = lines.join("\n") + "\n\n— Sent from the Asri Dining by Samanvaya website contact form";
+    const subject = name ? "New Dining Reservation / Inquiry from " + name : "New Inquiry — Asri Dining by Samanvaya";
+    
+    window.location.href = "mailto:samanvaya@samanvaya-bali.com?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+    setToastMessage("Opening your email client to send the reservation request...");
+    setTimeout(() => setToastMessage(""), 5000);
+  };
+
+  const menuItems = [
+    {
+      id: "m1",
+      category: "mains",
+      title: "Slow-Cooked Balinese Duck Breast",
+      price: "IDR 240K",
+      desc: "Pan-roasted local duck breast, heritage black rice cake, smoked coconut lawar, and rich aromatic kaffir lime jus.",
+      highlight: "Chef's Signature"
+    },
+    {
+      id: "m2",
+      category: "mains",
+      title: "Sidemen Valley Barramundi",
+      price: "IDR 220K",
+      desc: "Wild-caught barramundi with crisp skin, lemon basil dabu-dabu salsa, charred baby bok choy, and turmeric coconut foam.",
+      highlight: "Locally Sourced"
+    },
+    {
+      id: "m3",
+      category: "starters",
+      title: "Smoked Plant-Based Rendang Croquettes",
+      price: "IDR 135K",
+      desc: "Crispy heirloom potato croquettes filled with rich jackfruit rendang, served with fermented chili emulsion.",
+      highlight: "Vegan Specialty"
+    },
+    {
+      id: "m4",
+      category: "mains",
+      title: "Wagyu Beef Ribeye Sambal Hijau",
+      price: "IDR 380K",
+      desc: "200g Grade 7+ Australian Wagyu, charred green chili sambal, cassava leaf purée, and garlic-infused bone marrow jus.",
+      highlight: "Premium Cut"
+    },
+    {
+      id: "m5",
+      category: "drinks",
+      title: "Telaga Tawang Botanical Elixir",
+      price: "IDR 95K",
+      desc: "Artisanal gin infused with torch ginger, fresh lime juice, muddled wild lemongrass, and homemade kaffir syrup.",
+      highlight: "Craft Cocktail"
+    },
+    {
+      id: "m6",
+      category: "desserts",
+      title: "Organic Bamboo Charcoal Coconut Tart",
+      price: "IDR 110K",
+      desc: "Handcrafted charcoal crust, young coconut curd, mango-passionfruit reduction, and house-made palm sugar gelato.",
+      highlight: "Organic"
+    }
+  ];
+
+  const filteredMenuItems = activeTab === "all" ? menuItems : menuItems.filter(item => item.category === activeTab);
+
+  const reviews = [
+    {
+      name: "Marcus Vance",
+      location: "Melbourne, Australia",
+      rating: 5,
+      date: "August 2026",
+      text: "An absolute must-visit in Sidemen! We had dinner here today and were truly impressed from start to finish. The atmosphere is beautiful – stylish, cozy, and incredibly welcoming, making you feel comfortable right away. The flavors in every dish were distinct and remarkably balanced."
+    },
+    {
+      name: "Evelyn Thorne",
+      location: "London, UK",
+      rating: 5,
+      date: "September 2026",
+      text: "It has the best food quality among the restaurants in the area. There are hardly any local spices spared in crafting genuine depth. And you can really taste high-quality food on every dish you order. The bamboo architecture overlooking the valley takes it to another level."
+    },
+    {
+      name: "Sophie & Pierre Laurent",
+      location: "Paris, France",
+      rating: 5,
+      date: "July 2026",
+      text: "We had a lovely experience at Asri Dining by Samanvaya in Sidemen. The setting is absolutely beautiful, surrounded by lush greenery, it feels peaceful and intimate. The service was discrete yet warm, true Balinese hospitality at its finest."
+    }
+  ];
+
+  const faqs = [
+    {
+      q: "What is the dress code for dining at Asri Dining?",
+      a: "We embrace a 'Smart Resort Casual' dress code. We kindly ask our guests to refrain from wearing swimwear or sleeveless shirts for gentlemen during dinner service to preserve our refined, tranquil ambiance."
+    },
+    {
+      q: "Do you cater to vegetarian, vegan, or gluten-free dietary requirements?",
+      a: "Absolutely. Our culinary philosophy celebrates botanical richness. Over 40% of our menu consists of thoughtfully crafted plant-based and gluten-free creations, utilizing organic herbs from our private garden."
+    },
+    {
+      q: "Are reservations mandatory for non-resort guests?",
+      a: "While we welcome walk-ins based on availability, we highly recommend reserving at least 24 to 48 hours in advance due to limited intimate table settings overlooking the rice terraces."
+    },
+    {
+      q: "Is Asri Dining suitable for romantic private celebrations?",
+      a: "Yes. We offer customized romantic candlelit dining experiences, bespoke tasting menus, and florist arrangements upon request for anniversaries, proposals, and special milestones."
+    }
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#111612] text-[#E8EAE3] font-['Outfit'] selection:bg-[#C2A366] selection:text-[#111612] antialiased">
+      {/* Editorial Luxury Typography Pairings */}
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700;800&family=Outfit:wght@200;300;400;500;600;700&family=Prata&display=swap" />
+
+      {/* Floating Notification Toast */}
+      {toastMessage && (
+        <div className="fixed bottom-24 right-6 z-50 bg-[#C2A366] text-[#111612] px-6 py-3.5 rounded-2xl shadow-2xl font-medium text-sm flex items-center space-x-3 transition-all duration-300">
+          <i className="fas fa-info-circle text-base"></i>
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* NAVBAR */}
+      <nav className={`sticky top-0 z-50 transition-all duration-500 ${isScrolled ? "bg-[#111612]/92 backdrop-blur-lg border-b border-[#2A342B]/60 py-4 shadow-2xl" : "bg-transparent py-7"}`}>
+        <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between">
+          
+          {/* Logo */}
+          <button onClick={() => scrollTo("hero")} className="text-left group focus:outline-none">
+            <span className="block font-['Cinzel'] text-2xl md:text-3xl font-normal tracking-[0.25em] text-[#E8EAE3] group-hover:text-[#C2A366] transition-colors">
+              ASRI DINING
+            </span>
+            <span className="block text-[9px] uppercase tracking-[0.4em] text-[#C2A366] mt-0.5 font-semibold">
+              BY SAMANVAYA • SIDEMEN
+            </span>
+          </button>
+
+          {/* Desktop Nav Links */}
+          <div className="hidden lg:flex items-center space-x-10 text-[11px] uppercase tracking-[0.28em] font-medium text-[#A2ADA3]">
+            <button onClick={() => scrollTo("about")} className="hover:text-[#C2A366] transition-colors focus:outline-none">Story</button>
+            <button onClick={() => scrollTo("gallery")} className="hover:text-[#C'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+
+export default function Component() {
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("all");
+  const [openFaq, setOpenFaq] = useState(null);
+  const [toastMessage, setToastMessage] = useState("");
+
+  // Handle Navbar Background on Scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 50) {
+        setIsScrolled(true);
+      } else {
+        setIsScrolled(false);
+      }
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Smooth Scroll Anchor Navigation
+  const scrollTo = useCallback((id) => {
+    setMobileMenuOpen(false);
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
+
+  // Contact Form Mailto Handler
+  const handleContactSubmit = (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const formData = new FormData(form);
+    
+    const name = formData.get("name") || "";
+    const email = formData.get("email") || "";
+    const phone = formData.get("phone") || "";
+    const date = formData.get("date") || "";
+    const guests = formData.get("guests") || "";
+    const message = formData.get("message") || "";
+
+    const lines =
+

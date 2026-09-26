@@ -1,0 +1,361 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { SetNavbar } from '@/components/AppShell';
+import { useToast } from '@/components/Toast';
+import { verifyVercelToken, verifyImgxxKey } from '@/lib/verify-tokens';
+import { GEMINI_MODELS, DEFAULT_GEMINI_MODEL, type GeminiModel, type GeminiSource } from '@/lib/gemini';
+
+function StatusBadge({ configured }: { configured: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <span className={`px-2.5 py-1 text-xs font-medium rounded-lg ${configured ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
+      {configured ? t('settings.configured') : t('settings.notConfigured')}
+    </span>
+  );
+}
+
+function Card({ title, badge, className, id, children }: { title: string; badge?: React.ReactNode; className?: string; id?: string; children: React.ReactNode }) {
+  return (
+    <section id={id} className={`bg-white dark:bg-zinc-800/40 border border-gray-200 dark:border-zinc-700/50 rounded-xl p-5 ${className || ''}`}>
+      <div className="flex items-center justify-between mb-3 gap-2">
+        <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h2>
+        {badge}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+interface Snapshot {
+  vercelToken: string;
+  imgbbKey: string;
+  geminiKey: string;
+  model: GeminiModel;
+  source: GeminiSource;
+}
+
+function SecretInput({ value, onChange, placeholder, className, visible, onToggleVisible }: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  className: string;
+  visible: boolean;
+  onToggleVisible: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="relative w-full">
+      <input
+        type={visible ? 'text' : 'password'}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={`${className} w-full pr-10`}
+      />
+      <button
+        type="button"
+        onClick={onToggleVisible}
+        tabIndex={-1}
+        title={visible ? t('settings.hideKey') : t('settings.showKey')}
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg transition-colors"
+      >
+        {visible ? (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+          </svg>
+        ) : (
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+        )}
+      </button>
+    </div>
+  );
+}
+
+export default function SettingsPage() {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+
+  const [initial, setInitial] = useState<Snapshot | null>(null);
+  const [model, setModel] = useState<GeminiModel>(DEFAULT_GEMINI_MODEL);
+  const [source, setSource] = useState<GeminiSource>('proxy');
+
+  const [vercelToken, setVercelToken] = useState('');
+  const [imgbbKey, setImgbbKey] = useState('');
+  const [geminiKey, setGeminiKey] = useState('');
+  const [showVercel, setShowVercel] = useState(false);
+  const [showImgbb, setShowImgbb] = useState(false);
+  const [showGemini, setShowGemini] = useState(false);
+
+  const [savingAll, setSavingAll] = useState(false);
+  const [savedAll, setSavedAll] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then(data => {
+        if (!mounted) return;
+        const snap: Snapshot = {
+          vercelToken: data.vercelToken || '',
+          imgbbKey: data.imgbbKey || '',
+          geminiKey: data.geminiApiKey || '',
+          model: (data.geminiModel as GeminiModel) || DEFAULT_GEMINI_MODEL,
+          source: (data.geminiSource as GeminiSource) || 'proxy',
+        };
+        setInitial(snap);
+        setVercelToken(snap.vercelToken);
+        setImgbbKey(snap.imgbbKey);
+        setGeminiKey(snap.geminiKey);
+        setModel(snap.model);
+        setSource(snap.source);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Highlight the imgbb card when arriving via ?focus= link.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const focus = params.get('focus');
+    const targetId = focus === 'imgxxKey' ? 'imgxx-key-card' : null;
+    if (!targetId) return;
+    let attempts = 0;
+    const tick = () => {
+      const el = document.getElementById(targetId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('gen-highlight');
+        setTimeout(() => el.classList.remove('gen-highlight'), 4000);
+        const url = new URL(window.location.href);
+        url.searchParams.delete('focus');
+        window.history.replaceState({}, '', url.toString());
+      } else if (attempts++ < 60) {
+        setTimeout(tick, 200);
+      }
+    };
+    tick();
+  }, []);
+
+  // Active dirty detection: any diverged field vs the loaded snapshot.
+  const isDirty = !!initial && (
+    vercelToken.trim() !== initial.vercelToken ||
+    imgbbKey.trim() !== initial.imgbbKey ||
+    geminiKey.trim() !== initial.geminiKey ||
+    model !== initial.model ||
+    source !== initial.source
+  );
+
+  function discardChanges() {
+    if (!initial) return;
+    setVercelToken(initial.vercelToken);
+    setImgbbKey(initial.imgbbKey);
+    setGeminiKey(initial.geminiKey);
+    setModel(initial.model);
+    setSource(initial.source);
+  }
+
+  async function saveAll() {
+    if (savingAll || !isDirty || !initial) return;
+    setSavingAll(true);
+    try {
+      const trimmedVercel = vercelToken.trim();
+      const trimmedImgbb = imgbbKey.trim();
+      const trimmedGemini = geminiKey.trim();
+
+      if (trimmedVercel && trimmedVercel !== initial.vercelToken) {
+        const vResult = await verifyVercelToken(trimmedVercel);
+        if (!vResult.valid) {
+          toast(vResult.error, 'error');
+          return;
+        }
+      }
+      if (trimmedImgbb && trimmedImgbb !== initial.imgbbKey) {
+        const iResult = await verifyImgxxKey(trimmedImgbb);
+        if (!iResult.valid) {
+          toast(iResult.error, 'error');
+          return;
+        }
+      }
+
+      const body: Record<string, unknown> = {};
+      if (trimmedVercel !== initial.vercelToken) body.vercelToken = trimmedVercel;
+      if (trimmedImgbb !== initial.imgbbKey) body.imgbbKey = trimmedImgbb;
+      if (trimmedGemini !== initial.geminiKey) body.geminiApiKey = trimmedGemini;
+      if (model !== initial.model) body.geminiModel = model;
+      if (source !== initial.source) body.geminiSource = source;
+
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+
+      setInitial({
+        vercelToken: trimmedVercel,
+        imgbbKey: trimmedImgbb,
+        geminiKey: trimmedGemini,
+        model,
+        source,
+      });
+      setSavedAll(true);
+      setTimeout(() => setSavedAll(false), 2500);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      setSavingAll(false);
+    }
+  }
+
+  const hasVercel = vercelToken.trim() !== '';
+  const hasImgbb = imgbbKey.trim() !== '';
+  const hasGemini = geminiKey.trim() !== '';
+
+  const inputCls =
+    'flex-1 min-w-0 px-4 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all font-mono text-sm';
+
+  return (
+    <div className="flex-1 bg-gradient-to-br from-gray-100 via-white to-gray-50 dark:from-zinc-900 dark:via-zinc-800 dark:to-zinc-900 transition-colors flex flex-col">
+      <SetNavbar title={t('settings.title')} subtitle={t('settings.subtitle')} />
+
+      <main className="app-page flex-1">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          {/* Vercel Token */}
+          <Card title={t('settings.vercelToken')} badge={<StatusBadge configured={!!hasVercel} />}>
+            <div className="bg-zinc-100/60 dark:bg-zinc-900/60 border border-zinc-200/60 dark:border-zinc-700/30 rounded-xl p-4 mb-3">
+              <h3 className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-3 flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {t('settings.howToVercel')}
+              </h3>
+              <ol className="space-y-2 text-xs text-zinc-500 dark:text-zinc-400 list-decimal list-inside">
+                <li>{t('settings.vercelStep1')}</li>
+                <li>{t('settings.vercelStep2')}</li>
+                <li>{t('settings.vercelStep3')}</li>
+                <li>{t('settings.vercelStep4')}</li>
+              </ol>
+              <a href="https://vercel.com/account/tokens" target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                {t('settings.openVercelPage')}
+              </a>
+            </div>
+            <SecretInput value={vercelToken} onChange={setVercelToken} placeholder={t('settings.vercelPlaceholder')} className={inputCls} visible={showVercel} onToggleVisible={() => setShowVercel(v => !v)} />
+          </Card>
+
+          {/* ImgBB Key */}
+          <Card id="imgxx-key-card" title={t('settings.imgbbKey')} badge={<StatusBadge configured={!!hasImgbb} />}>
+            <div className="bg-zinc-100/60 dark:bg-zinc-900/60 border border-zinc-200/60 dark:border-zinc-700/30 rounded-xl p-4 mb-3">
+              <h3 className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-3 flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {t('settings.howToImgbb')}
+              </h3>
+              <ol className="space-y-2 text-xs text-zinc-500 dark:text-zinc-400 list-decimal list-inside">
+                <li>{t('settings.imgbbStep1')}</li>
+                <li>{t('settings.imgbbStep2')}</li>
+                <li>{t('settings.imgbbStep3')}</li>
+              </ol>
+              <a href="https://leadmaximguploadmechanism.vercel.app" target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                {t('settings.openImgbbPage')}
+              </a>
+            </div>
+            <SecretInput value={imgbbKey} onChange={setImgbbKey} placeholder={t('settings.imgbbPlaceholder')} className={inputCls} visible={showImgbb} onToggleVisible={() => setShowImgbb(v => !v)} />
+          </Card>
+
+          {/* Gemini */}
+          <Card title="Gemini" badge={<StatusBadge configured={!!hasGemini} />}>
+            <div className="bg-zinc-100/60 dark:bg-zinc-900/60 border border-zinc-200/60 dark:border-zinc-700/30 rounded-xl p-4 mb-4">
+              <h3 className="text-xs font-semibold text-zinc-600 dark:text-zinc-300 mb-3 flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                {t('settings.howToGemini')}
+              </h3>
+              <ol className="space-y-2 text-xs text-zinc-500 dark:text-zinc-400 list-decimal list-inside">
+                <li>{t('settings.geminiStep1')}</li>
+                <li>{t('settings.geminiStep2')}</li>
+                <li>{t('settings.geminiStep3')}</li>
+                <li>{t('settings.geminiStep4')}</li>
+              </ol>
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                {t('settings.openGeminiPage')}
+              </a>
+            </div>
+            <div className={`flex items-center justify-between gap-3 ${source === 'api' ? 'mb-4 pb-4 border-b border-gray-200 dark:border-zinc-700/50' : ''}`}>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('settings.geminiSource')}</h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">{t('settings.geminiSourceDesc')}</p>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">{t('settings.geminiSourceApiHint')}</p>
+              </div>
+              <div className="shrink-0">
+                <select value={source} onChange={e => setSource(e.target.value as GeminiSource)} className="px-3 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all text-sm">
+                  <option value="proxy">{t('settings.geminiSourceProxy')}</option>
+                  <option value="api">{t('settings.geminiSourceApi')}</option>
+                </select>
+              </div>
+            </div>
+            {source === 'api' && (
+              <>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">{t('settings.geminiApiKeyDesc')}</p>
+                <div className="mb-4">
+                  <SecretInput value={geminiKey} onChange={setGeminiKey} placeholder={t('settings.geminiApiKeyPlaceholder')} className={inputCls} visible={showGemini} onToggleVisible={() => setShowGemini(v => !v)} />
+                </div>
+                <div className="flex items-center justify-between gap-3 border-t border-gray-200 dark:border-zinc-700/50 pt-4">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{t('settings.geminiModel')}</h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">{t('settings.geminiModelDesc')}</p>
+                  </div>
+                  <div className="shrink-0">
+                    <select value={model} onChange={e => setModel(e.target.value as GeminiModel)} className="px-3 py-2.5 bg-gray-50 dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all text-sm">
+                      {Object.entries(GEMINI_MODELS).map(([value, label]) => (
+                        <option key={value} value={value}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+          </Card>
+
+        </div>
+        {(isDirty || savedAll) && <div className="h-24" aria-hidden />}
+      </main>
+
+      {(isDirty || savedAll) && (
+        <div className="fixed bottom-0 inset-x-0 z-40 flex justify-center px-4 pb-4 pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-3 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-2xl shadow-2xl px-4 py-3">
+            <span className="text-sm text-zinc-600 dark:text-zinc-300">
+              {savedAll ? t('settings.saved') : t('settings.unsavedChanges')}
+            </span>
+            {isDirty && (
+              <>
+                <button
+                  onClick={discardChanges}
+                  disabled={savingAll}
+                  className="px-3 py-2 text-sm font-medium text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white bg-gray-100 dark:bg-zinc-700/60 rounded-xl hover:bg-gray-200 dark:hover:bg-zinc-700 disabled:opacity-40 transition-all"
+                >
+                  {t('settings.discardChanges')}
+                </button>
+                <button
+                  onClick={saveAll}
+                  disabled={savingAll}
+                  className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
+                >
+                  {savingAll ? (
+                    <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  ) : t('settings.saveAll')}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

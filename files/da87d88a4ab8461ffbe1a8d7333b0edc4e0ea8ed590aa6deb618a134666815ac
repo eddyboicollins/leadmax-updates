@@ -1,0 +1,109 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaign, getLead, updateLeadLandingPage, getSettings } from '@/lib/store';
+import { askGeminiAndValidate, MODIFY_PROMPT_SUFFIX, formatModifyImagesBlock, buildSocialsBlock } from '@/lib/prompts';
+import { DEFAULT_GEMINI_MODEL, type GeminiModel, type GeminiSource } from '@/lib/gemini';
+
+export const maxDuration = 300;
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  const { id, leadId } = await params;
+
+  const body = await request.json();
+  const { userPrompt } = body;
+
+  if (!userPrompt || typeof userPrompt !== 'string') {
+    return NextResponse.json({ error: 'userPrompt is required' }, { status: 400 });
+  }
+
+  const campaign = await getCampaign(id);
+  if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+  const lead = await getLead(leadId);
+  if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+  const existingTsx = lead.landingPage?.tsx || lead.deploymentHistory?.find(e => e.isMain)?.tsx;
+  if (!existingTsx) {
+    return NextResponse.json({ error: 'No landing page to modify. Generate one first.' }, { status: 400 });
+  }
+
+  const imagesBlock = formatModifyImagesBlock(lead);
+
+  const settings = await getSettings();
+  const apiKey = settings.geminiApiKey || '';
+  const model = (settings.geminiModel as GeminiModel) || DEFAULT_GEMINI_MODEL;
+  const source = (settings.geminiSource as GeminiSource) || 'proxy';
+
+  // Carry the enriched email/socials (if present) so the AI preserves them.
+  const enrichedEmail = (lead.business as any).enrichedEmail as string | undefined;
+  const enrichedSocials = (lead.business as any).enrichedSocials as { instagram?: string; linkedin?: string; facebook?: string; twitter?: string; tiktok?: string; youtube?: string } | undefined;
+  const hasEnriched = !!(
+    enrichedEmail ||
+    enrichedSocials?.instagram ||
+    enrichedSocials?.linkedin ||
+    enrichedSocials?.facebook ||
+    enrichedSocials?.twitter ||
+    enrichedSocials?.tiktok ||
+    enrichedSocials?.youtube
+  );
+  const contactBlock = hasEnriched
+    ? `CURRENT CONTACT & SOCIALS (found online — keep these exact values in the design where relevant):\nEMAIL: ${enrichedEmail || ''}\nSOCIALS:\n${buildSocialsBlock(enrichedSocials)}`
+    : null;
+
+  const prompt = [
+    'Here is the React component to modify:',
+    existingTsx,
+    '',
+    "User's change request:",
+    userPrompt,
+    contactBlock ? '' : null,
+    contactBlock,
+    imagesBlock ? '' : null,
+    imagesBlock || null,
+    '',
+    'Return the COMPLETE modified React component (default export), no explanations.',
+    MODIFY_PROMPT_SUFFIX,
+  ].filter(Boolean).join('\n');
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: Record<string, unknown>) => {
+        try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)); } catch { /* client disconnected */ }
+      };
+      try {
+        send({ step: 'generating', message: 'Updating your website...' });
+        const onTruncatedRetry = (retryInSec: number) =>
+          send({ step: 'truncated_retry', message: 'Our free AI is experiencing high demand, retrying...', retryInSec });
+
+        const cleanTsx = await askGeminiAndValidate(prompt, apiKey, model, 4, undefined, source, onTruncatedRetry);
+
+        const lp = lead.landingPage || { generatedAt: new Date().toISOString(), version: 0, sections: [] };
+        const landingPage = {
+          tsx: cleanTsx,
+          generatedAt: lp.generatedAt,
+          version: (lp.version || 0) + 1,
+          sections: lp.sections || [],
+        };
+        await updateLeadLandingPage(leadId, landingPage);
+
+        send({ step: 'complete', success: true, version: landingPage.version });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to modify landing page';
+        send({ step: 'error', error: message });
+      } finally {
+        try { controller.close(); } catch { /* client disconnected */ }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
+}

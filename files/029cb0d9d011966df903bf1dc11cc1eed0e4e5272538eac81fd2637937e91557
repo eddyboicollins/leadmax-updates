@@ -1,0 +1,21 @@
+const fs = require('fs');
+let w = fs.readFileSync('src/components/OnboardingWizard.tsx', 'utf8');
+w = w.replace(/async function saveImgbbKey\(\) \{[\s\S]*?setImgbbSaving\(false\);\r?\n\s*\}/, `async function saveFilebaseKeys() {
+    if (!filebaseAccessKey.trim() || !filebaseSecretKey.trim() || !filebaseBucket.trim()) return;
+    setFilebaseSaving(true);
+    setFilebaseError('');
+    const iResult = await verifyFilebaseKeys(filebaseAccessKey.trim(), filebaseSecretKey.trim(), filebaseBucket.trim());
+    if (!iResult.valid) { setFilebaseError(iResult.error); setFilebaseSaving(false); return; }
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filebaseAccessKey: filebaseAccessKey.trim(), filebaseSecretKey: filebaseSecretKey.trim(), filebaseBucket: filebaseBucket.trim() }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setFilebaseDone(true);
+      goTo(nextStepFrom(7));
+    } catch { setFilebaseError('Failed to save Filebase keys'); }
+    setFilebaseSaving(false);
+  }`);
+fs.writeFileSync('src/components/OnboardingWizard.tsx', w);

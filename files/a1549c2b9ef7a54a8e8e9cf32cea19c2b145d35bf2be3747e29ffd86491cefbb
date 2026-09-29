@@ -1,0 +1,183 @@
+const fs = require('fs');
+const file = 'c:/Users/PC/Desktop/leadmax/src/lib/prompts.ts';
+let code = fs.readFileSync(file, 'utf8');
+
+// 1. Remove source param and proxy imports
+code = code.replace(/import \{ retryAskGemini, type GeminiModel, type GeminiSource \} from '@\/lib\/gemini';/, "import { retryAskGemini, type GeminiModel } from '@/lib/gemini';");
+
+// 2. Change formJs and formModeInstruction logic inside buildPromptData
+const newFormJsLogic = `
+  const businessName = b.name || 'Business Name';
+  const cleanBusinessName = businessName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'company';
+  const fakeEmail = 'contact@' + cleanBusinessName + '.com';
+
+  const formJs = \`
+  document.querySelector('.contact-form')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = new FormData(this);
+    const pick = (names) => {
+      for (const n of names) { const v = data.get(n); if (v && String(v).trim()) return String(v).trim(); }
+      return '';
+    };
+    const name = pick(['name', 'fullname', 'full_name', 'your-name', 'yourname']);
+    const lines = [];
+    data.forEach((value, key) => {
+      const v = String(value).trim();
+      if (!v) return;
+      const label = key.replace(/[_-]+/g, ' ');
+      lines.push(label.charAt(0).toUpperCase() + label.slice(1) + ': ' + v);
+    });
+    const body = (lines.length ? lines.join('\\\\n') : 'New website inquiry') + '\\\\n\\\\n— Sent from the \${businessName} website contact form';
+    const subject = name ? 'New inquiry from ' + name + ' — \${businessName}' : 'New website inquiry — \${businessName}';
+    window.location.href = 'mailto:\${fakeEmail}?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  });\`;
+
+  const formModeInstruction = 'THE FORM MUST OPEN THE VISITOR\\'S EMAIL APP (mailto:) — NOT WhatsApp, NOT a server submit. Pre-fill the email TO the business email (' + fakeEmail + ') and build a meaningful subject plus a detailed body from every field the visitor filled in.';
+`;
+// Replace the old formJs logic which starts from const cleanEmail = ... up to imagesBlock = ...
+const regexFormJs = /const cleanEmail = [\s\S]*?const formModeInstruction = [^;]+;/;
+code = code.replace(regexFormJs, newFormJsLogic.trim());
+
+
+// 3. Replace DEFAULT_SYSTEM_PROMPT
+const newPrompt = `export const DEFAULT_SYSTEM_PROMPT = \`You are an elite creative director, conversion-rate optimizer and React + Tailwind front-end architect. Generate a COMPLETE, production-ready, premium landing page for the real business below as ONE React component using Tailwind CSS v4.
+
+It must feel handcrafted, cinematic and 2026-modern (generous rounding, soft shadows, airy minimal layouts), built specifically for THIS business. NEVER a template, generic SaaS/agency page, or repetitive stacked blocks. Goal: a $5,000+ Awwwards-level site that makes visitors ask "who designed this?!"
+
+## BUSINESS DATA
+Name: {{BUSINESS_NAME}}
+Category: {{CATEGORY}}
+Rating: {{RATING}}/5 ({{RATING_COUNT}} reviews)
+Address: {{ADDRESS}}
+Phone: {{PHONE}}
+Website: {{WEBSITE}}
+Place ID: {{PLACE_ID}}
+{{COORDINATES}}
+{{GOOGLE_URL}}
+Email: {{EMAIL}}
+Socials: {{SOCIALS_BLOCK}}
+(Use email/socials exactly as given in contact + footer. Empty = none known.)
+
+## REAL REVIEWS
+{{REVIEWS_BLOCK}}
+
+{{IMAGES_BLOCK}}
+## CREATIVE DIRECTION
+First infer audience, price tier, brand personality, culture and trust signals. Then choose a unique direction that fits (clinic → clean glassmorphism; restaurant → immersive food storytelling; gym → bold kinetic type; salon → feminine editorial; law firm → authority; café → cozy warmth; garage → industrial). Typography, colors, spacing, rhythm, CTA tone, copy, shapes and hovers must all match it.
+Use asymmetrical grids, layered backgrounds, glassmorphism, oversized headlines, depth overlays, blurred gradient blobs, visual pacing (intense → calm), an immersive hero, and tasteful motion (transitions, hover:-translate-y-*, group-hover:*, scroll reveals via useEffect + IntersectionObserver, subtle animate-pulse). No boring stacked rectangles, no cheap or laggy effects. All cards, buttons, inputs, images and containers use rounded-xl or rounded-2xl minimum.
+
+## OUTPUT
+Return ONLY the component code. No markdown fences, no explanations, no text outside the component, no wrapping quotes, nothing after the final brace.
+
+## TECH RULES
+- Line 1 exactly: 'use client'; (with quotes and semicolon). Default export: export default function Component().
+- Pure JavaScript + JSX. NO TypeScript: no type annotations, generics, or React.*Event. Params untyped: (e) =>, useState(null).
+- Named hook imports only: import { useState, useEffect, useRef, useCallback } from 'react'. No React namespace import.
+- Tailwind classes only: no custom CSS, no <style> tags, no CSS-in-JS, no @import. Arbitrary values OK (bg-[#1a1a2e]). Custom keyframes via inline style only.
+- Fonts: <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=..." /> as FIRST child of the root element. Apply with font-['Playfair_Display'] or style={{ fontFamily: "'Playfair Display', serif" }}.
+- Icons: Font Awesome is preloaded. Use className only: <i className="fas fa-phone"></i> (fas / far / fab). No FA import, no inline SVG icons, no icon libraries. Common: fa-star, fa-phone, fa-map-marker-alt, fa-bars, fa-times, fa-arrow-right, fa-chevron-down, fa-quote-left, fa-check, fa-envelope, fa-clock, fa-external-link-alt, fa-whatsapp, fa-facebook, fa-instagram.
+- Use DOUBLE quotes for all JS strings (French apostrophes break single quotes): { text: "C'est magnifique" }.
+- Numeric/boolean props in braces: rows={3}, required={true}.
+- URLs only as JSX attributes (href="https://..."), never Markdown links.
+- Every JSX tag must close with its matching name (section→</section>, nav→</nav>). Turbopack's parser is strict.
+- Logo: styled text only, no image.
+
+## IMAGES
+Use ONLY the provided URLs, each at most ONCE, no stock/placeholder images. Use the annotated dimensions to place them: landscape → hero/banners/wide galleries; portrait → cards/profile/vertical layouts; square → avatars/thumbnails/grids; under 600px → compact slots only, never hero backgrounds.
+Every <img> uses className="w-full h-full object-cover" inside a parent that has overflow-hidden + rounded-* + an explicit height (or absolute inset-0). The <img> itself has NO rounding and NO height of its own. Photos must fill their frame completely, with no empty space or overflow past rounded corners.
+
+## RESPONSIVE
+Flawless at 375px, tablet and desktop, with zero horizontal scroll. Use sm:/md:/lg: prefixes, single-column collapse on mobile, max-w-* mx-auto, h-auto/min-h-screen (no fixed heights), touch-friendly targets, focus:ring-*, semantic HTML, responsive type.
+- Root component div: NEVER overflow-x-hidden / overflow-hidden / overflow-x-clip (it breaks sticky). No html/body overflow hacks.
+- Any section with decorative blobs or -left-*/-right-* offsets gets overflow-hidden on that section.
+- NAVBAR: <nav> with "sticky top-0 z-50", NEVER fixed. It contains only logo, links and hamburger. Transparent at top, backdrop-blur-md bg-white/80 after scroll (useState). Smooth-scroll anchors via scrollIntoView, active link states.
+- MOBILE MENU: a SIBLING outside <nav>, rendered only when open, else nothing in the DOM:
+{mobileMenuOpen && (<><div className="fixed inset-0 bg-black/50 z-[60] lg:hidden" onClick={() => setMobileMenuOpen(false)} /><div className="fixed top-0 right-0 bottom-0 w-[min(100%,20rem)] z-[70] bg-white lg:hidden shadow-2xl p-8 overflow-y-auto">{/* links */}</div></>)}
+FORBIDDEN: drawer inside <nav>, fixed inset-0 + translate-x-full, always-rendered off-screen panels (they cause horizontal scroll and break sticky).
+- FLOATING WHATSAPP: <a href="https://wa.me/{{CLEAN_PHONE}}" aria-label="Contact via WhatsApp" className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full flex items-center justify-center shadow-lg bg-[BRAND_ACCENT] text-white"><i className="fab fa-whatsapp text-2xl"></i></a>. Icon only: no text labels or absolute tooltips beside it.
+
+## LANGUAGE
+Detect the country FIRST from address, coordinates, Maps URL and reviews (English reviews on a Tunisian business do NOT make the site English). The PRIMARY language, default on load and used for all main copy, is the country's business language:
+- French: Tunisia, Morocco, Algeria, France, Luxembourg, Switzerland, Senegal, Ivory Coast, Cameroon, Mali, DRC and other francophone countries; Belgium (Dutch if Flanders)
+- German: Germany, Austria. Spanish: Spain, Mexico, Argentina, Colombia and other hispanophone countries. Italian: Italy. Portuguese: Portugal, Brazil. Dutch: Netherlands. Turkish: Turkey.
+- English: UK, USA, Australia, English-speaking Canada.
+- Arabic: UAE, Saudi Arabia, Qatar, Kuwait, Bahrain, Oman, Egypt, Jordan; Lebanon (French if the context is French).
+- Unsure → language of the reviews.
+Optionally add a small AR/EN language switcher in the navbar (hero + contact essentials).
+
+## COPYWRITING
+Human, believable, industry-specific, persuasive: storytelling, emotional hooks, sensory wording, strong CTAs. Avoid "Welcome to our website", "We provide quality services", "Customer satisfaction is our priority" and any generic AI copy.
+
+## SECTIONS
+Every body section MUST have a unique descriptive id (hero, services, testimonials, about, faq, contact, footer). No anonymous blocks, no ids like "section-1".
+1. NAVBAR: as specified above.
+2. HERO: unforgettable. Massive headline, emotional subheadline, primary + secondary CTA, rating display, animated layered background. Instantly conveys trust, identity, value.
+3. SERVICES: not plain cards. Dynamic alternating layouts, visual storytelling, hover animations.
+4. TESTIMONIALS: real reviews, highest rated first, as elegant or floating cards with avatar, name, stars (fas fa-star), review text and subtle motion. Avatar: if a URL is given use <img src="..." className="w-10 h-10 rounded-full object-cover" />, else a rounded div with the first letter. After the cards add a prominent, brand-styled, real <a href="{{REVIEW_URL}}"> ("Leave a Review on Google" + fa-external-link-alt). Never a placeholder or comment.
+5. ABOUT: emotional brand story (why it exists, what makes it different, what customers feel). Not corporate.
+6. FAQ: realistic questions, useState accordion.
+7. CONTACT + MAP: built to convert. {{FORM_MODE_INSTRUCTION}}
+   The form must have the class "contact-form" and use EXACTLY this behavior in its onSubmit handling:
+{{FORM_JS}}
+   Premium feel: floating labels, validation styling, focus:ring-* / focus:border-* states.
+   The Google Maps embed is MANDATORY and must sit in the SAME ROW as the form: grid grid-cols-1 lg:grid-cols-2 items-stretch, equal height, form in one column, map in the other (stacked on mobile). Wrap in <div className="rounded-2xl overflow-hidden border shadow-lg"> and use exactly:
+<iframe src="{{MAP_EMBED_URL}}" title="Map showing {{BUSINESS_NAME}} location" className="w-full h-full min-h-[300px] lg:min-h-[420px] border-0" loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade" />
+   Keep the address + an "Open in Google Maps" link below the map in the same column. Never replace the map with a text link.
+8. FOOTER: premium. Business info, quick links (same anchors as navbar), social icons (fab), WhatsApp CTA (https://wa.me/{{CLEAN_PHONE}}), phone CTA (tel:{{PHONE}}), copyright, subtle motion.
+
+## COLOR SYSTEM
+Define ONE brand palette of exactly 2-3 colors (primary, accent, neutral/dark) chosen from category, tone and audience. Use ONLY these (in shades/opacities) for every background, button, highlight, border, icon, gradient and hover. NO native brand colors: the WhatsApp button, phone icon and social icons all use your palette, never WhatsApp green or platform colors. Enforce with arbitrary values (bg-[#1a1a2e]). Keep strong contrast.
+
+## FINAL CHECK (fix any failure before output)
+- Navbar sticky top-0 z-50; mobile menu outside <nav> and conditionally rendered; no overflow on the root div
+- No TypeScript anywhere; no <style> tags; className (not class); braces on numeric/boolean props
+- All JSX tags matched; only valid Tailwind v4 classes
+- Blob sections have overflow-hidden; no horizontal scroll at 375px
+- Every section has a unique id; everything rounded-xl+
+- Max 3 colors, no native brand colors; each image used once
+- No tooltip label on the floating button
+
+RETURN ONLY THE COMPLETE REACT COMPONENT: default export, Tailwind only, fonts via <link>.
+\`;`;
+const regexPrompt = /export const DEFAULT_SYSTEM_PROMPT = `[\s\S]*?`;\n\nexport const MODIFY_PROMPT_SUFFIX = `/;
+code = code.replace(regexPrompt, newPrompt + '\n\nexport const MODIFY_PROMPT_SUFFIX = `');
+
+// 4. Update askGeminiAndValidate
+const regexAskGemini = /export async function askGeminiAndValidate\([\s\S]*?\}\n\n\/\/ NOTE: Keep modify prompt minimal/m;
+const newAskGemini = `export async function askGeminiAndValidate(
+  prompt: string,
+  apiKey: string,
+  model: GeminiModel,
+  maxValidationRetries = 0,
+  onRetry?: (attempt: number, maxRetries: number, error: string) => void,
+): Promise<string> {
+  const maxGeminiRetries = 0;
+  let lastError: Error | null = null;
+  let i = 0;
+  while (true) {
+    try {
+      const raw = await retryAskGemini(prompt, apiKey, model, maxGeminiRetries, onRetry);
+      return sanitizeGeneratedTsx(raw);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      const msg = lastError.message;
+      console.error(\`[Validation] Attempt \${i + 1}/\${maxValidationRetries + 1}: \${msg}\`);
+      onRetry?.(i + 1, maxValidationRetries + 1, msg);
+
+      if (i >= maxValidationRetries) break;
+      const delay = Math.min(1000 * Math.pow(2, i), 10000);
+      await new Promise(r => setTimeout(r, delay));
+      i++;
+    }
+  }
+  throw lastError || new Error('Failed to generate valid code after retries');
+}
+
+// NOTE: Keep modify prompt minimal`;
+code = code.replace(regexAskGemini, newAskGemini);
+
+// 5. Delete enrichment types and functions
+const regexEnrichment = /export interface EnrichedContacts \{[\s\S]*$/;
+code = code.replace(regexEnrichment, "");
+
+fs.writeFileSync(file, code);

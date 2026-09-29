@@ -1,0 +1,12 @@
+const fs = require('fs');
+let code = fs.readFileSync('c:/Users/PC/Desktop/leadmax/src/lib/prompts.ts', 'utf8');
+
+code = code.replace(/source: GeminiSource = 'proxy',\s*onTruncatedRetry\?: \(retryInSec: number\) => void,/, '');
+
+code = code.replace(/const maxGeminiRetries = 4; \/\/ per each Gemini call \(HTTP\/network drops\)\s*const isProxy = source === 'proxy';/, 'const maxGeminiRetries = 0;');
+
+code = code.replace(/const truncated = err instanceof TruncatedCodeError;\s*const msg = lastError\.message;\s*if \(truncated\) \{\s*console\.error\(\`\[Validation\] Attempt \$\{i \+ 1\}: Code truncated\$\{isProxy \? ' \(proxy — retrying in 20s\)' : ''\}\`\);\s*\} else \{\s*console\.error\(\`\[Validation\] Attempt \$\{i \+ 1\}\/\$\{maxValidationRetries \+ 1\}: \$\{msg\}\`\);\s*\}\s*onRetry\?\.\(i \+ 1, maxValidationRetries \+ 1, msg\);/, 'const msg = lastError.message;\n      console.error(`[Validation] Attempt ${i + 1}/${maxValidationRetries + 1}: ${msg}`);\n      onRetry?.(i + 1, maxValidationRetries + 1, msg);');
+
+code = code.replace(/\/\/ Proxy scenario:[\s\S]*?\/\/ Validation retries are proxy-only\. Official API fails fast on first error\.\s*if \(\!isProxy\) break;/, '');
+
+fs.writeFileSync('c:/Users/PC/Desktop/leadmax/src/lib/prompts.ts', code);

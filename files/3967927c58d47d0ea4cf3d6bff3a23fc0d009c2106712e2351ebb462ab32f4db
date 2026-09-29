@@ -1,0 +1,36 @@
+const fs = require('fs');
+let code = fs.readFileSync('c:/Users/PC/Desktop/leadmax/src/lib/prompts.ts', 'utf8');
+
+const regexAskGemini = /export async function askGeminiAndValidate\([\s\S]*?throw lastError \|\| new Error\('Failed to generate valid code after retries'\);\n\}/m;
+
+const newAskGemini = `export async function askGeminiAndValidate(
+  prompt: string,
+  apiKey: string,
+  model: GeminiModel,
+  maxValidationRetries = 0,
+  onRetry?: (attempt: number, maxRetries: number, error: string) => void,
+): Promise<string> {
+  const maxGeminiRetries = 0;
+  let lastError: Error | null = null;
+  let i = 0;
+  while (true) {
+    try {
+      const raw = await retryAskGemini(prompt, apiKey, model, maxGeminiRetries, onRetry);
+      return sanitizeGeneratedTsx(raw);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      const msg = lastError.message;
+      console.error(\`[Validation] Attempt \${i + 1}/\${maxValidationRetries + 1}: \${msg}\`);
+      onRetry?.(i + 1, maxValidationRetries + 1, msg);
+
+      if (i >= maxValidationRetries) break;
+      const delay = Math.min(1000 * Math.pow(2, i), 10000);
+      await new Promise(r => setTimeout(r, delay));
+      i++;
+    }
+  }
+  throw lastError || new Error('Failed to generate valid code after retries');
+}`;
+
+code = code.replace(regexAskGemini, newAskGemini);
+fs.writeFileSync('c:/Users/PC/Desktop/leadmax/src/lib/prompts.ts', code);

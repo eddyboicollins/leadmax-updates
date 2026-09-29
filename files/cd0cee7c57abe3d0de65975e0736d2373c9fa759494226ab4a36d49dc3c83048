@@ -1,0 +1,29 @@
+2026-09-29T12:05:30.606Z [retry:proxy:gemini-3.5-flash-lite] start maxRetries=4 promptChars=31151
+2026-09-29T12:05:30.609Z [proxy] attempt start promptChars=31151
+2026-09-29T12:05:38.957Z [proxy] HTTP 200 stream done in 8349ms rawChars=3977
+2026-09-29T12:05:38.958Z [proxy] parsed chars=91
+2026-09-29T12:05:38.958Z [retry:proxy:gemini-3.5-flash-lite] SUCCESS on attempt 1 outChars=91
+2026-09-29T12:05:58.965Z [retry:proxy:gemini-3.5-flash-lite] start maxRetries=4 promptChars=31151
+2026-09-29T12:05:58.968Z [proxy] attempt start promptChars=31151
+2026-09-29T12:06:12.264Z [proxy] HTTP 200 stream done in 13296ms rawChars=3888
+2026-09-29T12:06:12.265Z [proxy] parsed chars=65
+2026-09-29T12:06:12.265Z [retry:proxy:gemini-3.5-flash-lite] SUCCESS on attempt 1 outChars=65
+2026-09-29T12:06:32.278Z [retry:proxy:gemini-3.5-flash-lite] start maxRetries=4 promptChars=31151
+2026-09-29T12:06:32.279Z [proxy] attempt start promptChars=31151
+2026-09-29T12:08:51.871Z [retry:proxy:gemini-3.5-flash-lite] start maxRetries=4 promptChars=12594
+2026-09-29T12:08:51.874Z [proxy] attempt start promptChars=12594
+2026-09-29T12:09:01.192Z [proxy] HTTP 200 stream done in 9319ms rawChars=3872
+2026-09-29T12:09:01.192Z [proxy] parsed chars=65
+2026-09-29T12:09:01.193Z [retry:proxy:gemini-3.5-flash-lite] SUCCESS on attempt 1 outChars=65
+2026-09-29T12:09:21.200Z [retry:proxy:gemini-3.5-flash-lite] start maxRetries=4 promptChars=12594
+2026-09-29T12:09:21.200Z [proxy] attempt start promptChars=12594
+2026-09-29T12:09:34.843Z [proxy] HTTP 200 stream done in 13643ms rawChars=3890
+2026-09-29T12:09:34.844Z [proxy] parsed chars=69
+2026-09-29T12:09:34.844Z [retry:proxy:gemini-3.5-flash-lite] SUCCESS on attempt 1 outChars=69
+2026-09-29T12:11:18.430Z [retry:proxy:gemini-3.5-flash-lite] start maxRetries=4 promptChars=12594
+2026-09-29T12:11:18.431Z [proxy] attempt start promptChars=12594
+2026-09-29T12:11:31.151Z [proxy] HTTP 200 stream done in 12719ms rawChars=3900
+2026-09-29T12:11:31.151Z [proxy] parsed chars=69
+2026-09-29T12:11:31.151Z [retry:proxy:gemini-3.5-flash-lite] SUCCESS on attempt 1 outChars=69
+2026-09-29T12:11:51.158Z [retry:proxy:gemini-3.5-flash-lite] start maxRetries=4 promptChars=12594
+2026-09-29T12:11:51.159Z [proxy] attempt start promptChars=12594

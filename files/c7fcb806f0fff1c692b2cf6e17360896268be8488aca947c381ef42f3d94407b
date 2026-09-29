@@ -1,0 +1,9 @@
+const fs = require('fs');
+let w = fs.readFileSync('src/components/OnboardingWizard.tsx', 'utf8');
+w = w.replace(/const \[imgbbKey, setImgbbKey\] = useState\(''\);\r?\n\s*const \[imgbbSaving, setImgbbSaving\] = useState\(false\);\r?\n\s*const \[imgbbDone, setImgbbDone\] = useState\(false\);\r?\n\s*const \[imgbbError, setImgbbError\] = useState\(''\);/, `const [filebaseAccessKey, setFilebaseAccessKey] = useState('');
+  const [filebaseSecretKey, setFilebaseSecretKey] = useState('');
+  const [filebaseBucket, setFilebaseBucket] = useState('');
+  const [filebaseSaving, setFilebaseSaving] = useState(false);
+  const [filebaseDone, setFilebaseDone] = useState(false);
+  const [filebaseError, setFilebaseError] = useState('');`);
+fs.writeFileSync('src/components/OnboardingWizard.tsx', w);

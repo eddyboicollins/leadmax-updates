@@ -1,0 +1,33 @@
+export type VerifyResult = { valid: true } | { valid: false; error: string };
+
+export async function verifyVercelToken(token: string): Promise<VerifyResult> {
+  if (!token.trim()) return { valid: false, error: 'Token is empty' };
+  try {
+    const res = await fetch('https://api.vercel.com/v2/user', {
+      headers: { Authorization: `Bearer ${token.trim()}` },
+    });
+    if (res.ok) return { valid: true };
+    if (res.status === 403) return { valid: false, error: 'Token is invalid or expired' };
+    if (res.status === 401) return { valid: false, error: 'Token is unauthorized' };
+    return { valid: false, error: `Vercel API returned ${res.status}` };
+  } catch {
+    return { valid: false, error: 'Could not reach Vercel API — check your internet connection' };
+  }
+}
+
+export async function verifyFilebaseKeys(accessKey: string, secretKey: string, bucket: string): Promise<VerifyResult> {
+  if (!accessKey.trim() || !secretKey.trim() || !bucket.trim()) return { valid: false, error: 'All Filebase fields are required' };
+  return { valid: true };
+}
+
+export async function verifyGeminiKey(key: string): Promise<VerifyResult> {
+  if (!key.trim()) return { valid: false, error: 'Key is empty' };
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key.trim()}`);
+    if (res.ok) return { valid: true };
+    if (res.status === 403 || res.status === 401 || res.status === 400) return { valid: false, error: 'API Key is invalid' };
+    return { valid: false, error: `Gemini API returned ${res.status}` };
+  } catch {
+    return { valid: false, error: 'Could not reach Gemini API — check your internet connection' };
+  }
+}

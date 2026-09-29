@@ -18,6 +18,7 @@ const nextConfig: NextConfig = {
     '@puppeteer/browsers',
     'chromium-bidi',
     'devtools-protocol',
+    '@aws-sdk/client-s3',
   ],
   experimental: {
     serverActions: {

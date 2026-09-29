@@ -312,7 +312,8 @@
       "puppeteer-core",
       "@puppeteer/browsers",
       "chromium-bidi",
-      "devtools-protocol"
+      "devtools-protocol",
+      "@aws-sdk/client-s3"
     ],
     "outputFileTracingExcludes": {
       "/**": [

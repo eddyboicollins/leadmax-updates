@@ -1,0 +1,89 @@
+import { S3Client, PutObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import crypto from 'crypto';
+import sharp from 'sharp';
+
+export interface FilebaseResult {
+  url: string;
+}
+
+/** Landing pages never need more than this — full-res phone/Maps photos
+ *  (4000px+, several MB) made both the studio preview and live sites crawl. */
+const IMAGE_MAX_WIDTH = 1920;
+
+/**
+ * Normalize any uploaded/imported photo for the web: cap width, webp q80.
+ * Returns the exact bytes to store plus their final dimensions.
+ */
+export async function processImageForUpload(input: Buffer): Promise<{
+  buffer: Buffer;
+  width?: number;
+  height?: number;
+}> {
+  const resized = await sharp(input)
+    .resize({ width: IMAGE_MAX_WIDTH, withoutEnlargement: true })
+    .webp({ quality: 80 })
+    .toBuffer();
+  // Backstop for pathological images that are still huge after resizing.
+  const buffer =
+    resized.length > 8 * 1024 * 1024
+      ? await sharp(input)
+          .resize({ width: 1600, withoutEnlargement: true })
+          .webp({ quality: 70 })
+          .toBuffer()
+      : resized;
+  const meta = await sharp(buffer).metadata();
+  return { buffer, width: meta.width, height: meta.height };
+}
+
+export async function uploadToFilebase(base64Image: string, accessKey: string, secretKey: string, bucket: string): Promise<FilebaseResult> {
+  if (!accessKey || !secretKey || !bucket) {
+    throw new Error('Filebase credentials or bucket not configured');
+  }
+
+  const s3 = new S3Client({
+    region: 'us-east-1',
+    endpoint: 'https://s3.filebase.com',
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: accessKey,
+      secretAccessKey: secretKey,
+    },
+  });
+
+  const fileKey = `${crypto.randomUUID()}.webp`;
+  const buffer = Buffer.from(base64Image, 'base64');
+
+  const cmd = new PutObjectCommand({
+    Bucket: bucket,
+    Key: fileKey,
+    Body: buffer,
+    ContentType: 'image/webp',
+    ACL: 'public-read',
+  });
+
+  try {
+    await s3.send(cmd);
+
+    // Prefer the direct S3 URL: the public ipfs.filebase.io gateway is
+    // painfully slow on cold fetches (multi-second stalls in previews and
+    // on live sites). Verified public via an anonymous HEAD; the gateway
+    // stays as fallback so uploads never break on bucket config surprises.
+    const s3Url = `https://${bucket}.s3.filebase.com/${fileKey}`;
+    try {
+      const probe = await fetch(s3Url, { method: 'HEAD' });
+      if (probe.ok) return { url: s3Url };
+    } catch {
+      /* fall through to gateway */
+    }
+
+    // Retrieve the IPFS CID from Filebase metadata
+    const headCmd = new HeadObjectCommand({ Bucket: bucket, Key: fileKey });
+    const headData = await s3.send(headCmd);
+    const cid = headData.Metadata?.cid;
+
+    const url = cid ? `https://ipfs.filebase.io/ipfs/${cid}` : s3Url;
+    return { url };
+  } catch (err: any) {
+    throw new Error(`Filebase upload failed: ${err.message}`);
+  }
+}

@@ -1,0 +1,867 @@
+/**
+ * AI Proxy — Gemini web UI automation (server-only).
+ *
+ * Adapted from the standalone `scraper.js` worker you provided, trimmed for
+ * LeadMax's needs:
+ *  - No CLI / stdin worker mode, no file output — this is an in-process
+ *    singleton used by Next.js API routes via `askProxy(prompt, onChunk?)`.
+ *  - No system-prompt preamble — our prompts (landing-page TSX, JSON profile,
+ *    manual-resolve, deploy-fix) are already complete when they arrive here.
+ *  - Generic text support — the original only returned *code-shaped* strings
+ *    from the StreamGenerate payload. We keep that extractor for landing-page
+ *    generation but fall back to a generic longest-text extractor + DOM
+ *    fallback so JSON prompts (business profile, manual resolve) work too.
+ *
+ * How it works (same as your script): patch XMLHttpRequest before page load,
+ * watch the long-lived `.../BardFrontendService/StreamGenerate` request, read
+ * `responseText` incrementally via `progress` events, and scan the chunked
+ * JSON-RPC payload for the reply. No Canvas UI driving needed.
+ *
+ * NOTE: undocumented Google wire format — can break silently on a Gemini
+ * frontend change. The official API remains the reliable path; this proxy is
+ * the free alternative you can pick per Settings → AI Source.
+ *
+ * Two proxy-specific behaviors callers should know about:
+ *  - CHUNKING: Gemini's web input box truncates pasted input (~32k chars).
+ *    Prompts longer than PROXY_CHUNK_LIMIT are sent as consecutive turns of
+ *    the same chat (earlier turns carry a "reply OK and wait" note); only
+ *    the final turn's reply is returned.
+ *  - STALL TIMEOUT: slowness is fine — only a stream that produces no new
+ *    bytes for PROXY_STALL_TIMEOUT_MS is treated as dead. Transport errors
+ *    (insert failures, stalls, blocks) throw immediately with a truthful
+ *    message; they are NOT retried here (see askGeminiAndValidate).
+ *
+ * Auth: persists a Chrome profile under `<data>/gemini-proxy-profile`.
+ * First run: launch once with PROXY_HEADLESS=false, sign in manually in the
+ * opened window, then later runs reuse the session headless.
+ */
+/* eslint-disable @typescript-eslint/no-explicit-any, prefer-rest-params -- puppeteer page fns + XHR patching need `any` */
+
+import path from 'path';
+import { promises as fs } from 'fs';
+import type { ProxyStatus } from '@/lib/gemini';
+
+const GEMINI_URL = 'https://gemini.google.com/app';
+const NAV_TIMEOUT_MS = Number(process.env.PROXY_NAV_TIMEOUT_MS || 60_000);
+// Absolute ceiling for one turn's stream. There is NO stall/silence timeout —
+// a slow-but-alive generation must never be killed for being quiet.
+const STREAM_TIMEOUT_MS = Number(process.env.PROXY_STREAM_TIMEOUT_MS || 600_000);
+// Gemini's web prompt box truncates pasted input (~32k chars observed), so
+// longer prompts are split into same-chat turns of at most this size.
+const CHUNK_LIMIT = Number(process.env.PROXY_CHUNK_LIMIT || 28_000);
+
+function dataDir(): string {
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'data');
+  }
+  return path.join(process.cwd(), 'data');
+}
+
+function proxyProfileDir(): string {
+  return path.join(dataDir(), 'gemini-proxy-profile');
+}
+
+function isHeadless(): boolean {
+  return process.env.PROXY_HEADLESS !== 'false';
+}
+
+function jitter(baseMs: number, spreadMs: number): number {
+  return baseMs + Math.floor(Math.random() * spreadMs);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ── Payload scanning (ported from scraper.js) ─────────────────────────────
+
+function* findStringLiterals(text: string): Generator<string> {
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] !== '"') {
+      i++;
+      continue;
+    }
+    const start = i + 1;
+    let j = start;
+    let escaped = false;
+    while (j < text.length) {
+      const c = text[j];
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') break;
+      j++;
+    }
+    if (j >= text.length) break; // unterminated (likely mid-stream)
+    yield text.slice(start, j);
+    i = j + 1;
+  }
+}
+
+const CODE_SIGNAL_RE =
+  /```(react|tsx|jsx|javascript|js|ts)|import\s+React|function App\s*\(|export default function|export\s+default\s+\w+/;
+
+const MAX_NESTING_DEPTH = 30;
+
+function walkLiterals(
+  text: string,
+  onDecoded: (decoded: string, depth: number) => void,
+): void {
+  function walk(str: string, depth: number) {
+    if (depth > MAX_NESTING_DEPTH) return;
+    for (const literal of findStringLiterals(str)) {
+      if (literal.length < 50) continue;
+      let decoded: string;
+      try {
+        decoded = JSON.parse('"' + literal + '"');
+      } catch {
+        continue;
+      }
+      onDecoded(decoded, depth);
+      const trimmed = decoded.trim();
+      if ((trimmed.startsWith('[') || trimmed.startsWith('{')) && decoded.length > 100) {
+        walk(decoded, depth + 1);
+      }
+    }
+  }
+  walk(text, 0);
+}
+
+/** Longest code-shaped string in the (possibly partial) stream payload. */
+export function findBestCodeCandidate(text: string): string | null {
+  let best: string | null = null;
+  walkLiterals(text, (decoded, depth) => {
+    if (depth >= 1 && decoded.length > 200 && CODE_SIGNAL_RE.test(decoded)) {
+      if (!best || decoded.length > best.length) best = decoded;
+    }
+  });
+  return best;
+}
+
+/**
+ * Longest plausible *prose/JSON* string — for non-code prompts (business
+ * profile JSON, manual-resolve JSON, short answers). Skips strings that look
+ * like code fences so a half-streamed code reply doesn't win here.
+ */
+export function findBestTextCandidate(text: string): string | null {
+  let best: string | null = null;
+  walkLiterals(text, (decoded, depth) => {
+    if (depth < 1 || decoded.length < 80) return;
+    if (CODE_SIGNAL_RE.test(decoded)) return;
+    const trimmed = decoded.trim();
+    // Must look like language or JSON, not wire metadata / URLs / blobs.
+    if (!/[ \n]/.test(trimmed)) return;
+    if (!best || decoded.length > best.length) best = decoded;
+  });
+  return best;
+}
+
+export function stripCodeFence(text: string): string {
+  return text
+    .replace(/^```(react|tsx|jsx|javascript|js|ts|json)?\n/, '')
+    .replace(/\n```\s*$/, '');
+}
+
+// ── Page-side helpers (must stay closure-free for evaluateOnNewDocument) ──
+
+function installXhrInterceptor(): void {
+  const OrigOpen = XMLHttpRequest.prototype.open;
+  const OrigSend = XMLHttpRequest.prototype.send;
+  (XMLHttpRequest.prototype as any).open = function (method: string, url: string) {
+    (this as any).__isStreamGenerate =
+      typeof url === 'string' && url.indexOf('/StreamGenerate') !== -1;
+    return OrigOpen.apply(this, arguments as any);
+  };
+  (XMLHttpRequest.prototype as any).send = function () {
+    if ((this as any).__isStreamGenerate) {
+      let lastLen = 0;
+      const xhr = this as XMLHttpRequest;
+      const flush = () => {
+        try {
+          const text = xhr.responseText;
+          if (typeof text === 'string' && text.length > lastLen) {
+            const delta = text.slice(lastLen);
+            lastLen = text.length;
+            if ((window as any).__onStreamChunk) (window as any).__onStreamChunk(delta);
+          }
+        } catch {
+          // responseText not accessible yet at this readyState — next event catches up
+        }
+      };
+      xhr.addEventListener('progress', flush);
+      xhr.addEventListener('readystatechange', function () {
+        if (xhr.readyState === 4) {
+          flush();
+          if ((window as any).__onStreamDone) (window as any).__onStreamDone();
+        }
+      });
+    }
+    return OrigSend.apply(this, arguments as any);
+  };
+}
+
+function installPreviewFrameReaper(): void {
+  const PREVIEW_CONTAINERS =
+    'web-preview, inline-preview, immersive-panel, immersive-entry-chip';
+  (window as any).__reapedFrames = 0;
+  const reap = (node: any) => {
+    if (!node || node.nodeType !== 1) return;
+    const frames: any[] =
+      node.tagName === 'IFRAME' ? [node] : Array.from(node.querySelectorAll('iframe'));
+    for (const f of frames) {
+      try {
+        if (f.closest(PREVIEWS())) {
+          f.remove();
+          (window as any).__reapedFrames++;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    function PREVIEWS() {
+      return PREVIEW_CONTAINERS;
+    }
+  };
+  new MutationObserver((mutations) => {
+    for (const m of mutations) for (const n of m.addedNodes) reap(n);
+  }).observe(document, { childList: true, subtree: true });
+}
+
+// ── Browser singleton + serialized turn queue ─────────────────────────────
+// Shared via globalThis so Next.js dev HMR — which re-evaluates this module
+// and would otherwise orphan the old browser AND launch a second one into
+// the same locked profile ("already running" error) — reuses one browser,
+// one page, one queue, and one in-flight launch across reloads.
+
+type PuppeteerModule = typeof import('puppeteer');
+type Browser = Awaited<ReturnType<PuppeteerModule['launch']>>;
+type Page = Awaited<ReturnType<Browser['newPage']>>;
+
+interface ProxyShared {
+  browser: Browser | null;
+  page: Page | null;
+  launching: Promise<Page> | null;
+  chatReady: boolean;
+  queue: Promise<unknown>;
+}
+
+function shared(): ProxyShared {
+  const g = globalThis as unknown as { __leadmaxProxy?: ProxyShared };
+  if (!g.__leadmaxProxy) {
+    g.__leadmaxProxy = {
+      browser: null,
+      page: null,
+      launching: null,
+      chatReady: false,
+      queue: Promise.resolve(),
+    };
+  }
+  return g.__leadmaxProxy;
+}
+
+// Trampolines for the page's exposed stream functions. These are per module
+// instance, so a page reused after HMR gets rebound via bindPageFunctions.
+let onStreamChunk: (delta: string) => void = () => {};
+let onStreamDone: () => void = () => {};
+
+async function loadPuppeteer(): Promise<PuppeteerModule> {
+  const mod = await import('puppeteer');
+  if ('default' in mod && mod.default && typeof (mod.default as any).launch === 'function') {
+    return mod.default as unknown as PuppeteerModule;
+  }
+  return mod as unknown as PuppeteerModule;
+}
+
+async function resolveExecutable(): Promise<string | undefined> {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
+  // Prefer puppeteer's bundled Chromium (no path = default). Only fall back
+  // to a system browser when the default launch fails (see ensureBrowser).
+  return undefined;
+}
+
+function systemBrowserCandidates(): string[] {
+  const isWin = process.platform === 'win32';
+  const isMac = process.platform === 'darwin';
+  const localAppData = process.env.LOCALAPPDATA || '';
+  const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
+  const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+  if (isWin) {
+    return [
+      path.join(programFiles, 'Google\\Chrome\\Application\\chrome.exe'),
+      path.join(programFilesX86, 'Google\\Chrome\\Application\\chrome.exe'),
+      path.join(localAppData, 'Google\\Chrome\\Application\\chrome.exe'),
+      path.join(programFiles, 'BraveSoftware\\Brave-Browser\\Application\\brave.exe'),
+      path.join(programFilesX86, 'Microsoft\\Edge\\Application\\msedge.exe'),
+      path.join(programFiles, 'Microsoft\\Edge\\Application\\msedge.exe'),
+    ];
+  }
+  if (isMac) {
+    return [
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    ];
+  }
+  return ['/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium'];
+}
+
+async function ensureBrowser(): Promise<Page> {
+  const s = shared();
+  if (s.page && s.browser?.connected) {
+    // Page survived a dev HMR reload: the exposed functions still point at
+    // the OLD module instance's trampolines, so rebind them to this one.
+    await bindPageFunctions(s.page).catch(() => {});
+    return s.page;
+  }
+  s.page = null;
+  if (s.browser && !s.browser.connected) s.browser = null;
+  // Launch mutex: concurrent cold starts share one launch instead of racing
+  // two browsers into the same locked profile.
+  if (!s.launching) {
+    s.launching = (async () => {
+      try {
+        const { browser, page } = await launchWithFriendlyLockError();
+        s.browser = browser;
+        s.page = page;
+        s.chatReady = false;
+        return page;
+      } finally {
+        shared().launching = null;
+      }
+    })();
+  }
+  return s.launching;
+}
+
+/** (Re)bind the stream trampolines of THIS module instance on the page. */
+async function bindPageFunctions(p: Page): Promise<void> {
+  for (const name of ['__onStreamChunk', '__onStreamDone']) {
+    try {
+      await (p as any).removeExposedFunction?.(name);
+    } catch {
+      /* never exposed here — exposing below is enough */
+    }
+  }
+  await p.exposeFunction('__onStreamChunk', (delta: string) => onStreamChunk(delta));
+  await p.exposeFunction('__onStreamDone', () => onStreamDone());
+}
+
+/**
+ * Launch. A lock held by a genuinely separate running instance can never be
+ * shared — that fails immediately with an actionable message instead of
+ * puppeteer's cryptic one. No retries: callers surface the error as-is.
+ */
+async function launchWithFriendlyLockError(): Promise<{ browser: Browser; page: Page }> {
+  try {
+    return await doLaunch();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/already running/i.test(msg)) throw err;
+    throw new Error(
+      'Proxy browser is already running in another LeadMax instance using the same data folder. ' +
+        'Close the other window (dev server / desktop app) and retry. ' +
+        'If nothing else is open, quit every Chrome process — a crashed run may hold a stale profile lock — and retry.',
+    );
+  }
+}
+
+async function doLaunch(): Promise<{ browser: Browser; page: Page }> {
+  const puppeteer = await loadPuppeteer();
+  await fs.mkdir(proxyProfileDir(), { recursive: true });
+  const headless = isHeadless();
+  const baseArgs = [
+    '--disable-blink-features=AutomationControlled',
+    '--window-size=1400,1000',
+    '--disable-site-isolation-trials',
+    '--disable-features=IsolateOrigins,site-per-process',
+    '--renderer-process-limit=4',
+    '--disable-extensions',
+    '--mute-audio',
+    '--no-sandbox',
+    '--disable-dev-shm-usage',
+  ];
+  const execPath = await resolveExecutable();
+  let browser: Browser | null = null;
+  try {
+    browser = await puppeteer.launch({
+      headless: headless ? ('new' as any) : false,
+      userDataDir: proxyProfileDir(),
+      ...(execPath ? { executablePath: execPath } : {}),
+      defaultViewport: { width: 1400, height: 1000 },
+      args: baseArgs,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Profile lock: other binaries would hit the same lock — rethrow for
+    // launchWithFriendlyLockError instead of pointlessly trying every browser.
+    if (/already running/i.test(msg)) throw err;
+    // Bundled Chromium missing/failed — try an installed system browser.
+    let launched = false;
+    for (const candidate of systemBrowserCandidates()) {
+      try {
+        await fs.access(candidate);
+      } catch {
+        continue;
+      }
+      try {
+        browser = await puppeteer.launch({
+          headless: headless ? ('new' as any) : false,
+          userDataDir: proxyProfileDir(),
+          executablePath: candidate,
+          defaultViewport: { width: 1400, height: 1000 },
+          args: baseArgs,
+        });
+        launched = true;
+        break;
+      } catch {
+        // try next candidate
+      }
+    }
+    if (!launched) throw err;
+  }
+  const page = await browser!.newPage();
+  if (headless) {
+    await page.setRequestInterception(true).catch(() => {});
+    page.on('request', (req: any) => {
+      const type = req.resourceType();
+      if (type === 'image' || type === 'media' || type === 'font') {
+        req.abort('blockedbyclient').catch(() => {});
+      } else {
+        req.continue().catch(() => {});
+      }
+    });
+  }
+  try {
+    const ua = await browser!.userAgent();
+    await page.setUserAgent(ua.replace('HeadlessChrome', 'Chrome'));
+  } catch {
+    /* keep default UA */
+  }
+  await bindPageFunctions(page);
+  await page.evaluateOnNewDocument(installXhrInterceptor as any);
+  await page.evaluateOnNewDocument(installPreviewFrameReaper as any);
+  return { browser: browser!, page };
+}
+
+async function detectBlock(p: Page): Promise<string | null> {
+  const bodyText: string = await p
+    .evaluate(() => document.body.innerText || '')
+    .catch(() => '');
+  const phrases = [
+    'unusual traffic',
+    "verify you're human",
+    'verify you are human',
+    'our systems have detected unusual',
+    'automated queries',
+  ];
+  const hit = phrases.find((x) => bodyText.toLowerCase().includes(x));
+  return hit || null;
+}
+
+async function ensureChat(p: Page, forceFresh = false): Promise<void> {
+  if (shared().chatReady && !forceFresh) return;
+  await p.goto(GEMINI_URL, { waitUntil: 'networkidle2', timeout: NAV_TIMEOUT_MS });
+  const block = await detectBlock(p);
+  if (block) {
+    throw new Error(
+      `Google served a bot-challenge page (matched "${block}"). ` +
+        'Run once with PROXY_HEADLESS=false and solve it manually, then retry.',
+    );
+  }
+  // Wait for the prompt box so we know the app actually loaded.
+  await p
+    .waitForSelector('div[contenteditable="true"], rich-textarea div[contenteditable="true"], textarea', {
+      timeout: NAV_TIMEOUT_MS,
+    })
+    .catch(() => {
+      throw new Error(
+        'Gemini chat box did not load. You may need to sign in once with PROXY_HEADLESS=false.',
+      );
+    });
+  shared().chatReady = true;
+}
+
+async function typePromptFast(p: Page, prompt: string): Promise<void> {
+  const editor: any = await p.waitForSelector(
+    'div[contenteditable="true"], rich-textarea div[contenteditable="true"], textarea',
+    { timeout: NAV_TIMEOUT_MS },
+  );
+
+  // Gemini's editor occasionally keeps focus off the contenteditable after a
+  // synthetic click, so `document.activeElement` is wrong and the insert
+  // silently lands nowhere ("holds 1 chars"). Fix: target the editable node
+  // directly, re-assert focus, and replace its selection — retried within
+  // this same turn (a paste retry, not an AI re-run).
+  let composed = 0;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await editor.click({ clickCount: 3 });
+    } catch {
+      /* click can fail while the editor settles — the JS focus below still runs */
+    }
+    composed = await p
+      .evaluate((text: string) => {
+        const ed = document.querySelector(
+          'div[contenteditable="true"], textarea',
+        ) as HTMLElement | null;
+        if (!ed) return 0;
+        ed.focus();
+        const sel = window.getSelection();
+        if (sel) {
+          const range = document.createRange();
+          range.selectNodeContents(ed);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+        // Bulk-insert. insertLineBreak keeps Shift+Enter semantics: a raw
+        // Enter SUBMITS, so newlines must never be typed directly.
+        const lines = text.split('\n');
+        lines.forEach((line, i) => {
+          if (i > 0) document.execCommand('insertLineBreak');
+          if (line) document.execCommand('insertText', false, line);
+        });
+        if (sel) {
+          sel.selectAllChildren(ed);
+          sel.collapseToEnd();
+        }
+        const len = (ed as any).innerText?.length ?? (ed as any).value?.length ?? 0;
+        return len;
+      }, prompt)
+      .catch(() => 0);
+
+    if (composed >= prompt.length * 0.9) break;
+    await sleep(500);
+  }
+
+  if (composed < prompt.length * 0.9) {
+    throw new Error(
+      `Prompt did not land in the editor (holds ${composed} chars, expected ~${prompt.length}).`,
+    );
+  }
+}
+
+async function submitPrompt(p: Page): Promise<void> {
+  const sendBtn: any = await p.$('button[aria-label*="Send" i], button[aria-label*="Submit" i]');
+  if (sendBtn) {
+    const disabled: boolean = await p.evaluate((el: any) => !!el.disabled, sendBtn).catch(() => true);
+    if (!disabled) {
+      await sendBtn.click().catch(() => {});
+      return;
+    }
+  }
+  await p.keyboard.press('Enter');
+}
+
+async function readDomFallback(p: Page): Promise<string> {
+  await sleep(1200).catch(() => {});
+  const text: string = await p
+    .evaluate(() => {
+      const pick = (sel: string): string => {
+        const nodes = Array.from(document.querySelectorAll(sel));
+        if (!nodes.length) return '';
+        const last = nodes[nodes.length - 1] as HTMLElement;
+        return (last.innerText || '').trim();
+      };
+      return (
+        pick('[data-message-author="model"]') ||
+        pick('div[data-message-id]') ||
+        pick('message-content') ||
+        pick('.markdown') ||
+        (document.body.innerText || '').slice(-20000)
+      );
+    })
+    .catch(() => '');
+  return (text || '').trim();
+}
+
+function pickBest(accumulated: string): { code: string | null; text: string | null } {
+  return {
+    code: findBestCodeCandidate(accumulated),
+    text: findBestTextCandidate(accumulated),
+  };
+}
+
+/** Split a long prompt at newline boundaries (hard-splitting overlong lines). */
+export function splitPrompt(prompt: string, limit: number): string[] {
+  if (prompt.length <= limit) return [prompt];
+  const chunks: string[] = [];
+  let cur = '';
+  const push = () => {
+    if (cur) chunks.push(cur);
+    cur = '';
+  };
+  for (const line of prompt.split('\n')) {
+    if (line.length > limit) {
+      push();
+      for (let i = 0; i < line.length; i += limit) chunks.push(line.slice(i, i + limit));
+      continue;
+    }
+    if ((cur ? cur.length + 1 : 0) + line.length > limit) push();
+    cur = cur ? cur + '\n' + line : line;
+  }
+  push();
+  return chunks.filter(Boolean);
+}
+
+const holdSuffix = (i: number, n: number): string =>
+  `\n\n[Note: this request continues in part ${i + 1} of ${n} — reply with exactly "OK" and nothing else.]`;
+const GO_SUFFIX = `\n\n[Note: this is the final part. Now fulfill the complete request above.]`;
+
+/** Waits for stream completion. No stall timeout — only the absolute ceiling. */
+async function waitForStreamDone(
+  done: Promise<void>,
+  getLastActivity: () => number,
+): Promise<boolean> {
+  const start = Date.now();
+  let doneFlag = false;
+  done.then(
+    () => { doneFlag = true; },
+    () => { doneFlag = true; },
+  );
+  let lastHeartbeat = 0;
+  while (true) {
+    if (doneFlag) return true;
+    if (Date.now() - start > STREAM_TIMEOUT_MS) return false;
+    const now = Date.now();
+    if (now - lastHeartbeat > 10_000) {
+      lastHeartbeat = now;
+      const quiet = Math.max(0, Math.round((now - getLastActivity()) / 1000));
+      console.log(
+        `[proxy] waiting for StreamGenerate… ${Math.round((now - start) / 1000)}s elapsed, last output ${quiet}s ago`,
+      );
+    }
+    await sleep(1000);
+  }
+}
+
+/**
+ * Types one chunk into the editor, submits it, and waits for the reply to
+ * finish. Hold turns (non-final chunks) just drain the ack; only the final
+ * turn forwards grown text via onTextGrown.
+ */
+async function submitChunk(
+  p: Page,
+  text: string,
+  onTextGrown?: (fullBest: string) => void,
+): Promise<string> {
+  const label = onTextGrown ? 'final' : 'hold';
+  const start = Date.now();
+  console.log(`[proxy] submitChunk(${label}): typing ${text.length} chars into the editor`);
+
+  let accumulated = '';
+  let resolveDone!: () => void;
+  const donePromise = new Promise<void>((resolve) => {
+    resolveDone = resolve;
+  });
+  let emittedUpTo = 0;
+  let chunkCount = 0;
+  let firstChunkAt = 0;
+  let foundCodeAt = 0;
+  let lastActivity = Date.now();
+  onStreamChunk = (delta: string) => {
+    accumulated += delta;
+    lastActivity = Date.now();
+    chunkCount++;
+    if (!firstChunkAt) {
+      firstChunkAt = Date.now();
+      console.log(`[proxy] submitChunk(${label}): first stream chunk after ${firstChunkAt - start}ms`);
+    }
+    if (onTextGrown) {
+      // Emit the RAW growing code (fence intact) so deltas stay monotonic.
+      // stripCodeFence is NON-monotonic mid-stream: the opening fence only
+      // matches once its trailing newline arrives, so stripping it early
+      // makes the "best" string shrink and corrupts delta splicing (that's
+      // why the live code never visibly scrolled/grew).
+      const code = findBestCodeCandidate(accumulated);
+      if (code && code.length > emittedUpTo) {
+        if (!foundCodeAt) {
+          foundCodeAt = Date.now();
+          console.log(
+            `[proxy] submitChunk(${label}): code candidate found (${code.length} chars) after ${foundCodeAt - start}ms`,
+          );
+        }
+        emittedUpTo = code.length;
+        onTextGrown(code);
+      }
+    }
+    if (chunkCount % 50 === 0) {
+      let snippet = '';
+      if (onTextGrown && emittedUpTo === 0) {
+        const txt = findBestTextCandidate(accumulated);
+        if (txt) snippet = ` | non-code reply: "${txt.slice(0, 160).replace(/\s+/g, ' ')}"`;
+        else snippet = ` | raw tail: "${accumulated.slice(-160).replace(/\s+/g, ' ')}"`;
+      }
+      console.log(
+        `[proxy] submitChunk(${label}): ${chunkCount} chunks / ${accumulated.length} bytes / code ${emittedUpTo} chars / ${Math.round((Date.now() - start) / 1000)}s${snippet}`,
+      );
+    }
+  };
+  onStreamDone = () => {
+    console.log(
+      `[proxy] submitChunk(${label}): stream done — ${accumulated.length} bytes, ${chunkCount} chunks, ${Math.round((Date.now() - start) / 1000)}s`,
+    );
+    resolveDone();
+  };
+
+  await typePromptFast(p, text);
+  console.log(`[proxy] submitChunk(${label}): editor filled, submitting prompt`);
+  await sleep(jitter(200, 300));
+  await submitPrompt(p);
+  console.log(`[proxy] submitChunk(${label}): prompt submitted, waiting for StreamGenerate`);
+
+  const finished = await waitForStreamDone(donePromise, () => lastActivity);
+  if (!finished) {
+    const s = Math.round(STREAM_TIMEOUT_MS / 1000);
+    throw new Error(
+      `Proxy timed out after ${s}s waiting for Gemini's response. Try again or switch AI Source to Official API.`,
+    );
+  }
+  return accumulated;
+}
+
+async function runTurn(
+  prompt: string,
+  onChunk?: (text: string) => void,
+  onStatus?: (event: ProxyStatus) => void,
+): Promise<string> {
+  onStatus?.({ type: 'uploading' });
+  const p = await ensureBrowser();
+  // Each generate/regenerate/modify is an independent request, so it must
+  // start in a FRESH chat. Reusing the warm chat accumulates context from the
+  // previous request (prompt + generated code), which is exactly what made
+  // the second request's final turn slow down and hang — and why killing the
+  // server (which closes the browser and resets the chat) "fixed" it.
+  await ensureChat(p, true);
+
+  // Oversized prompts don't fit Gemini's web input box in one paste, so
+  // they go out as consecutive turns of the SAME chat (context carries
+  // over); only the final turn's reply is the answer.
+  const pieces = splitPrompt(prompt, CHUNK_LIMIT);
+  if (pieces.length > 1) {
+    console.log(`[proxy] prompt is ${prompt.length} chars, sending as ${pieces.length} same-chat turns`);
+  }
+
+  let lastRaw = '';
+  for (let i = 0; i < pieces.length; i++) {
+    const isLast = i === pieces.length - 1;
+    const text =
+      pieces.length > 1
+        ? pieces[i] + (isLast ? GO_SUFFIX : holdSuffix(i, pieces.length))
+        : pieces[i];
+    // Turn progress is terminal-only; the frontend gets its own friendly copy
+    // via the SSE events built from these statuses.
+    if (pieces.length > 1) {
+      console.log(`[proxy] turn ${i + 1}/${pieces.length}`);
+      onStatus?.({ type: 'turn', turn: i + 1, total: pieces.length });
+    }
+    if (isLast) {
+      console.log(`[proxy] turn ${i + 1}/${pieces.length} is the FINAL turn — streaming the answer`);
+      let emittedUpTo = 0;
+      let announcedStream = false;
+      lastRaw = await submitChunk(p, text, (fullBest) => {
+        if (!announcedStream) {
+          announcedStream = true;
+          console.log('[proxy] final turn: first code delta emitted, announcing "streaming"');
+          onStatus?.({ type: 'streaming' });
+        }
+        const delta = fullBest.slice(emittedUpTo);
+        emittedUpTo = fullBest.length;
+        if (!delta) return;
+        try {
+          onChunk?.(delta);
+        } catch {
+          /* chunk consumer failed — ignore */
+        }
+      });
+    } else {
+      await submitChunk(p, text);
+      // Let the editor settle/clear before the next part goes in.
+      await sleep(1500);
+    }
+  }
+  const accumulated = lastRaw;
+
+  console.log(`[proxy] extraction: accumulated ${accumulated.length} raw chars`);
+  const { code, text } = pickBest(accumulated);
+  if (code) {
+    const stripped = stripCodeFence(code);
+    console.log(`[proxy] extraction: returned code (${stripped.length} chars)`);
+    return stripped;
+  }
+  if (text && text.length >= 40) {
+    console.log(`[proxy] extraction: returned text (${text.length} chars)`);
+    return stripCodeFence(text).trim();
+  }
+
+  // Plain chat reply that never matched the extractors — read the DOM.
+  console.log('[proxy] extraction: no code/text found — reading DOM fallback');
+  const dom = await readDomFallback(p);
+  if (dom && dom.length >= 20) {
+    console.log(`[proxy] extraction: returned DOM text (${dom.length} chars)`);
+    return dom;
+  }
+  if (accumulated.length > 0 && text) return text.trim();
+  throw new Error(
+    'Proxy received a reply but could not extract text from it. ' +
+      'Gemini may have changed its web format — switch AI Source to Official API and retry.',
+  );
+}
+
+/**
+ * Ask the Gemini web UI (free proxy path). Calls are serialized — the
+ * browser holds a single chat, so concurrent callers queue behind it.
+ * `onChunk` receives incremental deltas (same contract as askGemini);
+ * `onStatus` receives human-readable progress (e.g. "Part 2 of 3").
+ */
+export async function askProxy(
+  prompt: string,
+  onChunk?: (text: string) => void,
+  onStatus?: (event: ProxyStatus) => void,
+): Promise<string> {
+  if (typeof window !== 'undefined') {
+    throw new Error('askProxy is server-only.');
+  }
+  if (!prompt || !prompt.trim()) throw new Error('Empty prompt.');
+  const s = shared();
+  const task = s.queue.then(() => runTurn(prompt, onChunk, onStatus));
+  // Keep the chain alive even if this turn rejects.
+  s.queue = task.catch(() => {});
+  return task;
+}
+
+/** Abandon the current chat and open a fresh one on the next turn. */
+export async function resetProxyChat(): Promise<void> {
+  const s = shared();
+  const task = s.queue.then(async () => {
+    s.chatReady = false;
+    if (s.page) {
+      try {
+        await ensureChat(s.page, true);
+      } catch {
+        // Next askProxy will retry the navigation.
+        s.chatReady = false;
+      }
+    }
+  });
+  s.queue = task.catch(() => {});
+  await task;
+}
+
+export function getProxyStatus(): {
+  running: boolean;
+  headless: boolean;
+  profileDir: string;
+} {
+  return { running: !!shared().browser, headless: isHeadless(), profileDir: proxyProfileDir() };
+}
+
+export async function closeProxy(): Promise<void> {
+  const s = shared();
+  try {
+    await s.browser?.close();
+  } catch {
+    /* already closed */
+  }
+  s.browser = null;
+  s.page = null;
+  s.chatReady = false;
+}

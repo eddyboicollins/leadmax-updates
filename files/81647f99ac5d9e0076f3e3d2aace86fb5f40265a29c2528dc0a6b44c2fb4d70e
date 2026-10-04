@@ -443,23 +443,6 @@
     "studioMakeLiveHint": "Instant: switch the live site back to the exact build of v{{v}} that was published before (no rebuild)",
     "studioRepublishHint": "Rebuild v{{v}} on Vercel (~1–2 min) with the latest build setup and fixes, then put it online"
   },
-  "promo": {
-    "new": "NEW",
-    "cta": "Move to the future now",
-    "slide1Title": "LeadMax 3 is on the way...",
-    "slide1Body": "LeadMax 2.0 user? Get 20% off in LeadMax 3.",
-    "slide2Title": "Why move to 3.0? 2.0 is doing just fine",
-    "v20Label": "LeadMax 2.0",
-    "v30Label": "LeadMax 3.0",
-    "v20Price": "250 – 450 TND",
-    "v30Price": "1000 – 2000 TND",
-    "v20Static": "Static website — no real ownership, needs your help for any small change",
-    "v20Devices": "Windows PC only",
-    "v30Devices": "Mobile, PC, tablet, desktop — anywhere you are",
-    "slide3L1": "LeadMax 1.0: Fought for your luck",
-    "slide3L2": "LeadMax 2.0: Fought for your freedom",
-    "slide3L3": "LeadMax 3.0: Will fight for your wealth"
-  },
   "about": {
     "title": "About LeadMax",
     "by": "by Motez Hadj Salem",

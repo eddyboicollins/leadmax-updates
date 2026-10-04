@@ -10,7 +10,6 @@ import OnboardingWizard from '@/components/OnboardingWizard';
 import CampaignExportModal from '@/components/CampaignExportModal';
 import SafeImg from '@/components/SafeImg';
 import LocationAutocomplete from '@/components/LocationAutocomplete';
-import LeadMax3Promo from '@/components/LeadMax3Promo';
 import { useTranslation } from 'react-i18next';
 import { useLockBodyScroll } from '@/lib/useLockBodyScroll';
 import { useScrape } from '@/lib/scrape/ScrapeProvider';
@@ -575,8 +574,6 @@ export default function Home() {
       <SetNavbar title={t('home.dashboard')} />
 
       <main className="app-page flex-1">
-        <LeadMax3Promo />
-
         {showNewCampaign && (
           <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-xl flex items-center justify-center p-4" onClick={() => setShowNewCampaign(false)}>
             <div className="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-2xl w-full max-w-4xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>

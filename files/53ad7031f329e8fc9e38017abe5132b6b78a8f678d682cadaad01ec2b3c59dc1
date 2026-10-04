@@ -443,23 +443,6 @@
     "studioMakeLiveHint": "Instantané : remet en ligne exactement le build de v{{v}} publié auparavant (sans reconstruire)",
     "studioRepublishHint": "Reconstruit v{{v}} sur Vercel (~1–2 min) avec la configuration et les correctifs les plus récents, puis la met en ligne"
   },
-  "promo": {
-    "new": "NOUVEAU",
-    "cta": "Passez au futur maintenant",
-    "slide1Title": "LeadMax 3 arrive bientôt...",
-    "slide1Body": "Utilisateur LeadMax 2.0 ? Profitez de -20% sur LeadMax 3.",
-    "slide2Title": "Pourquoi passer à la 3.0 ? La 2.0 fonctionne très bien",
-    "v20Label": "LeadMax 2.0",
-    "v30Label": "LeadMax 3.0",
-    "v20Price": "250 – 450 TND",
-    "v30Price": "1000 – 2000 TND",
-    "v20Static": "Site statique — pas de vraie propriété, nécessite votre aide pour le moindre changement",
-    "v20Devices": "PC Windows uniquement",
-    "v30Devices": "Mobile, PC, tablette, ordinateur — partout où vous êtes",
-    "slide3L1": "LeadMax 1.0 : S'est battu pour votre chance",
-    "slide3L2": "LeadMax 2.0 : S'est battu pour votre liberté",
-    "slide3L3": "LeadMax 3.0 : Se battra pour votre richesse"
-  },
   "about": {
     "title": "À propos de LeadMax",
     "by": "par Motez Hadj Salem",

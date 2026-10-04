@@ -1,0 +1,152 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaign, getLead, getSettings } from '@/lib/store';
+import { askGeminiAndValidate, MODIFY_PROMPT_SUFFIX, formatModifyImagesBlock, buildSocialsBlock } from '@/lib/prompts';
+import { DEFAULT_GEMINI_MODEL, normalizeAiSource, type GeminiModel } from '@/lib/gemini';
+import { getVersion, commitVersion, withVersionInUse } from '@/lib/site/versions';
+import { describeElementAt } from '@/lib/site/jsx';
+import { formatRequestForDisplay, type StudioNote } from '@/lib/site/notes';
+
+export const maxDuration = 300;
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  const { id, leadId } = await params;
+
+  const body = await request.json();
+  const { baseVersionId } = body as { baseVersionId?: string };
+  const userPrompt = typeof body.userPrompt === 'string' ? body.userPrompt.trim() : '';
+  const notes: StudioNote[] = Array.isArray(body.notes)
+    ? body.notes.filter((n: StudioNote) => n && typeof n.note === 'string' && n.note.trim() && typeof n.loc === 'number')
+    : [];
+
+  if (!userPrompt && notes.length === 0) {
+    return NextResponse.json({ error: 'userPrompt or notes are required' }, { status: 400 });
+  }
+
+  const campaign = await getCampaign(id);
+  if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+
+  const lead = await getLead(leadId);
+  if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+  // The AI gets the FULL code of the version being viewed (the newest by
+  // default) and returns the full modified component, saved as a new version.
+  const base = await getVersion(lead, baseVersionId || null);
+  if (!base) {
+    return NextResponse.json({ error: 'No landing page to modify. Generate one first.' }, { status: 400 });
+  }
+  const existingTsx = base.tsx;
+
+  const imagesBlock = formatModifyImagesBlock(lead);
+
+  const settings = await getSettings();
+  const apiKey = settings.geminiApiKey || '';
+  const model = (settings.geminiModel as GeminiModel) || DEFAULT_GEMINI_MODEL;
+  const aiSource = normalizeAiSource(settings.aiSource);
+
+  // Carry the enriched email/socials (if present) so the AI preserves them.
+  const enrichedEmail = lead.business.enrichedEmail;
+  const enrichedSocials = lead.business.enrichedSocials;
+  const hasEnriched = !!(enrichedEmail || (enrichedSocials && Object.values(enrichedSocials).some(Boolean)));
+  const contactBlock = hasEnriched
+    ? `CURRENT CONTACT & SOCIALS (found online — keep these exact values in the design where relevant):\nEMAIL: ${enrichedEmail || ''}\nSOCIALS:\n${buildSocialsBlock(enrichedSocials)}`
+    : null;
+
+  // Targeted notes: each one pinned to the exact element it was written on.
+  // Positions are resolved in the version the note was taken on; the line
+  // number is only given when that is the version being edited.
+  const versionCode = new Map<string, string | null>();
+  const notesBlock: string[] = [];
+  for (const [i, n] of notes.entries()) {
+    if (!versionCode.has(n.versionId)) versionCode.set(n.versionId, (await getVersion(lead, n.versionId))?.tsx ?? null);
+    const code = versionCode.get(n.versionId);
+    const sameVersion = n.versionId === base.id;
+
+    if (n.insert) {
+      // "+" between two blocks: NEW content goes exactly at this position.
+      const after = code ? describeElementAt(code, n.insert.after.loc) : null;
+      const before = code && n.insert.before ? describeElementAt(code, n.insert.before.loc) : null;
+      const afterName = n.insert.after.section ? `#${n.insert.after.section}` : `<${n.insert.after.tag}>`;
+      const beforeName = n.insert.before ? (n.insert.before.section ? `#${n.insert.before.section}` : `<${n.insert.before.tag}>`) : null;
+      notesBlock.push(
+        `${i + 1}. INSERT NEW CONTENT at this exact position: right AFTER the block ${afterName}${after ? ` (${after.openTag}${sameVersion ? `, which ends at line ${after.endLine}` : ''})` : ''}`
+          + (beforeName
+            ? ` and right BEFORE the block ${beforeName}${before ? ` (${before.openTag}${sameVersion ? `, line ${before.line}` : ''})` : ''}.`
+            : ', at the end of the page content.'),
+        `   WHAT TO ADD: ${n.note.trim()}`,
+        '   Create it as a new sibling block with its own unique id, matching the existing design, and add it to the navbar links if it is a full section. Do not move or remove the neighbouring blocks.',
+      );
+      continue;
+    }
+
+    const where = code ? describeElementAt(code, n.loc) : null;
+    const target = [
+      where ? `element ${where.openTag}` : `<${n.tag}> element`,
+      where && sameVersion ? `(line ${where.line})` : null,
+      n.section ? `inside #${n.section}` : null,
+    ].filter(Boolean).join(' ');
+    notesBlock.push(
+      `${i + 1}. TARGET: ${target}`,
+      n.excerpt ? `   Current content: "${n.excerpt.replace(/\s+/g, ' ').slice(0, 160)}"` : '',
+      `   CHANGE: ${n.note.trim()}`,
+    );
+  }
+
+  const prompt = [
+    'Here is the React component to modify:',
+    existingTsx,
+    '',
+    userPrompt ? "User's change request:" : null,
+    userPrompt || null,
+    notes.length ? '' : null,
+    notes.length
+      ? `TARGETED NOTES — apply ALL of these in this single update. Each note applies ONLY to the element it targets (and its contents); leave everything else unchanged unless a note says otherwise:\n${notesBlock.filter(Boolean).join('\n')}`
+      : null,
+    contactBlock ? '' : null,
+    contactBlock,
+    imagesBlock ? '' : null,
+    imagesBlock || null,
+    '',
+    'Return the COMPLETE modified React component (default export), no explanations.',
+    MODIFY_PROMPT_SUFFIX,
+  ].filter(Boolean).join('\n');
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: Record<string, unknown>) => {
+        try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)); } catch { /* client disconnected */ }
+      };
+      try {
+        send({ step: 'generating', message: 'Updating your website...' });
+        // While the AI works from `base`, visual edits can't merge into it.
+        const { version, status } = await withVersionInUse(base.id, async () => {
+          const cleanTsx = await askGeminiAndValidate(prompt, apiKey, model, (chunk) => send({ step: 'generating_chunk', chunk }), aiSource, (ev) => send({ step: 'proxy_status', ...ev }));
+          return commitVersion(lead, {
+            tsx: cleanTsx,
+            source: 'ai',
+            parentId: base.id,
+            prompt: formatRequestForDisplay(userPrompt, notes),
+          });
+        });
+
+        send({ step: 'complete', success: true, versionId: version.id, version: version.n, status });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to modify landing page';
+        send({ step: 'error', error: message });
+      } finally {
+        try { controller.close(); } catch { /* client disconnected */ }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
+}

@@ -1,0 +1,15 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getLead } from '@/lib/store';
+import { listVersions } from '@/lib/site/versions';
+
+/** All local versions (v1, v2, …) of the lead's site, oldest first. */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  const { leadId } = await params;
+  const lead = await getLead(leadId);
+  if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+  const versions = await listVersions(lead);
+  return NextResponse.json({ versions: [...versions].sort((a, b) => a.n - b.n) });
+}

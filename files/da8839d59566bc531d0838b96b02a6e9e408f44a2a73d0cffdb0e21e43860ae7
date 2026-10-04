@@ -1,0 +1,141 @@
+import { NextRequest } from 'next/server';
+import { getLead, getSettings, updateLeadLandingPage, addDeploymentEntry, createLeadGeneration } from '@/lib/store';
+import { deployLandingPageWithAutoFix, type DeployProgressEvent } from '@/lib/deploy-with-fix';
+import { slugifyProjectName } from '@/lib/vercel-deploy';
+import { normalizeAiSource, type GeminiModel } from '@/lib/gemini';
+import { v4 as uuidv4 } from 'uuid';
+import { getVersion, commitVersion, markPublished, withVersionInUse } from '@/lib/site/versions';
+
+export const maxDuration = 300;
+
+function sseEncode(event: DeployProgressEvent | Record<string, unknown>): string {
+  return `data: ${JSON.stringify(event)}\n\n`;
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  const { id, leadId } = await params;
+  const body = await request.json().catch(() => ({}));
+  const userPrompt: string | undefined = body.userPrompt || undefined;
+  const versionId: string | undefined = body.versionId || undefined;
+
+  const lead = await getLead(leadId);
+  if (!lead) {
+    return new Response(sseEncode({ step: 'error', message: 'Lead not found' }), { status: 404 });
+  }
+
+  const page = lead.landingPage;
+  // Publish the explicitly chosen local version (default: the newest one).
+  const version = await getVersion(lead, versionId || null);
+  if (versionId && !version) {
+    return new Response(sseEncode({ step: 'error', message: 'Version not found' }), { status: 404 });
+  }
+  const rawTsx = version?.tsx || page?.tsx || (page as { html?: string } | undefined)?.html;
+  if (!rawTsx) {
+    return new Response(sseEncode({ step: 'error', message: 'No landing page to deploy. Generate one first.' }), { status: 400 });
+  }
+
+  const settings = await getSettings();
+  const vercelToken = settings.vercelToken || '';
+  if (!vercelToken) {
+    return new Response(sseEncode({ step: 'error', message: 'No Vercel token configured. Go to Settings to add your token.' }), { status: 400 });
+  }
+
+  const projectName = lead.deploymentName || slugifyProjectName(lead.business.name);
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: DeployProgressEvent | Record<string, unknown>) => {
+        try { controller.enqueue(encoder.encode(sseEncode(event))); } catch { /* client disconnected */ }
+      };
+
+      try {
+        // The version being published stays frozen (no visual edit merges into it)
+        // until it's recorded as published.
+        let shippedVersionId = version?.id;
+        const result = await withVersionInUse(version?.id, async () => {
+          const result = await deployLandingPageWithAutoFix({
+            vercelToken,
+            geminiApiKey: settings.geminiApiKey || '',
+            geminiModel: settings.geminiModel as GeminiModel,
+            aiSource: normalizeAiSource(settings.aiSource),
+            projectName,
+            tsx: rawTsx,
+            onProgress: send,
+          });
+
+          // If the auto-fixer had to change the code, keep that as its own version
+          // (child of the one being published) so local history matches what shipped.
+          if (version && result.tsx !== rawTsx) {
+            const fixed = await commitVersion(lead, {
+              tsx: result.tsx,
+              source: 'fix',
+              parentId: version.id,
+              change: 'Automatic build fix while publishing',
+            });
+            shippedVersionId = fixed.version.id;
+          } else if (!version) {
+            await updateLeadLandingPage(leadId, {
+              tsx: result.tsx,
+              generatedAt: page?.generatedAt || new Date().toISOString(),
+              version: (page?.version || 0) + (result.tsx !== rawTsx ? 1 : 0),
+              sections: page?.sections || [],
+            });
+          }
+
+          if (result.success && result.url) {
+            const aliasUrl = result.url;
+            const entry = {
+              id: uuidv4(),
+              vercelDeploymentId: result.deploymentId || '',
+              url: result.deploymentUrl || result.url,
+              aliasUrl,
+              deployedAt: new Date().toISOString(),
+              userPrompt: userPrompt || (version ? `v${version.n}` : undefined),
+              isMain: true,
+              tsx: result.tsx,
+            };
+            await addDeploymentEntry(leadId, entry);
+            if (shippedVersionId) await markPublished(lead, shippedVersionId, entry.id);
+            await createLeadGeneration({
+              leadId,
+              campaignId: id,
+              landingPageCode: result.tsx,
+              deploymentUrl: result.url,
+              projectName,
+            });
+          }
+          return result;
+        });
+
+        send({
+          step: 'complete',
+          message: result.success ? 'Your website is online!' : (result.error || 'Could not put the website online'),
+          success: result.success,
+          url: result.url,
+          versionId: shippedVersionId,
+          attempts: result.attempts,
+          error: result.error,
+          lastLogs: result.lastLogs,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Deployment failed';
+        send({ step: 'error', message, error: message });
+        send({ step: 'complete', message, success: false, error: message });
+      } finally {
+        try { controller.close(); } catch { /* client disconnected */ }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
+}

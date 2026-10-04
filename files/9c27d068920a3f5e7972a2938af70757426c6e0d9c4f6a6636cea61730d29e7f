@@ -1,0 +1,82 @@
+/**
+ * Line-level change detection between two versions of a component: how many
+ * lines were added/removed and which page sections (by element id) they touch.
+ */
+
+export interface ChangeStats {
+  added: number;
+  removed: number;
+  sections: string[];
+}
+
+/** Canonical form used to decide whether two versions are "the same code". */
+export function normalizeCode(code: string): string {
+  return code
+    .replace(/\r\n/g, '\n')
+    .split('\n')
+    .map(l => l.replace(/\s+$/, ''))
+    .join('\n')
+    .trim();
+}
+
+const SECTION_RE = /<(section|header|footer|nav|main|aside|div|form)\b[^>]*?\bid=["'{`]*([A-Za-z][\w-]*)/;
+
+/** For each line, the id of the section it belongs to (carried forward). */
+function sectionOfLines(lines: string[]): (string | null)[] {
+  const out: (string | null)[] = [];
+  let current: string | null = null;
+  for (const line of lines) {
+    const m = line.match(SECTION_RE);
+    if (m) current = m[2];
+    out.push(current);
+  }
+  return out;
+}
+
+export function diffStats(before: string, after: string): ChangeStats {
+  const a = normalizeCode(before).split('\n');
+  const b = normalizeCode(after).split('\n');
+
+  let pre = 0;
+  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++;
+  let suf = 0;
+  while (suf < a.length - pre && suf < b.length - pre && a[a.length - 1 - suf] === b[b.length - 1 - suf]) suf++;
+
+  const am = a.slice(pre, a.length - suf);
+  const bm = b.slice(pre, b.length - suf);
+  const changedB = new Set<number>();
+  let added = 0;
+  let removed = 0;
+
+  if (am.length * bm.length > 4_000_000) {
+    // Huge rewrite: don't burn CPU on an exact LCS.
+    added = bm.length;
+    removed = am.length;
+    bm.forEach((_, j) => changedB.add(pre + j));
+  } else {
+    // LCS table (lengths of common suffixes) then walk to classify lines.
+    const n = am.length;
+    const m = bm.length;
+    const dp: Uint32Array[] = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        dp[i][j] = am[i] === bm[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    let i = 0;
+    let j = 0;
+    while (i < n || j < m) {
+      if (i < n && j < m && am[i] === bm[j]) { i++; j++; }
+      else if (j < m && (i >= n || dp[i][j + 1] >= dp[i + 1][j])) { added++; changedB.add(pre + j); j++; }
+      else { removed++; changedB.add(Math.min(pre + j, b.length - 1)); i++; }
+    }
+  }
+
+  const sectionOf = sectionOfLines(b);
+  const sections: string[] = [];
+  for (const idx of [...changedB].sort((x, y) => x - y)) {
+    const s = sectionOf[idx];
+    if (s && !sections.includes(s)) sections.push(s);
+  }
+  return { added, removed, sections: sections.slice(0, 6) };
+}

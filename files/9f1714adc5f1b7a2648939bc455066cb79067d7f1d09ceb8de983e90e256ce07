@@ -1,0 +1,33 @@
+import { NextRequest } from 'next/server';
+import { getLead } from '@/lib/store';
+import { getVersion } from '@/lib/site/versions';
+import { buildPreviewHtml } from '@/lib/site/preview';
+
+/** Local, instant preview of one site version (rendered in the studio iframe). */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  const { leadId } = await params;
+  const lead = await getLead(leadId);
+  if (!lead) return new Response('Lead not found', { status: 404 });
+
+  const sp = request.nextUrl.searchParams;
+  const version = await getVersion(lead, sp.get('v'));
+  if (!version) return new Response('No version to preview yet', { status: 404 });
+
+  const html = buildPreviewHtml({
+    tsx: version.tsx,
+    title: `${lead.business.name} · v${version.n}`,
+    scrollY: Number(sp.get('scroll')) || 0,
+    appOrigin: request.nextUrl.origin,
+  });
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      // Versions are immutable except coalesced visual edits; the studio
+      // busts the cache with the version's updatedAt.
+      'Cache-Control': 'no-store',
+    },
+  });
+}

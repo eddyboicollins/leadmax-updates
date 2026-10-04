@@ -1,0 +1,59 @@
+/**
+ * Element-specific notes ("comment" mode in the studio). Queued notes are sent
+ * to the AI in ONE request, each pinned to the element it was written on.
+ * Client-safe (no server imports).
+ */
+
+export interface StudioNote {
+  id: string;
+  /** Version the element position (loc) refers to. */
+  versionId: string;
+  /** Source offset of the element's `<` in that version. */
+  loc: number;
+  tag: string;
+  /** Closest id in the page (usually the section), e.g. "hero". */
+  section?: string;
+  /** Visible text of the element (trimmed), or the image URL. */
+  excerpt?: string;
+  note: string;
+  /**
+   * Insertion point between two page blocks ("+" in comment mode): new
+   * content goes after `after` and before `before` (null = end of page).
+   */
+  insert?: {
+    after: InsertAnchor;
+    before: InsertAnchor | null;
+  };
+}
+
+export interface InsertAnchor {
+  loc: number;
+  tag: string;
+  section?: string;
+  excerpt?: string;
+}
+
+const anchorName = (a: InsertAnchor) => (a.section ? `#${a.section}` : `<${a.tag}>`);
+
+const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+
+/** Short human label for a note's target, e.g. `<h1> #hero “Redefining…”` or `+ between #hero and #services`. */
+export function noteTargetLabel(n: Pick<StudioNote, 'tag' | 'section' | 'excerpt' | 'insert'>): string {
+  if (n.insert) {
+    return n.insert.before
+      ? `+ between ${anchorName(n.insert.after)} and ${anchorName(n.insert.before)}`
+      : `+ after ${anchorName(n.insert.after)} (end)`;
+  }
+  const parts = [`<${n.tag}>`];
+  if (n.section) parts.push(`#${n.section}`);
+  if (n.excerpt) parts.push(`“${clip(n.excerpt.replace(/\s+/g, ' ').trim(), 40)}”`);
+  return parts.join(' ');
+}
+
+/** Text shown in the chat (and stored on the version) for a bulk request. */
+export function formatRequestForDisplay(general: string, notes: StudioNote[]): string {
+  const lines: string[] = [];
+  if (general.trim()) lines.push(general.trim());
+  for (const n of notes) lines.push(`• ${noteTargetLabel(n)}: ${n.note.trim()}`);
+  return lines.join('\n');
+}

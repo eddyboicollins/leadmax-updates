@@ -1,0 +1,303 @@
+/**
+ * Local site versions (v1, v2, …) for a lead. Every generation, AI edit and
+ * visual edit lands here first and is previewed locally; nothing reaches
+ * Vercel until a version is explicitly published.
+ *
+ * Stored per lead in data/sites/<leadId>.json (kept out of the campaign leads
+ * file so the campaign list stays light).
+ */
+import { promises as fs } from 'fs';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { DATA_DIR, readJSON, updateLeadLandingPage } from '@/lib/store';
+import type { Lead } from '@/lib/types';
+import { normalizeCode, diffStats } from './diff';
+
+export type VersionSource = 'generate' | 'ai' | 'visual' | 'fix' | 'import';
+
+export interface SiteVersion {
+  id: string;
+  /** Display number: v1, v2, … (never reused). */
+  n: number;
+  tsx: string;
+  createdAt: string;
+  updatedAt: string;
+  source: VersionSource;
+  /** The user's AI request (ai / generate). */
+  prompt?: string;
+  /** Human-readable list of what changed (visual edits accumulate here). */
+  changes: string[];
+  /** Version this one was derived from (null for fresh generations). */
+  parentId: string | null;
+  added?: number;
+  removed?: number;
+  sections?: string[];
+  /** deploymentHistory entry ids that shipped exactly this code. */
+  publishedEntryIds: string[];
+}
+
+export interface ImageVariant {
+  url: string;
+  sourceUrl: string;
+  crop: { x: number; y: number; w: number; h: number };
+  createdAt: string;
+}
+
+interface SiteFile {
+  versions: SiteVersion[];
+  variants?: ImageVariant[];
+}
+
+/** Consecutive visual edits merge into one unpublished version within this window. */
+const VISUAL_COALESCE_MS = 30 * 60 * 1000;
+
+/**
+ * Versions currently used by a running job (AI edit based on it, or being
+ * published). Visual edits never merge INTO such a version — they create a
+ * new one — so the job's input/output always matches what's stored.
+ */
+const versionsInUse = new Map<string, number>();
+
+export async function withVersionInUse<T>(versionId: string | null | undefined, fn: () => Promise<T>): Promise<T> {
+  if (!versionId) return fn();
+  versionsInUse.set(versionId, (versionsInUse.get(versionId) || 0) + 1);
+  try {
+    return await fn();
+  } finally {
+    const left = (versionsInUse.get(versionId) || 1) - 1;
+    if (left > 0) versionsInUse.set(versionId, left);
+    else versionsInUse.delete(versionId);
+  }
+}
+
+const siteFile = (leadId: string) => path.join(DATA_DIR, 'sites', `${leadId.replace(/[^\w-]/g, '_')}.json`);
+
+const locks = new Map<string, Promise<unknown>>();
+async function withLock<T>(leadId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = locks.get(leadId) || Promise.resolve();
+  const next = prev.catch(() => {}).then(fn);
+  locks.set(leadId, next);
+  try {
+    return await next;
+  } finally {
+    if (locks.get(leadId) === next) locks.delete(leadId);
+  }
+}
+
+async function readSite(leadId: string): Promise<SiteFile | null> {
+  const data = await readJSON<SiteFile | null>(siteFile(leadId), null);
+  return data && Array.isArray(data.versions) ? data : null;
+}
+
+async function writeSite(leadId: string, data: SiteFile): Promise<void> {
+  const file = siteFile(leadId);
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(data), 'utf-8');
+  await fs.rename(tmp, file);
+}
+
+/** Build the initial history from pre-versioning data (deploy history + working copy). */
+function migrate(lead: Lead): SiteFile {
+  const versions: SiteVersion[] = [];
+  const history = [...(lead.deploymentHistory || [])]
+    .filter(e => e.tsx)
+    .sort((a, b) => new Date(a.deployedAt).getTime() - new Date(b.deployedAt).getTime());
+  for (const entry of history) {
+    const prev = versions[versions.length - 1];
+    if (prev && normalizeCode(prev.tsx) === normalizeCode(entry.tsx)) {
+      prev.publishedEntryIds.push(entry.id);
+      continue;
+    }
+    const stats = prev ? diffStats(prev.tsx, entry.tsx) : null;
+    versions.push({
+      id: uuidv4(),
+      n: versions.length + 1,
+      tsx: entry.tsx,
+      createdAt: entry.deployedAt,
+      updatedAt: entry.deployedAt,
+      source: entry.userPrompt ? 'ai' : versions.length === 0 ? 'generate' : 'import',
+      prompt: entry.userPrompt,
+      changes: [],
+      parentId: prev?.id ?? null,
+      added: stats?.added,
+      removed: stats?.removed,
+      sections: stats?.sections,
+      publishedEntryIds: [entry.id],
+    });
+  }
+  const working = lead.landingPage?.tsx;
+  if (working && !versions.some(v => normalizeCode(v.tsx) === normalizeCode(working))) {
+    const prev = versions[versions.length - 1];
+    const stats = prev ? diffStats(prev.tsx, working) : null;
+    const at = lead.landingPage?.generatedAt || lead.updatedAt || new Date().toISOString();
+    versions.push({
+      id: uuidv4(),
+      n: versions.length + 1,
+      tsx: working,
+      createdAt: at,
+      updatedAt: at,
+      source: prev ? 'import' : 'generate',
+      changes: [],
+      parentId: prev?.id ?? null,
+      added: stats?.added,
+      removed: stats?.removed,
+      sections: stats?.sections,
+      publishedEntryIds: [],
+    });
+  }
+  return { versions, variants: [] };
+}
+
+async function load(lead: Lead): Promise<SiteFile> {
+  const existing = await readSite(lead.id);
+  if (existing) return existing;
+  const migrated = migrate(lead);
+  await writeSite(lead.id, migrated);
+  return migrated;
+}
+
+const SWAP_RE = /^Image replaced \((.+) → (.+)\)$/;
+
+/**
+ * Append a change line, collapsing back-to-back swaps of the same photo
+ * ("A → B" then "B → C" becomes "A → C"; swapping back to A removes the line).
+ */
+function mergeChange(changes: string[], change: string): string[] {
+  const last = changes[changes.length - 1];
+  const prev = last?.match(SWAP_RE);
+  const next = change.match(SWAP_RE);
+  if (prev && next && prev[2] === next[1]) {
+    const rest = changes.slice(0, -1);
+    return prev[1] === next[2] ? rest : [...rest, `Image replaced (${prev[1]} → ${next[2]})`];
+  }
+  return [...changes, change];
+}
+
+export async function listVersions(lead: Lead): Promise<SiteVersion[]> {
+  return withLock(lead.id, async () => (await load(lead)).versions);
+}
+
+export async function getVersion(lead: Lead, versionId?: string | null): Promise<SiteVersion | null> {
+  const versions = await listVersions(lead);
+  if (versionId) return versions.find(v => v.id === versionId) ?? null;
+  return latestVersion(versions);
+}
+
+export function latestVersion(versions: SiteVersion[]): SiteVersion | null {
+  return versions.reduce<SiteVersion | null>((best, v) => (!best || v.n > best.n ? v : best), null);
+}
+
+export type CommitStatus = 'created' | 'updated' | 'unchanged' | 'duplicate';
+
+/**
+ * Record new code as a version, with change detection:
+ * - identical to its parent → nothing recorded ('unchanged')
+ * - identical to another existing version → that version is returned ('duplicate')
+ * - a visual edit on top of the newest, unpublished visual version (recent,
+ *   no children) → merged into it ('updated') instead of spamming versions
+ * - otherwise a new vN is created.
+ */
+export async function commitVersion(
+  lead: Lead,
+  input: {
+    tsx: string;
+    source: VersionSource;
+    parentId: string | null;
+    prompt?: string;
+    change?: string;
+  },
+): Promise<{ version: SiteVersion; status: CommitStatus }> {
+  const result = await withLock(lead.id, async () => {
+    const site = await load(lead);
+    const { versions } = site;
+    const now = new Date().toISOString();
+    const key = normalizeCode(input.tsx);
+    const parent = input.parentId ? versions.find(v => v.id === input.parentId) ?? null : null;
+
+    if (parent && normalizeCode(parent.tsx) === key) return { version: parent, status: 'unchanged' as const };
+    const dup = versions.find(v => normalizeCode(v.tsx) === key);
+    if (dup) return { version: dup, status: 'duplicate' as const };
+
+    const head = latestVersion(versions);
+    const canCoalesce =
+      input.source === 'visual'
+      && parent
+      && parent.source === 'visual'
+      && head?.id === parent.id
+      && parent.publishedEntryIds.length === 0
+      && !versionsInUse.has(parent.id)
+      && !versions.some(v => v.parentId === parent.id)
+      && Date.now() - new Date(parent.updatedAt).getTime() < VISUAL_COALESCE_MS;
+
+    if (canCoalesce && parent) {
+      const base = parent.parentId ? versions.find(v => v.id === parent.parentId) : null;
+      const stats = base ? diffStats(base.tsx, input.tsx) : null;
+      parent.tsx = input.tsx;
+      parent.updatedAt = now;
+      if (input.change) parent.changes = mergeChange(parent.changes, input.change);
+      parent.added = stats?.added;
+      parent.removed = stats?.removed;
+      parent.sections = stats?.sections;
+      await writeSite(lead.id, site);
+      return { version: parent, status: 'updated' as const };
+    }
+
+    const stats = parent ? diffStats(parent.tsx, input.tsx) : null;
+    const version: SiteVersion = {
+      id: uuidv4(),
+      n: (head?.n ?? 0) + 1,
+      tsx: input.tsx,
+      createdAt: now,
+      updatedAt: now,
+      source: input.source,
+      prompt: input.prompt,
+      changes: input.change ? [input.change] : [],
+      parentId: parent?.id ?? null,
+      added: stats?.added,
+      removed: stats?.removed,
+      sections: stats?.sections,
+      publishedEntryIds: [],
+    };
+    versions.push(version);
+    await writeSite(lead.id, site);
+    return { version, status: 'created' as const };
+  });
+
+  // Keep the legacy working copy in sync (lead cards, exports, older routes).
+  if (result.status === 'created' || result.status === 'updated') {
+    const lp = lead.landingPage;
+    await updateLeadLandingPage(lead.id, {
+      tsx: result.version.tsx,
+      generatedAt: lp?.generatedAt || result.version.createdAt,
+      version: result.version.n,
+      sections: lp?.sections || [],
+    });
+  }
+  return result;
+}
+
+export async function markPublished(lead: Lead, versionId: string, entryId: string): Promise<void> {
+  await withLock(lead.id, async () => {
+    const site = await load(lead);
+    const v = site.versions.find(x => x.id === versionId);
+    if (v && !v.publishedEntryIds.includes(entryId)) {
+      v.publishedEntryIds.push(entryId);
+      await writeSite(lead.id, site);
+    }
+  });
+}
+
+export async function recordImageVariant(lead: Lead, variant: ImageVariant): Promise<void> {
+  await withLock(lead.id, async () => {
+    const site = await load(lead);
+    site.variants = [...(site.variants || []).filter(v => v.url !== variant.url), variant];
+    await writeSite(lead.id, site);
+  });
+}
+
+/** Original photo + last crop for a (possibly already cropped) image URL. */
+export async function resolveImageVariant(lead: Lead, url: string): Promise<ImageVariant | null> {
+  const site = await withLock(lead.id, () => load(lead));
+  return (site.variants || []).find(v => v.url === url) ?? null;
+}

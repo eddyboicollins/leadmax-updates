@@ -1,0 +1,451 @@
+/**
+ * JSX-aware scanning of generated landing-page components, built on sucrase's
+ * tokenizer (a real JS/TS/JSX lexer, so strings, templates, comments and
+ * nested JSX are never confused with each other).
+ *
+ * Offsets are always character offsets into the ORIGINAL source string, so a
+ * DOM element tagged with `data-lm-src="<offset>"` in the preview maps back to
+ * exactly one `<tag` in the stored code.
+ */
+import { parse, type SucraseToken } from 'sucrase/dist/parser';
+import { TokenType } from 'sucrase/dist/parser/tokenizer/types';
+
+export type Tok = SucraseToken;
+
+const T = {
+  string: TokenType.string,
+  template: TokenType.template,
+  backQuote: TokenType.backQuote,
+  dollarBraceL: TokenType.dollarBraceL,
+  braceL: TokenType.braceL,
+  braceR: TokenType.braceR,
+  bracketL: TokenType.bracketL,
+  eq: TokenType.eq,
+  slash: TokenType.slash,
+  dot: TokenType.dot,
+  colon: TokenType.colon,
+  jsxName: TokenType.jsxName,
+  jsxText: TokenType.jsxText,
+  jsxTagStart: TokenType.jsxTagStart,
+  jsxTagEnd: TokenType.jsxTagEnd,
+};
+
+/** Attribute injected on every host element in the preview build. */
+export const LOC_ATTR = 'data-lm-src';
+
+/** Tokenize; throws a SyntaxError-like Error (with line info) on invalid code. */
+export function tokenize(code: string): Tok[] {
+  return parse(code, true, true, false).tokens;
+}
+
+/** Returns null when the code parses, else a human-readable syntax error. */
+export function syntaxError(code: string): string | null {
+  try {
+    tokenize(code);
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
+// ── Tags ────────────────────────────────────────────────────────────────
+
+export interface JsxAttr {
+  /** Attribute name, or '' for a spread `{...props}`. */
+  name: string;
+  start: number;
+  end: number;
+  /** Token index of the value token for `name="..."`. */
+  stringTok?: number;
+  /** Token index range (inclusive) of `{ ... }` for `name={...}`. */
+  exprStart?: number;
+  exprEnd?: number;
+}
+
+export interface JsxTag {
+  startTok: number;
+  endTok: number;
+  closing: boolean;
+  selfClosing: boolean;
+  /** Tag name ('' for fragments), e.g. "div", "Foo.Bar". */
+  name: string;
+  /** Source offset right after the tag name (where attributes may be inserted). */
+  nameEnd: number;
+  start: number;
+  end: number;
+  attrs: JsxAttr[];
+}
+
+/** Index of the token closing a `{` / `${` opened at `i` (balanced braces). */
+function matchBrace(tokens: Tok[], i: number): number {
+  let depth = 0;
+  for (let k = i; k < tokens.length; k++) {
+    const ty = tokens[k].type;
+    if (ty === T.braceL || ty === T.dollarBraceL) depth++;
+    else if (ty === T.braceR) {
+      depth--;
+      if (depth === 0) return k;
+    }
+  }
+  return tokens.length - 1;
+}
+
+/**
+ * The object literal `{ … }` that directly holds token i — e.g. one entry of a
+ * data array like { title: '…', image: '…' }. Null when the token isn't inside one.
+ */
+export function enclosingObjectRange(tokens: Tok[], i: number): { start: number; end: number } | null {
+  let depth = 0;
+  for (let k = i - 1; k >= 0; k--) {
+    const ty = tokens[k].type;
+    if (ty === T.braceR) depth++;
+    else if (ty === T.braceL || ty === T.dollarBraceL) {
+      if (depth === 0) {
+        const end = matchBrace(tokens, k);
+        return { start: tokens[k].start, end: tokens[end].end };
+      }
+      depth--;
+    } else if (ty === T.bracketL && depth === 0) {
+      return null; // reached the array/list itself: not inside an entry
+    }
+  }
+  return null;
+}
+
+/** Parse the JSX tag whose `<` token is at index i. */
+export function scanTag(code: string, tokens: Tok[], i: number): JsxTag | null {
+  if (tokens[i]?.type !== T.jsxTagStart) return null;
+  let k = i + 1;
+  const closing = tokens[k]?.type === T.slash;
+  if (closing) k++;
+  let name = '';
+  let nameEnd = tokens[i].end;
+  if (tokens[k]?.type === T.jsxName) {
+    name = code.slice(tokens[k].start, tokens[k].end);
+    nameEnd = tokens[k].end;
+    k++;
+    // Member / namespaced names: Foo.Bar, svg:path
+    while (
+      (tokens[k]?.type === T.dot || tokens[k]?.type === T.colon)
+      && tokens[k + 1]?.type === T.jsxName
+      && tokens[k].start === nameEnd
+    ) {
+      name += code.slice(tokens[k].start, tokens[k + 1].end);
+      nameEnd = tokens[k + 1].end;
+      k += 2;
+    }
+  }
+  const attrs: JsxAttr[] = [];
+  let selfClosing = false;
+  while (k < tokens.length && tokens[k].type !== T.jsxTagEnd) {
+    const tk = tokens[k];
+    if (tk.type === T.braceL) {
+      // Spread attribute {...props} (or a stray expression).
+      const end = matchBrace(tokens, k);
+      attrs.push({ name: '', start: tk.start, end: tokens[end].end, exprStart: k, exprEnd: end });
+      k = end + 1;
+      continue;
+    }
+    if (tk.type === T.jsxName) {
+      // Attribute names may contain ':' / '-' (namespaced names come as several tokens).
+      let attrName = code.slice(tk.start, tk.end);
+      const attrStart = tk.start;
+      let attrEnd = tk.end;
+      k++;
+      while (tokens[k] && tokens[k].type === T.colon && tokens[k + 1]?.type === T.jsxName) {
+        attrName += ':' + code.slice(tokens[k + 1].start, tokens[k + 1].end);
+        attrEnd = tokens[k + 1].end;
+        k += 2;
+      }
+      const attr: JsxAttr = { name: attrName, start: attrStart, end: attrEnd };
+      if (tokens[k]?.type === T.eq) {
+        k++;
+        const v = tokens[k];
+        if (v?.type === T.string) {
+          attr.stringTok = k;
+          attr.end = v.end;
+          k++;
+        } else if (v?.type === T.braceL) {
+          const end = matchBrace(tokens, k);
+          attr.exprStart = k;
+          attr.exprEnd = end;
+          attr.end = tokens[end].end;
+          k = end + 1;
+        } else if (v?.type === T.jsxTagStart) {
+          // attr=<Elem/> (rare): skip the nested element.
+          const nested = findElementRange(code, tokens, k);
+          attr.end = nested ? nested.end : v.end;
+          k = nested ? nested.endTok + 1 : k + 1;
+        }
+      }
+      attrs.push(attr);
+      continue;
+    }
+    if (tk.type === T.slash) selfClosing = true;
+    k++;
+  }
+  if (k >= tokens.length) return null;
+  return {
+    startTok: i,
+    endTok: k,
+    closing,
+    selfClosing,
+    name,
+    nameEnd,
+    start: tokens[i].start,
+    end: tokens[k].end,
+    attrs,
+  };
+}
+
+export interface JsxElementRange {
+  open: JsxTag;
+  /** Offset right after the opening tag's `>`. */
+  innerStart: number;
+  /** Offset of the closing tag's `<` (=== innerStart for self-closing). */
+  innerEnd: number;
+  end: number;
+  endTok: number;
+}
+
+/** Full element (opening tag → matching closing tag) starting at token i. */
+export function findElementRange(code: string, tokens: Tok[], i: number): JsxElementRange | null {
+  const open = scanTag(code, tokens, i);
+  if (!open || open.closing) return null;
+  if (open.selfClosing) {
+    return { open, innerStart: open.end, innerEnd: open.end, end: open.end, endTok: open.endTok };
+  }
+  let depth = 1;
+  let k = open.endTok + 1;
+  while (k < tokens.length) {
+    if (tokens[k].type === T.jsxTagStart) {
+      const tag = scanTag(code, tokens, k);
+      if (!tag) return null;
+      if (tag.closing) {
+        depth--;
+        if (depth === 0) {
+          return { open, innerStart: open.end, innerEnd: tag.start, end: tag.end, endTok: tag.endTok };
+        }
+      } else if (!tag.selfClosing) {
+        depth++;
+      }
+      k = tag.endTok + 1;
+      continue;
+    }
+    k++;
+  }
+  return null;
+}
+
+/** Locate the element whose `<` sits exactly at `offset`. */
+export function elementAt(code: string, tokens: Tok[], offset: number): JsxElementRange | null {
+  const i = tokens.findIndex(t => t.start === offset && t.type === T.jsxTagStart);
+  if (i < 0) return null;
+  return findElementRange(code, tokens, i);
+}
+
+/** Where an element sits in the code: 1-based start/end lines and its opening tag (trimmed). */
+export function describeElementAt(code: string, offset: number): { line: number; endLine: number; openTag: string; snippet: string } | null {
+  let tokens: Tok[];
+  try {
+    tokens = tokenize(code);
+  } catch {
+    return null;
+  }
+  const el = elementAt(code, tokens, offset);
+  if (!el) return null;
+  const openTag = code.slice(el.open.start, el.open.end).replace(/\s+/g, ' ');
+  return {
+    line: code.slice(0, offset).split('\n').length,
+    endLine: code.slice(0, el.end).split('\n').length,
+    // The element's own source (capped), so the AI sees exactly what was clicked.
+    snippet: (() => {
+      const src = code.slice(el.open.start, el.end);
+      return src.length > 900 ? src.slice(0, 899) + '\n…' : src;
+    })(),
+    openTag: openTag.length > 240 ? openTag.slice(0, 239) + '…' : openTag,
+  };
+}
+
+/** Host (DOM) element names: lowercase first letter, no member expression. */
+function isHostName(name: string): boolean {
+  return /^[a-z][a-zA-Z0-9-]*$/.test(name);
+}
+
+/**
+ * Preview-only instrumentation: adds data-lm-src="<offset>" to every host JSX
+ * opening tag so clicks in the preview map back to exact source positions.
+ */
+export function instrumentJsx(code: string): string {
+  const tokens = tokenize(code);
+  const inserts: { at: number; text: string }[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].type !== T.jsxTagStart) continue;
+    const next = tokens[i + 1];
+    if (!next || next.type !== T.jsxName) continue; // closing tag or fragment
+    const tag = scanTag(code, tokens, i);
+    if (!tag || tag.closing || !isHostName(tag.name)) continue;
+    if (tag.attrs.some(a => a.name === LOC_ATTR)) continue;
+    inserts.push({ at: tag.nameEnd, text: ` ${LOC_ATTR}="${tag.start}"` });
+  }
+  let out = code;
+  for (let j = inserts.length - 1; j >= 0; j--) {
+    out = out.slice(0, inserts[j].at) + inserts[j].text + out.slice(inserts[j].at);
+  }
+  return out;
+}
+
+// ── Text values ─────────────────────────────────────────────────────────
+
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', copy: '©', reg: '®',
+  trade: '™', hellip: '…', mdash: '—', ndash: '–', laquo: '«', raquo: '»', rsquo: '’',
+  lsquo: '‘', rdquo: '”', ldquo: '“', middot: '·', bull: '•', euro: '€', deg: '°', times: '×',
+};
+
+export function decodeEntities(s: string): string {
+  return s.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z][a-zA-Z0-9]*);/g, (m, body: string) => {
+    if (body[0] === '#') {
+      const cp = body[1] === 'x' || body[1] === 'X' ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+      return Number.isFinite(cp) ? String.fromCodePoint(cp) : m;
+    }
+    return NAMED_ENTITIES[body] ?? m;
+  });
+}
+
+/** JSX text → rendered string (React/Babel whitespace rules + entities). */
+export function jsxTextValue(raw: string): string {
+  const lines = raw.split(/\r\n|\n|\r/);
+  let lastNonEmpty = 0;
+  for (let i = 0; i < lines.length; i++) if (/[^ \t]/.test(lines[i])) lastNonEmpty = i;
+  let str = '';
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].replace(/\t/g, ' ');
+    const isFirst = i === 0;
+    const isLast = i === lines.length - 1;
+    let trimmed = line;
+    if (!isFirst) trimmed = trimmed.replace(/^[ ]+/, '');
+    if (!isLast) trimmed = trimmed.replace(/[ ]+$/, '');
+    if (trimmed) {
+      if (i !== lastNonEmpty) trimmed += ' ';
+      str += trimmed;
+    }
+  }
+  return decodeEntities(str);
+}
+
+/** Cooks the body of a JS string/template literal (escape sequences). */
+export function unescapeJs(body: string): string {
+  return body.replace(/\\(u\{[0-9a-fA-F]+\}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|\r\n|[\s\S])/g, (_m, e: string) => {
+    if (e[0] === 'u') return String.fromCodePoint(parseInt(e[1] === '{' ? e.slice(2, -1) : e.slice(1), 16));
+    if (e[0] === 'x') return String.fromCharCode(parseInt(e.slice(1), 16));
+    switch (e) {
+      case 'n': return '\n';
+      case 't': return '\t';
+      case 'r': return '\r';
+      case 'b': return '\b';
+      case 'f': return '\f';
+      case 'v': return '\v';
+      case '0': return '\0';
+      case '\n': case '\r\n': case '\r': return '';
+      default: return e;
+    }
+  });
+}
+
+export type TextTokKind = 'jsxText' | 'string' | 'jsxAttrString' | 'template';
+
+export interface TextTok {
+  idx: number;
+  kind: TextTokKind;
+  start: number;
+  end: number;
+  /** Rendered value. */
+  value: string;
+}
+
+function isJsxAttrString(tokens: Tok[], i: number): boolean {
+  return tokens[i - 1]?.type === T.eq && tokens[i - 2]?.type === T.jsxName;
+}
+
+/** Every literal piece of text in the file, with its rendered value. */
+export function textTokens(code: string, tokens: Tok[]): TextTok[] {
+  const out: TextTok[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const tk = tokens[i];
+    const raw = code.slice(tk.start, tk.end);
+    if (tk.type === T.jsxText) {
+      out.push({ idx: i, kind: 'jsxText', start: tk.start, end: tk.end, value: jsxTextValue(raw) });
+    } else if (tk.type === T.string) {
+      if (isJsxAttrString(tokens, i)) {
+        out.push({ idx: i, kind: 'jsxAttrString', start: tk.start, end: tk.end, value: decodeEntities(raw.slice(1, -1)) });
+      } else {
+        out.push({ idx: i, kind: 'string', start: tk.start, end: tk.end, value: unescapeJs(raw.slice(1, -1)) });
+      }
+    } else if (
+      tk.type === T.template
+      && tokens[i - 1]?.type === T.backQuote
+      && tokens[i + 1]?.type === T.backQuote
+    ) {
+      out.push({ idx: i, kind: 'template', start: tk.start, end: tk.end, value: unescapeJs(raw) });
+    }
+  }
+  return out;
+}
+
+/** Comparison key: collapses whitespace (incl. nbsp) so DOM text ≈ source text. */
+export function textKey(s: string): string {
+  return s.replace(/[\s ]+/g, ' ').trim();
+}
+
+// ── Encoders ────────────────────────────────────────────────────────────
+
+const ENTITY_LIKE = /&(?=#?[a-zA-Z0-9]+;)/g;
+
+function escapeJsxText(s: string): string {
+  return s
+    .replace(ENTITY_LIKE, '&amp;')
+    .replace(/[{}]/g, ch => `{'${ch}'}`)
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\r?\n/g, ' ');
+}
+
+function escapeJsString(s: string, quote: string): string {
+  let out = s.replace(/\\/g, '\\\\').replace(/\r/g, '\\r').replace(/\n/g, '\\n');
+  if (quote === '`') out = out.replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+  else out = out.split(quote).join('\\' + quote);
+  return out;
+}
+
+/**
+ * Replacement source text for a literal token, preserving its quoting style
+ * (and, for JSX text, the surrounding whitespace/indentation).
+ */
+export function encodeTextTok(code: string, tok: TextTok, value: string): string {
+  const raw = code.slice(tok.start, tok.end);
+  switch (tok.kind) {
+    case 'jsxText': {
+      const lead = raw.match(/^\s*/)?.[0] ?? '';
+      const trail = raw.match(/\s*$/)?.[0] ?? '';
+      const core = escapeJsxText(value);
+      // An all-whitespace token keeps a single space so siblings don't glue together.
+      return core ? lead + core + trail : ' ';
+    }
+    case 'jsxAttrString': {
+      const q = raw[0];
+      if (value.includes(q) || /\r|\n/.test(value)) return `{${JSON.stringify(value)}}`;
+      return q + value.replace(ENTITY_LIKE, '&amp;') + q;
+    }
+    case 'string': {
+      const q = raw[0];
+      return q + escapeJsString(value, q) + q;
+    }
+    case 'template':
+      return escapeJsString(value, '`');
+  }
+}
+
+export function spliceCode(code: string, start: number, end: number, text: string): string {
+  return code.slice(0, start) + text + code.slice(end);
+}

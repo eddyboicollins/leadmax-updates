@@ -100,6 +100,7 @@ type Selection = {
   /** Which copy was clicked when a list renders the same template several times. */
   instance?: number;
   instances?: number;
+  copyKey?: string | null;
   linkInstance?: number;
   linkInstances?: number;
   excerpt?: string;
@@ -114,8 +115,8 @@ const bridgeMode = (m: StudioMode) => (m === 'interact' ? 'view' : m);
 
 type VisualEditBody =
   | { kind: 'text'; loc: number; oldText: string; newText: string }
-  | { kind: 'attr'; loc: number; attr: 'href' | 'src'; oldValue: string; newValue: string; instance?: number; instances?: number }
-  | { kind: 'bgimage'; loc: number; oldUrl: string; newUrl: string; instance?: number; instances?: number };
+  | { kind: 'attr'; loc: number; attr: 'href' | 'src'; oldValue: string; newValue: string; instance?: number; instances?: number; copyKey?: string | null }
+  | { kind: 'bgimage'; loc: number; oldUrl: string; newUrl: string; instance?: number; instances?: number; copyKey?: string | null };
 
 const toDataUrl = (html: string) => `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 
@@ -637,9 +638,9 @@ export default function ModifyStudio({
   const savePhoto = (target: Selection, newUrl: string) => {
     if (!target.src || newUrl === target.src) return;
     if (target.kind === 'bgimage') {
-      applyEdit({ kind: 'bgimage', loc: target.loc, oldUrl: target.src, newUrl, instance: target.instance, instances: target.instances }, { kind: 'bgimage', loc: target.loc, oldValue: target.src, newValue: newUrl });
+      applyEdit({ kind: 'bgimage', loc: target.loc, oldUrl: target.src, newUrl, instance: target.instance, instances: target.instances, copyKey: target.copyKey }, { kind: 'bgimage', loc: target.loc, oldValue: target.src, newValue: newUrl });
     } else {
-      applyEdit({ kind: 'attr', loc: target.loc, attr: 'src', oldValue: target.src, newValue: newUrl, instance: target.instance, instances: target.instances }, { kind: 'src', loc: target.loc, oldValue: target.src, newValue: newUrl });
+      applyEdit({ kind: 'attr', loc: target.loc, attr: 'src', oldValue: target.src, newValue: newUrl, instance: target.instance, instances: target.instances, copyKey: target.copyKey }, { kind: 'src', loc: target.loc, oldValue: target.src, newValue: newUrl });
     }
   };
 

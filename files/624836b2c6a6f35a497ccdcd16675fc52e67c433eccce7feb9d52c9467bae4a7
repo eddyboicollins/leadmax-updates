@@ -194,10 +194,20 @@ const BRIDGE_JS = String.raw`
     return { loc: locOf(el), tag: el.tagName.toLowerCase(), excerpt: excerptOf(el), section: sectionOf(el), rect: rectOf(el) };
   }
   /** Index of el among copies of the same template showing the same value (list rendering). */
+  /** React key of the list item this element belongs to (nearest keyed ancestor fiber). */
+  function copyKeyOf(el) {
+    try {
+      var fk = Object.keys(el).find(function (k) { return k.indexOf('__reactFiber$') === 0; });
+      for (var f = fk ? el[fk] : null, depth = 0; f && depth < 60; f = f.return, depth++) {
+        if (f.key != null) return String(f.key);
+      }
+    } catch (e) {}
+    return null;
+  }
   function instanceOf(el, valueOf) {
     var v = valueOf(el);
     var same = Array.prototype.filter.call(document.querySelectorAll('[' + LOC + '="' + locOf(el) + '"]'), function (n) { return valueOf(n) === v; });
-    return { instance: same.indexOf(el), instances: same.length };
+    return { instance: same.indexOf(el), instances: same.length, copyKey: copyKeyOf(el) };
   }
   function srcOf(n) { return n.getAttribute('src') || ''; }
   function hrefOf(n) { return n.getAttribute('href') || ''; }
@@ -457,9 +467,11 @@ const BRIDGE_JS = String.raw`
         post(Object.assign({ type: 'select', kind: 'element' }, describe(parentEl)));
       }
     } else if (d.type === 'patch-dom') {
-      // Live (optimistic) update — no reload. Only elements still showing the
-      // old value change, so other items of a list keep their own photo/link.
-      var nodes = document.querySelectorAll('[' + LOC + '="' + d.loc + '"]');
+      // Live (optimistic) update — no reload. Only the clicked element changes
+      // (other cards of the same list keep their photo even if it's identical).
+      var nodes = selectedEl && locOf(selectedEl) === d.loc
+        ? [selectedEl]
+        : document.querySelectorAll('[' + LOC + '="' + d.loc + '"]');
       for (var k = 0; k < nodes.length; k++) {
         var node = nodes[k];
         if (d.kind === 'src' && node.getAttribute('src') === d.oldValue) {

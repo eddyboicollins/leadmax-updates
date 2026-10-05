@@ -9,6 +9,8 @@
 import {
   tokenize,
   elementAt,
+  scanTag,
+  JSX_TAG_START,
   textTokens,
   textKey,
   encodeTextTok,
@@ -46,23 +48,38 @@ interface Splice {
   end: number;
   text: string;
   summary: string;
-  /** The value was replaced in several places (couldn't tell which one was clicked). */
-  everywhere?: boolean;
 }
 
 /**
- * Same photo/link written in several places: when the clicked element is one
- * of N copies rendered from a list and there are exactly N literals, they map
- * 1:1 in source order → change only the clicked one. Otherwise change them all
- * (the clicked one included) rather than refusing.
+ * A photo/link value that lives in data (e.g. a cards array) — pick the ONE
+ * literal that feeds the clicked element, or null when that can't be proven
+ * (the caller then overrides the clicked element's own attribute instead).
+ * Several literals map to the clicked copy only when the list renders exactly
+ * that many copies with this value (1:1 in source order).
  */
-function pickTargets(candidates: TextTok[], hint: InstanceHint): { toks: TextTok[]; everywhere: boolean } {
-  if (candidates.length <= 1) return { toks: candidates, everywhere: false };
+function pickDataLiteral(candidates: TextTok[], hint: InstanceHint): TextTok | null {
+  if (candidates.length === 1) return candidates[0];
   const { instance, instances } = hint;
-  if (typeof instance === 'number' && instances === candidates.length && instance >= 0 && instance < candidates.length) {
-    return { toks: [candidates[instance]], everywhere: false };
+  if (candidates.length > 1 && typeof instance === 'number' && instances === candidates.length && instance >= 0 && instance < candidates.length) {
+    return candidates[instance];
   }
-  return { toks: candidates, everywhere: true };
+  return null;
+}
+
+/** Opening-tag ranges of every JSX element (literals inside belong to that element). */
+function openingTagRanges(code: string, tokens: Tok[]): [number, number][] {
+  const out: [number, number][] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].type !== JSX_TAG_START) continue;
+    const tag = scanTag(code, tokens, i);
+    if (tag && !tag.closing) out.push([tag.start, tag.end]);
+  }
+  return out;
+}
+
+/** True when the literal is written on ANOTHER element's tag (never ours to change). */
+function onOtherElement(tok: TextTok, tags: [number, number][], el: JsxElementRange | null): boolean {
+  return tags.some(([a, b]) => tok.start >= a && tok.end <= b && !(el && a === el.open.start));
 }
 
 function clip(s: string, n = 40): string {
@@ -121,29 +138,26 @@ function resolveAttr(code: string, tokens: Tok[], el: JsxElementRange | null, ed
     ? `Link → ${clip(edit.newValue, 60)}`
     : `Image replaced (${clip(edit.oldValue.split('/').pop() || edit.oldValue, 24)} → ${clip(edit.newValue.split('/').pop() || edit.newValue, 24)})`;
   const lits = textTokens(code, tokens);
-  const splice = (t: TextTok, everywhere = false): Splice => ({
-    start: t.start, end: t.end, text: encodeTextTok(code, t, edit.newValue), summary, everywhere,
-  });
+  const tags = openingTagRanges(code, tokens);
+  const splice = (t: TextTok): Splice => ({ start: t.start, end: t.end, text: encodeTextTok(code, t, edit.newValue), summary });
 
-  // 1) The attribute written right on the clicked element.
+  // 1) The value written on the clicked element itself (also inside an earlier
+  //    override such as src={(x) === "A" ? "B" : (x)}).
   const attr = el?.open.attrs.find(a => a.name === edit.attr);
   if (attr) {
-    const own = lits.filter(t => t.start >= attr.start && t.end <= attr.end);
-    if (own.length === 1 && own[0].value === edit.oldValue) return [splice(own[0])];
+    const own = lits.filter(t => t.start >= attr.start && t.end <= attr.end && t.value === edit.oldValue);
+    if (own.length) return [splice(own[own.length - 1])];
   }
-  // 2) The value comes from data (e.g. an array of cards): exact literal(s).
-  const exact = lits.filter(t => t.value === edit.oldValue);
-  if (exact.length) {
-    const { toks, everywhere } = pickTargets(exact, edit);
-    return toks.map(t => splice(t, everywhere));
-  }
-  // 3) Images only: URL embedded inside a larger literal.
+  // 2) The value comes from data (e.g. a cards array) — only a literal that
+  //    provably feeds THIS element; literals on other elements are never touched.
+  const data = pickDataLiteral(lits.filter(t => t.value === edit.oldValue && !onOtherElement(t, tags, el)), edit);
+  if (data) return [splice(data)];
+  // 3) Images only: URL embedded inside a larger literal (same rules).
   if (edit.attr === 'src') {
     const inside = resolveUrlInside(code, tokens, el, edit.oldValue, edit.newValue, summary, edit);
     if (inside) return inside;
   }
-  // 4) Computed by code (src={p.image}, href={`tel:${phone}`}…): rewrite the
-  //    clicked element's own attribute.
+  // 4) Otherwise override the clicked element's own attribute — only it changes.
   return [rewriteAttr(code, tokens, el, edit.attr, edit.oldValue, edit.newValue, summary, edit, label)];
 }
 
@@ -162,9 +176,8 @@ function attrInsertPoint(el: JsxElementRange): number {
 
 /**
  * The value isn't a literal anywhere: change the clicked element's attribute.
- * One copy on screen → the attribute becomes the new value. Several copies
- * (list rendering) → value-based condition, so only the copy that showed the
- * old value changes. Layout/size classes are never touched.
+ * A computed value gets a value-based condition, so only the copy (in a list)
+ * that showed the old value changes. Layout/size classes are never touched.
  */
 function rewriteAttr(
   code: string,
@@ -180,8 +193,10 @@ function rewriteAttr(
   if (!el) throw new VisualEditError(`${label} could not be located in the code. Ask the AI instead.`);
   const attr = el.open.attrs.find(a => a.name === name);
   const expr = attrExpr(code, tokens, el, name);
-  const repeated = (hint.instances ?? 1) > 1;
-  const value = expr && repeated
+  // A computed value may differ per copy (lists): only the copy that showed
+  // the old value gets the new one. A missing/plain attribute is replaced.
+  void hint;
+  const value = expr
     ? `{(${expr}) === ${JSON.stringify(oldValue)} ? ${JSON.stringify(newValue)} : (${expr})}`
     : `{${JSON.stringify(newValue)}}`;
   if (attr) return { start: attr.start, end: attr.end, text: `${name}=${value}`, summary };
@@ -200,7 +215,9 @@ function rewriteBackground(code: string, tokens: Tok[], el: JsxElementRange | nu
   const styleAttr = el.open.attrs.find(a => a.name === 'style');
   const styleExpr = attrExpr(code, tokens, el, 'style');
   const sources = [styleExpr, attrExpr(code, tokens, el, 'className')].filter((x): x is string => !!x);
-  const cond = (hint.instances ?? 1) > 1 && sources.length
+  // Computed style/className may differ per copy: override only the copy that showed the old photo.
+  void hint;
+  const cond = sources.length
     ? `[${sources.map(x => `(${x})`).join(', ')}].some(v => JSON.stringify(v ?? '').includes(${JSON.stringify(oldUrl)}))`
     : null;
   const summary = 'Background image replaced';
@@ -220,13 +237,17 @@ function resolveUrlInside(code: string, tokens: Tok[], el: JsxElementRange | nul
   if (!oldUrl) return null;
   const containing = textTokens(code, tokens).filter(t => code.slice(t.start, t.end).includes(oldUrl));
   if (containing.length === 0) return null;
-  // Prefer the literal written on the clicked element itself.
-  const own = el ? containing.filter(t => within(t, el.open.start, el.open.end)) : [];
-  const { toks, everywhere } = own.length === 1 ? { toks: own, everywhere: false } : pickTargets(containing, hint);
-  return toks.map(tok => {
+  const swap = (tok: TextTok): Splice[] => {
     const raw = code.slice(tok.start, tok.end);
-    return { start: tok.start, end: tok.end, text: raw.split(oldUrl).join(newUrl), summary, everywhere };
-  });
+    return [{ start: tok.start, end: tok.end, text: raw.split(oldUrl).join(newUrl), summary }];
+  };
+  // The literal written on the clicked element itself (style / className / src).
+  const own = el ? containing.filter(t => within(t, el.open.start, el.open.end)) : [];
+  if (own.length) return swap(own[own.length - 1]);
+  // Data literal that provably feeds this element; never another element's tag.
+  const tags = openingTagRanges(code, tokens);
+  const data = pickDataLiteral(containing.filter(t => !onOtherElement(t, tags, el)), hint);
+  return data ? swap(data) : null;
 }
 
 function resolveEdit(code: string, tokens: Tok[], edit: VisualEdit): Splice[] {
@@ -251,7 +272,7 @@ export interface OffsetShift {
 }
 
 /** Apply one or several edits atomically (all resolved against the same code). */
-export function applyVisualEdits(code: string, edits: VisualEdit[]): { code: string; summary: string; shifts: OffsetShift[]; everywhere: boolean } {
+export function applyVisualEdits(code: string, edits: VisualEdit[]): { code: string; summary: string; shifts: OffsetShift[] } {
   let tokens: Tok[];
   try {
     tokens = tokenize(code);
@@ -262,7 +283,7 @@ export function applyVisualEdits(code: string, edits: VisualEdit[]): { code: str
   const splices = edits
     .flatMap(e => resolveEdit(code, tokens, e))
     .sort((a, b) => b.start - a.start);
-  if (splices.length === 0) return { code, summary: '', shifts: [], everywhere: false };
+  if (splices.length === 0) return { code, summary: '', shifts: [] };
 
   for (let i = 1; i < splices.length; i++) {
     if (splices[i].end > splices[i - 1].start) {
@@ -276,20 +297,13 @@ export function applyVisualEdits(code: string, edits: VisualEdit[]): { code: str
   const err = syntaxError(out);
   if (err) throw new VisualEditError(`This edit would break the page (${err}). Ask the AI instead.`);
   const ordered = splices.reverse();
-  // One summary line per change (several splices of one "everywhere" swap → one line ×N).
-  const lines: string[] = [];
-  for (const sp of ordered) {
-    const line = sp.everywhere ? `${sp.summary} ×${ordered.filter(o => o.summary === sp.summary).length}` : sp.summary;
-    if (!lines.includes(line)) lines.push(line);
-  }
   return {
     code: out,
-    summary: lines.join(' · '),
-    everywhere: ordered.some(sp => sp.everywhere),
+    summary: ordered.map(sp => sp.summary).join(' · '),
     shifts: ordered.map(s => ({ at: s.end, delta: s.text.length - (s.end - s.start) })).filter(x => x.delta !== 0),
   };
 }
 
-export function applyVisualEdit(code: string, edit: VisualEdit): { code: string; summary: string; shifts: OffsetShift[]; everywhere: boolean } {
+export function applyVisualEdit(code: string, edit: VisualEdit): { code: string; summary: string; shifts: OffsetShift[] } {
   return applyVisualEdits(code, [edit]);
 }

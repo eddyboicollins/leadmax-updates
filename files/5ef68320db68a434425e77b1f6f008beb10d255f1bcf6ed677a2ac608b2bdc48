@@ -31,7 +31,7 @@ export async function POST(
   }
 
   try {
-    const { code, summary, shifts, everywhere } = applyVisualEdits(base.tsx, edits);
+    const { code, summary, shifts } = applyVisualEdits(base.tsx, edits);
     if (code === base.tsx) return NextResponse.json({ status: 'unchanged', version: base });
     const { version, status } = await commitVersion(lead, {
       tsx: code,
@@ -40,8 +40,7 @@ export async function POST(
       change: summary,
     });
     // shifts: lets the studio keep the current preview (no reload) in sync.
-    // everywhere: the value was swapped in every place it appears (live-update them all).
-    return NextResponse.json({ status, version, shifts, everywhere });
+    return NextResponse.json({ status, version, shifts });
   } catch (err) {
     if (err instanceof VisualEditError) return NextResponse.json({ error: err.message }, { status: 422 });
     const message = err instanceof Error ? err.message : 'Edit failed';

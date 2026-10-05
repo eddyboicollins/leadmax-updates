@@ -573,8 +573,6 @@ export default function ModifyStudio({
         setNotice({ tone: 'info', text: t('campaign.studioSameAs', { v: data.version.n }) });
       }
       if (data.version?.id) {
-        // Same photo/link replaced in every place it appears: update all copies on screen too.
-        if (data.everywhere && live) postToPreview({ type: 'patch-dom', ...live, everywhere: true });
         postToPreview({ type: 'remap', shifts: Array.isArray(data.shifts) ? data.shifts : [] });
         const nextKey = docKeyFor(previewUrlFor(data.version));
         setAdoption(prev => ({ ...prev, map: { ...prev.map, [nextKey]: shownDoc } }));

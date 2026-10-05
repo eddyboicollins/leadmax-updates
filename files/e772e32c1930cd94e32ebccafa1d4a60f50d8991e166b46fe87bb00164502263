@@ -482,8 +482,7 @@ export function useSearchParams() { return new URLSearchParams(); }`},sa=String.
     } else if (d.type === 'patch-dom') {
       // Live (optimistic) update — no reload. Only elements still showing the
       // old value change, so other items of a list keep their own photo/link.
-      // everywhere: the value was swapped in every place it appears.
-      var nodes = d.everywhere ? document.querySelectorAll('[' + LOC + ']') : document.querySelectorAll('[' + LOC + '="' + d.loc + '"]');
+      var nodes = document.querySelectorAll('[' + LOC + '="' + d.loc + '"]');
       for (var k = 0; k < nodes.length; k++) {
         var node = nodes[k];
         if (d.kind === 'src' && node.getAttribute('src') === d.oldValue) {

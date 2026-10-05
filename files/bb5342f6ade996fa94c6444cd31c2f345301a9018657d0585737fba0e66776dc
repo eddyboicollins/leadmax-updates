@@ -29,6 +29,9 @@ const T = {
   jsxTagEnd: TokenType.jsxTagEnd,
 };
 
+/** Token type of a JSX tag's `<` (for callers scanning tokens). */
+export const JSX_TAG_START = T.jsxTagStart;
+
 /** Attribute injected on every host element in the preview build. */
 export const LOC_ATTR = 'data-lm-src';
 

@@ -1,0 +1,47 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getCampaign, addLeads } from '@/lib/store';
+import { scrapePlaceLinks } from '@/lib/scrapePlaces';
+import { v4 as uuidv4 } from 'uuid';
+
+export const maxDuration = 300;
+
+/**
+ * Add more own-clients to a manual campaign: scrapes each {name, mapsUrl}
+ * Google Maps link directly (no AI) and saves the resulting leads.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+
+    const campaign = await getCampaign(id);
+    if (!campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    if (campaign.source !== 'manual') {
+      return NextResponse.json({ error: 'Not a manual campaign' }, { status: 400 });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const list = Array.isArray(body.entries)
+      ? body.entries
+          .filter((e: any) => e && typeof e.name === 'string' && e.name.trim() && typeof e.mapsUrl === 'string' && e.mapsUrl.trim())
+          .map((e: any) => ({ name: e.name.trim(), mapsUrl: e.mapsUrl.trim() }))
+      : [];
+    if (list.length === 0) {
+      return NextResponse.json({ error: 'at least one business with a Maps link required' }, { status: 400 });
+    }
+
+    const scraped = await scrapePlaceLinks(list);
+    const found = scraped.filter(r => r.ok && r.business);
+    if (found.length) await addLeads(id, found.map(r => ({ leadId: uuidv4(), business: r.business! })));
+    const results = scraped.map(r => ({ name: r.name, ok: r.ok, error: r.error }));
+    return NextResponse.json({
+      added: results.filter(r => r.ok).length,
+      failed: results.filter(r => !r.ok).length,
+      results,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'Failed to add clients' }, { status: 500 });
+  }
+}

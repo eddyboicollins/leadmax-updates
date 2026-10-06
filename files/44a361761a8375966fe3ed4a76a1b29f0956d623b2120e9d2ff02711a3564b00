@@ -1,0 +1,173 @@
+module.exports=[24162,e=>{"use strict";var t=e.i(71994);async function a(n,o,s,i,r="official",l){if("proxy"===r){let{askProxy:t}=await e.A(69800);return t(n,i,l)}return(0,t.retryAskGemini)(n,o,s,i)}function n(e){return(e.images||[]).filter(e=>!e.deleted).map(e=>({url:e.url,alt:(e.alt||"Business photo").replace(/,?\s*best usage area:.*$/i,"").trim()||"Business photo",width:e.width,height:e.height}))}function o(e){let t=e||{},a=[];return t.instagram&&a.push(`Instagram: @${t.instagram}`),t.linkedin&&a.push(`LinkedIn: ${t.linkedin}`),t.facebook&&a.push(`Facebook: ${t.facebook}`),t.twitter&&a.push(`X/Twitter: @${t.twitter}`),t.tiktok&&a.push(`TikTok: @${t.tiktok}`),t.youtube&&a.push(`YouTube: @${t.youtube}`),a.join("\n")}let s=`You are an elite creative director, conversion-rate optimizer and React + Tailwind front-end architect. Generate a COMPLETE, production-ready, premium landing page for the real business below as ONE React component using Tailwind CSS v4.
+
+It must feel handcrafted, cinematic and 2026-modern (generous rounding, soft shadows, airy minimal layouts), built specifically for THIS business. NEVER a template, generic SaaS/agency page, or repetitive stacked blocks. Goal: a $5,000+ Awwwards-level site that makes visitors ask "who designed this?!"
+
+## BUSINESS DATA
+Name: {{BUSINESS_NAME}}
+Category: {{CATEGORY}}
+Rating: {{RATING}}/5 ({{RATING_COUNT}} reviews)
+Address: {{ADDRESS}}
+Phone: {{PHONE}}
+Opening hours: {{HOURS}}
+Place ID: {{PLACE_ID}}
+{{COORDINATES}}
+{{GOOGLE_URL}}
+Email: {{EMAIL}}
+Socials: {{SOCIALS_BLOCK}}
+(Use email/socials exactly as given in contact + footer. Empty = none known.)
+
+## REAL REVIEWS
+{{REVIEWS_BLOCK}}
+
+{{IMAGES_BLOCK}}
+## CREATIVE DIRECTION
+First infer audience, price tier, brand personality, culture and trust signals. Then choose a unique direction that fits (clinic → clean glassmorphism; restaurant → immersive food storytelling; gym → bold kinetic type; salon → feminine editorial; law firm → authority; caf\xe9 → cozy warmth; garage → industrial). Typography, colors, spacing, rhythm, CTA tone, copy, shapes and hovers must all match it.
+Use asymmetrical grids, layered backgrounds, glassmorphism, oversized headlines, depth overlays, blurred gradient blobs, visual pacing (intense → calm), an immersive hero, and tasteful motion (transitions, hover:-translate-y-*, group-hover:*, scroll reveals via useEffect + IntersectionObserver, subtle animate-pulse). No boring stacked rectangles, no cheap or laggy effects. All cards, buttons, inputs, images and containers use rounded-xl or rounded-2xl minimum.
+
+## OUTPUT
+Return ONLY the component code. No markdown fences, no explanations, no text outside the component, no wrapping quotes, nothing after the final brace.
+
+## TECH RULES
+- Line 1 exactly: 'use client'; (with quotes and semicolon). Default export: export default function Component().
+- Pure JavaScript + JSX. NO TypeScript: no type annotations, generics, or React.*Event. Params untyped: (e) =>, useState(null).
+- Named hook imports only: import { useState, useEffect, useRef, useCallback } from 'react'. No React namespace import.
+- Tailwind classes only: no custom CSS, no <style> tags, no CSS-in-JS, no @import. Arbitrary values OK (bg-[#1a1a2e]). Custom keyframes via inline style only.
+- Fonts: <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=..." /> as FIRST child of the root element. Apply with font-['Playfair_Display'] or style={{ fontFamily: "'Playfair Display', serif" }}.
+- Icons: Font Awesome is preloaded. Use className only: <i className="fas fa-phone"></i> (fas / far / fab). No FA import, no inline SVG icons, no icon libraries. Common: fa-star, fa-phone, fa-map-marker-alt, fa-bars, fa-times, fa-arrow-right, fa-chevron-down, fa-quote-left, fa-check, fa-envelope, fa-clock, fa-external-link-alt, fa-whatsapp, fa-facebook, fa-instagram.
+- Use DOUBLE quotes for all JS strings (French apostrophes break single quotes): { text: "C'est magnifique" }.
+- Numeric/boolean props in braces: rows={3}, required={true}.
+- URLs only as JSX attributes (href="https://..."), never Markdown links.
+- Every JSX tag must close with its matching name (section→</section>, nav→</nav>). Turbopack's parser is strict.
+- Logo: styled text only, no image.
+
+## IMAGES
+Use ONLY the provided URLs, each at most ONCE, no stock/placeholder images. Use the annotated dimensions to place them: landscape → hero/banners/wide galleries; portrait → cards/profile/vertical layouts; square → avatars/thumbnails/grids; under 600px → compact slots only, never hero backgrounds.
+Every <img> uses className="w-full h-full object-cover" inside a parent that has overflow-hidden + rounded-* + an explicit height (or absolute inset-0). The <img> itself has NO rounding and NO height of its own. Photos must fill their frame completely, with no empty space or overflow past rounded corners.
+
+## RESPONSIVE
+Flawless at 375px, tablet and desktop, with zero horizontal scroll. Use sm:/md:/lg: prefixes, single-column collapse on mobile, max-w-* mx-auto, h-auto/min-h-screen (no fixed heights), touch-friendly targets, focus:ring-*, semantic HTML, responsive type.
+- Root component div: NEVER overflow-x-hidden / overflow-hidden / overflow-x-clip (it breaks sticky). No html/body overflow hacks.
+- Any section with decorative blobs or -left-*/-right-* offsets gets overflow-hidden on that section.
+- NAVBAR: <nav> with "sticky top-0 z-50", NEVER fixed. It contains only logo, links and hamburger. Transparent at top, backdrop-blur-md bg-white/80 after scroll (useState). Smooth-scroll anchors via scrollIntoView, active link states.
+- MOBILE MENU: a SIBLING outside <nav>, rendered only when open, else nothing in the DOM:
+{mobileMenuOpen && (<><div className="fixed inset-0 bg-black/50 z-[60] lg:hidden" onClick={() => setMobileMenuOpen(false)} /><div className="fixed top-0 right-0 bottom-0 w-[min(100%,20rem)] z-[70] bg-white lg:hidden shadow-2xl p-8 overflow-y-auto">{/* links */}</div></>)}
+FORBIDDEN: drawer inside <nav>, fixed inset-0 + translate-x-full, always-rendered off-screen panels (they cause horizontal scroll and break sticky).
+- FLOATING WHATSAPP: <a href="https://wa.me/{{CLEAN_PHONE}}" aria-label="Contact via WhatsApp" className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full flex items-center justify-center shadow-lg bg-[BRAND_ACCENT] text-white"><i className="fab fa-whatsapp text-2xl"></i></a>. Icon only: no text labels or absolute tooltips beside it.
+
+## LANGUAGE
+Detect the country FIRST from address, coordinates, Maps URL and reviews (English reviews on a Tunisian business do NOT make the site English). The PRIMARY language, default on load and used for all main copy, is the country's business language:
+- French: Tunisia, Morocco, Algeria, France, Luxembourg, Switzerland, Senegal, Ivory Coast, Cameroon, Mali, DRC and other francophone countries; Belgium (Dutch if Flanders)
+- German: Germany, Austria. Spanish: Spain, Mexico, Argentina, Colombia and other hispanophone countries. Italian: Italy. Portuguese: Portugal, Brazil. Dutch: Netherlands. Turkish: Turkey.
+- English: UK, USA, Australia, English-speaking Canada.
+- Arabic: UAE, Saudi Arabia, Qatar, Kuwait, Bahrain, Oman, Egypt, Jordan; Lebanon (French if the context is French).
+- Unsure → language of the reviews.
+Optionally add a small AR/EN language switcher in the navbar (hero + contact essentials).
+
+## COPYWRITING
+Human, believable, industry-specific, persuasive: storytelling, emotional hooks, sensory wording, strong CTAs. Avoid "Welcome to our website", "We provide quality services", "Customer satisfaction is our priority" and any generic AI copy.
+
+## SECTIONS
+Every body section MUST have a unique descriptive id (hero, services, testimonials, about, faq, contact, footer). No anonymous blocks, no ids like "section-1".
+1. NAVBAR: as specified above.
+2. HERO: unforgettable. Massive headline, emotional subheadline, primary + secondary CTA, rating display, animated layered background. Instantly conveys trust, identity, value.
+3. SERVICES: not plain cards. Dynamic alternating layouts, visual storytelling, hover animations.
+4. TESTIMONIALS: real reviews, highest rated first, as elegant or floating cards with avatar, name, stars (fas fa-star), review text and subtle motion. Avatar: if a URL is given use <img src="..." className="w-10 h-10 rounded-full object-cover" />, else a rounded div with the first letter. After the cards add a prominent, brand-styled, real <a href="https://search.google.com/local/writereview?placeid={{PLACE_ID}}"> ("Leave a Review on Google" + fa-external-link-alt). Never a placeholder or comment.
+5. ABOUT: emotional brand story (why it exists, what makes it different, what customers feel). Not corporate.
+6. FAQ: realistic questions, useState accordion.
+7. CONTACT + MAP: built to convert. {{FORM_MODE_INSTRUCTION}}
+   The form must have the class "contact-form" and use EXACTLY this behavior in its onSubmit handling:
+{{FORM_JS}}
+   Premium feel: floating labels, validation styling, focus:ring-* / focus:border-* states.
+   RICH, BUSINESS-SPECIFIC FORM (not just name/email/message). Every field has a name attribute so it lands in the email body. Include:
+   - Name + phone (and email if it fits).
+   - A "purpose" <select name="purpose"> whose options YOU choose for THIS business type, e.g. dentist: appointment / consultation / dental emergency / other; restaurant: table reservation / private event / catering / other; hotel: room booking / event / info; gym: free trial / membership / personal coaching; shop: product inquiry / order / other. 3-5 options, always ending with a general "other" option, in the site's language.
+   - If the business takes appointments, bookings or reservations (most do): a date picker <input type="date" name="date"> with min set to today (new Date().toISOString().slice(0, 10)), and a time <select name="time"> listing ONLY xx:00 and xx:30 slots inside the opening hours above (respect lunch breaks; if hours are unknown use a sensible window for the category, e.g. 09:00-18:00). Generate the slots from a hours array in code. If the chosen date's weekday is a closed day, show a short inline note.
+   - Show date/time only when the chosen purpose is a booking-type option (useState); hide them for pure inquiries. Skip date/time entirely for businesses where booking makes no sense.
+   - Optional extra fields only when truly relevant (e.g. party size for restaurants, number of guests/nights for hotels, service wanted for salons).
+   - A message/details textarea.
+   Style selects and date inputs like the other fields (same height, rounding, border, focus ring, custom chevron via appearance-none + fa-chevron-down).
+   The Google Maps embed is MANDATORY and must sit in the SAME ROW as the form: grid grid-cols-1 lg:grid-cols-2 items-stretch, equal height, form in one column, map in the other (stacked on mobile). Wrap in <div className="rounded-2xl overflow-hidden border shadow-lg"> and use exactly:
+<iframe src="{{MAP_EMBED_URL}}" title="Map showing {{BUSINESS_NAME}} location" className="w-full h-full min-h-[300px] lg:min-h-[420px] border-0" loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade" />
+   Keep the address + an "Open in Google Maps" link below the map in the same column. Never replace the map with a text link.
+8. FOOTER: premium. Business info, quick links (same anchors as navbar), social icons (fab), WhatsApp CTA (https://wa.me/{{CLEAN_PHONE}}), phone CTA (tel:{{PHONE}}), copyright, subtle motion.
+
+## COLOR SYSTEM
+Define ONE brand palette of exactly 2-3 colors (primary, accent, neutral/dark) chosen from category, tone and audience. Use ONLY these (in shades/opacities) for every background, button, highlight, border, icon, gradient and hover. NO native brand colors: the WhatsApp button, phone icon and social icons all use your palette, never WhatsApp green or platform colors. Enforce with arbitrary values (bg-[#1a1a2e]). Keep strong contrast.
+
+## FINAL CHECK (fix any failure before output)
+- Navbar sticky top-0 z-50; mobile menu outside <nav> and conditionally rendered; no overflow on the root div
+- No TypeScript anywhere; no <style> tags; className (not class); braces on numeric/boolean props
+- All JSX tags matched; only valid Tailwind v4 classes
+- Blob sections have overflow-hidden; no horizontal scroll at 375px
+- Every section has a unique id; everything rounded-xl+
+- Max 3 colors, no native brand colors; each image used once
+- No tooltip label on the floating button
+
+RETURN ONLY THE COMPLETE REACT COMPONENT: default export, Tailwind only, fonts via <link>.`,i=`
+DEPLOYMENT RULES (must follow for Vercel production build):
+- Return the COMPLETE modified React component (default export), no explanations, no markdown fences.
+- Line 1 must be exactly \`'use client';\` — never bare \`use client\` without quotes.
+- NO TypeScript type annotations. NO <style> tags. Fonts via <link rel="stylesheet"> only.
+- Font Awesome is pre-loaded — use className="fas fa-*" only, do not import FA.
+- Every JSX opening tag must close with the same tag name (section→</section>, nav→</nav>).
+- Navbar must use sticky top-0 z-50, NOT fixed top-0. Mobile menu drawer must be OUTSIDE <nav>, rendered only when open ({isOpen && ...}), NEVER fixed inset-0 translate-x-full always in DOM.
+- Root div must NOT have overflow-x-hidden (breaks sticky navbar). Use overflow-hidden on individual sections only.
+- Floating WhatsApp/button: icon only, no absolute tooltip labels beside the button. Use brand accent color — NOT WhatsApp green.
+- Numeric JSX props use braces: rows={4} not rows="4".
+- EVERY section in the body MUST have a unique descriptive id (id="hero", id="services", etc.). No unnamed sections, no generic ids like "section-1".
+- Use generous rounded corners throughout (rounded-xl rounded-2xl on cards, buttons, inputs, containers — avoid sharp square corners).
+- Maintain the existing brand color scheme (2-3 colors max) across all elements — no external brand colors.
+`;function r(e){let t,a,n,o,s=((n=[...(a=e.replace(/\r\n/g,"\n")).matchAll(/```[^\n`]*\n([\s\S]*?)\n[ \t]*```/g)].map(e=>e[1]).filter(e=>/export\s+default/.test(e))).length&&(a=n.sort((e,t)=>t.length-e.length)[0]),(o=(a=a.replace(/^[ \t]*```[a-zA-Z0-9_+-]*[ \t]*$/gm,"").replace(/^[ \t]*```(?:tsx|jsx|typescript|javascript|react|ts|js)?[ \t]*/gm,"")).search(/^[ \t]*(['"`]?use client|import\s|export\s|const\s|let\s|function\s|\/\*|\/\/)/m))>0&&(a=a.slice(o)),a).replace(/\[(https?:\/\/[^\]]+)\]\((https?:\/\/[^)]+)\)/g,"$1").trim();(s.startsWith("'")&&s.endsWith("'")&&!s.startsWith("'use client")||s.startsWith('"')&&s.endsWith('"')&&!s.startsWith('"use client'))&&(s=s.slice(1,-1).trim());let i=[];if(s=(s=(s=(s=s.replace(/\}\s*\n\s*['"]+\s*$/m,"}")).replace(/\}\s*['"]+\s*$/g,"}")).replace(/\sclass="/g,' className="').replace(/\sclass='/g," className='")).replace(/<style[^>]*>\{`([\s\S]*?)`\}<\/style>/g,(e,t)=>{for(let e of t.matchAll(/@import\s+url\(['"]?([^'")]+)['"]?\)/g))e[1].includes("fonts.googleapis.com")&&i.push(`<link rel="stylesheet" href="${e[1]}" />`);return""}),i.length>0){let e=[...new Set(i)];s=s.replace(/return\s*\(\s*\n?(\s*)(<[a-zA-Z])/,(t,a,n)=>`return (
+${a}${e.join(`
+${a}`)}
+${a}${n}`)}return t=s.replace(/^[ \t]*['"`]?use client['"`]?[ \t]*;?[ \t]*(?:\n|$)/gim,"").trimStart(),`'use client';
+
+${t}`}async function l(e,t,n,o,s="official",i){return r(await a(e,t,n,o,s,i))}e.s(["DEFAULT_SYSTEM_PROMPT",0,s,"MODIFY_PROMPT_SUFFIX",0,i,"askGeminiAndValidate",0,l,"buildDeployFixPrompt",0,function(e,t){return`The React landing page below FAILED to build on Vercel (Next.js 16 + Turbopack).
+
+VERCEL BUILD LOGS:
+${t}
+
+Fix ALL errors shown in the logs and return ONLY the complete corrected React component (default export, no markdown fences).
+
+Rules:
+- Line 1 must be exactly: 'use client';
+- Use double quotes for ALL JavaScript strings (French apostrophes like l'Art, c'est break single quotes)
+- Tailwind fonts: className="font-['Playfair_Display']"
+- Mobile menu: {isOpen && (...)} outside <nav>, never fixed inset-0 translate-x-full when closed
+- Navbar: sticky top-0 z-50
+- No TypeScript type annotations
+- No characters after the final closing brace
+- Valid JSX — every opening tag closes with the same tag name
+- Use generous rounded corners (rounded-xl rounded-2xl) on cards, buttons, containers
+- Maintain a single brand color scheme (max 3 colors) — no external brand colors, WhatsApp/phone icons use brand accent not their native colors
+
+Component to fix:
+
+${e}`},"buildPromptData",0,function(e){let t=e.business,a=t.phone?.replace(/[^0-9]/g,"")||"",s=[...t.reviews||[]].sort((e,t)=>(t.rating||0)-(e.rating||0)).slice(0,8).map(e=>{let t=`- "${e.text?.slice(0,250)||""}"`;return e.author&&(t+=` — ${e.author}`),e.rating&&(t+=` (${e.rating}★)`),e.avatar&&(t+=` avatar: ${e.avatar}`),t}).join("\n"),i=t.name||"Business Name",r="contact@"+(i.toLowerCase().replace(/[^a-z0-9]/g,"")||"company")+".com",l=`
+  document.querySelector('.contact-form')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const data = new FormData(this);
+    const pick = (names) => {
+      for (const n of names) { const v = data.get(n); if (v && String(v).trim()) return String(v).trim(); }
+      return '';
+    };
+    const name = pick(['name', 'fullname', 'full_name', 'your-name', 'yourname']);
+    const lines = [];
+    data.forEach((value, key) => {
+      const v = String(value).trim();
+      if (!v) return;
+      const label = key.replace(/[_-]+/g, ' ');
+      lines.push(label.charAt(0).toUpperCase() + label.slice(1) + ': ' + v);
+    });
+    const body = (lines.length ? lines.join('\\n') : 'New website inquiry') + '\\n\\n— Sent from the ${i} website contact form';
+    const subject = name ? 'New inquiry from ' + name + ' — ${i}' : 'New website inquiry — ${i}';
+    window.location.href = 'mailto:${r}?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  });`,c=function(e){let t=n(e);if(0===t.length)return"";let a=t.map((e,t)=>{let a=e.width&&e.height?` (${e.width}x${e.height})`:"";return`Image ${t+1}: ${e.url}${a}
+Alt text: ${e.alt}`}).join("\n\n");return`==================================================
+BUSINESS IMAGES (uploaded — use these URLs in the design)
+==================================================
+
+${a}
+`}(e),d=t.placeId?`https://search.google.com/local/writereview?placeid=${t.placeId}`:"";return{businessName:t.name||"Business Name",category:t.category||"General Business",rating:(t.rating||0).toString(),ratingCount:(t.ratingCount||0).toString(),address:t.address||"N/A",phone:t.phone||"",cleanPhone:a,hours:(Array.isArray(t.hours)?t.hours:[]).map(e=>String(e||"").replace(/\s+/g," ").trim()).filter(Boolean).join(" | ")||"Unknown (infer typical hours for this kind of business)",email:t.enrichedEmail||"",socialsBlock:o(t.enrichedSocials),placeId:t.placeId||"",coordinates:t.latitude&&t.longitude?`COORDINATES: ${t.latitude}, ${t.longitude}`:"",googleUrl:t.googleUrl?`GOOGLE MAPS URL: ${t.googleUrl}`:"",mapEmbedUrl:t.latitude&&t.longitude?`https://maps.google.com/maps?q=${t.latitude},${t.longitude}&z=16&output=embed&hl=en`:`https://maps.google.com/maps?q=${encodeURIComponent((t.name||"")+" "+(t.address||""))}&z=16&output=embed&hl=en`,reviewsBlock:s||"No reviews available",imagesBlock:c,formJs:l,formModeInstruction:"THE FORM MUST OPEN THE VISITOR'S EMAIL APP (mailto:) — NOT WhatsApp, NOT a server submit. Pre-fill the email TO the business email ("+r+") and build a meaningful subject plus a detailed body from every field the visitor filled in.",encodedBusinessAddress:encodeURIComponent((t.name||"")+" "+(t.address||"")),reviewUrl:d}},"buildSocialsBlock",0,o,"formatModifyImagesBlock",0,function(e){let t=n(e);return 0===t.length?"":"Available images:\n"+t.map(e=>{let t=e.width&&e.height?` [${e.width}x${e.height}]`:"";return`${e.url}${t}${e.alt?` (${e.alt})`:""}`}).join("\n")},"renderPrompt",0,function(e,t){return e.replace(/\{\{FORM_JS\}\}/g,t.formJs).replace(/\{\{FORM_MODE_INSTRUCTION\}\}/g,t.formModeInstruction).replace(/\{\{REVIEWS_BLOCK\}\}/g,t.reviewsBlock).replace(/\{\{IMAGES_BLOCK\}\}/g,t.imagesBlock).replace(/\{\{BUSINESS_NAME\}\}/g,t.businessName).replace(/\{\{CATEGORY\}\}/g,t.category).replace(/\{\{RATING\}\}/g,t.rating).replace(/\{\{RATING_COUNT\}\}/g,t.ratingCount).replace(/\{\{ADDRESS\}\}/g,t.address).replace(/\{\{PHONE\}\}/g,t.phone).replace(/\{\{CLEAN_PHONE\}\}/g,t.cleanPhone).replace(/\{\{HOURS\}\}/g,t.hours).replace(/\{\{EMAIL\}\}/g,t.email).replace(/\{\{SOCIALS_BLOCK\}\}/g,t.socialsBlock).replace(/\{\{PLACE_ID\}\}/g,t.placeId).replace(/\{\{COORDINATES\}\}/g,t.coordinates).replace(/\{\{GOOGLE_URL\}\}/g,t.googleUrl).replace(/\{\{MAP_EMBED_URL\}\}/g,t.mapEmbedUrl).replace(/\{\{ENCODED_BUSINESS_ADDRESS\}\}/g,t.encodedBusinessAddress).replace(/\{\{REVIEW_URL\}\}/g,t.reviewUrl)},"sanitizeGeneratedTsx",0,r],24162)}];
+
+//# sourceMappingURL=src_lib_prompts_ts_0y0egq3._.js.map

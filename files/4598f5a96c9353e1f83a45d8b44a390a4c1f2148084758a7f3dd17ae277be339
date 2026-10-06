@@ -369,6 +369,7 @@ export function useSearchParams() { return new URLSearchParams(); }`},sa=String.
     return kind === 'src' ? srcOf(n) : kind === 'href' ? hrefOf(n) : (bgUrlOf(n) || '');
   }
   function setValue(n, kind, v) {
+    if (valueOf(n, kind) === v) return; // no-op writes would wake the observer again
     if (kind === 'src') { n.removeAttribute('srcset'); n.setAttribute('src', v); }
     else if (kind === 'href') n.setAttribute('href', v);
     else n.style.backgroundImage = 'url("' + String(v).replace(/"/g, '%22') + '")';
@@ -380,9 +381,13 @@ export function useSearchParams() { return new URLSearchParams(); }`},sa=String.
     for (var s = 0; s < stickies.length; s++) {
       var st = stickies[s];
       // Chained swaps on one card: React still renders the first value.
-      if (st.kind === kind && st.orig === orig && st.sig === sig && st.to === from) { st.to = to; return; }
+      if (st.kind === kind && st.orig === orig && st.sig === sig && st.to === from) {
+        // Swapped back to what the page renders anyway: nothing left to re-apply.
+        if (to === st.from) stickies.splice(s, 1); else st.to = to;
+        return;
+      }
     }
-    stickies.push({ kind: kind, orig: orig, sig: sig, from: from, to: to });
+    if (from !== to) stickies.push({ kind: kind, orig: orig, sig: sig, from: from, to: to });
   }
   var syncing = false;
   function syncRebuilt() {
@@ -399,15 +404,21 @@ export function useSearchParams() { return new URLSearchParams(); }`},sa=String.
         if (valueOf(n, st.kind) !== st.from) continue;
         if (st.sig !== null && cardSig(n) !== st.sig) continue;
         setValue(n, st.kind, st.to);
+        break; // one swap per element per pass: chains can never cycle
       }
     }
   }
   // Runs before the browser paints: a rebuilt card never flashes its old photo.
-  new MutationObserver(function () {
+  var rebuiltObserver = new MutationObserver(function () {
     if (syncing || !(shiftLog.length || stickies.length)) return;
     syncing = true;
-    try { syncRebuilt(); } finally { syncing = false; }
-  }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'style', 'href'] });
+    try { syncRebuilt(); } finally {
+      // Drop the records our own writes just produced (no feedback loop).
+      rebuiltObserver.takeRecords();
+      syncing = false;
+    }
+  });
+  rebuiltObserver.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'style', 'href'] });
   var photoLabel = 'Photo · click to replace / crop';
   var badge = document.createElement('div');
   badge.id = 'lm-photo-badge';

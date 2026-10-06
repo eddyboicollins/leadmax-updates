@@ -447,6 +447,8 @@
     "studioRepublishHint": "Reconstruit v{{v}} sur Vercel (~1–2 min) avec la configuration et les correctifs les plus récents, puis la met en ligne",
     "leadsFromCampaign": "Leads de la campagne",
     "prevLead": "Lead précédent",
+    "hideDetails": "Masquer la fiche (voir la carte)",
+    "showDetails": "Afficher la fiche du lead",
     "nextLead": "Lead suivant",
     "photoCounter": "{{n}} / {{total}} photos",
     "reviewsCount": "{{count}} avis",

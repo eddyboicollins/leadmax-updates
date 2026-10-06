@@ -447,6 +447,8 @@
     "studioRepublishHint": "يعيد بناء v{{v}} على Vercel (حوالي 1–2 دقيقة) بأحدث الإعدادات والإصلاحات ثم ينشرها",
     "leadsFromCampaign": "عملاء الحملة",
     "prevLead": "العميل السابق",
+    "hideDetails": "إخفاء التفاصيل (عرض الخريطة)",
+    "showDetails": "عرض تفاصيل العميل",
     "nextLead": "العميل التالي",
     "photoCounter": "{{n}} / {{total}} صورة",
     "reviewsCount": "{{count}} مراجعة",

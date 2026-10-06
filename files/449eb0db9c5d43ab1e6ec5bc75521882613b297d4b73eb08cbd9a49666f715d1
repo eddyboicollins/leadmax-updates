@@ -447,6 +447,8 @@
     "studioRepublishHint": "Rebuild v{{v}} on Vercel (~1–2 min) with the latest build setup and fixes, then put it online",
     "leadsFromCampaign": "Leads from campaign",
     "prevLead": "Previous lead",
+    "hideDetails": "Hide details (show the map)",
+    "showDetails": "Show lead details",
     "nextLead": "Next lead",
     "photoCounter": "{{n}} / {{total}} photos",
     "reviewsCount": "{{count}} reviews",

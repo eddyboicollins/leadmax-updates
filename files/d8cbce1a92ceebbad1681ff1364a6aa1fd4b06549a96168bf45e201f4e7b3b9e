@@ -122,6 +122,8 @@ export default function CampaignPage() {
   const [interactiveMapOpen, setInteractiveMapOpen] = useState(false);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  // Desktop: the details panel can be folded away for a clear look at the map.
+  const [detailHidden, setDetailHidden] = useState(false);
   const { theme } = useTheme();
 
   const [domainEditLeadId, setDomainEditLeadId] = useState<string | null>(null);
@@ -693,7 +695,7 @@ export default function CampaignPage() {
   const selectedIndex = selectedLead ? filteredLeads.findIndex(l => l.id === selectedLead.id) : -1;
   const selectLead = (leadId: string, openOnMobile = true) => {
     setSelectedLeadId(leadId);
-    if (openOnMobile) setMobileDetailOpen(true);
+    if (openOnMobile) { setMobileDetailOpen(true); setDetailHidden(false); }
   };
 
   const detailFor = (lead: Lead) => {
@@ -720,7 +722,7 @@ export default function CampaignPage() {
         onViewImage={(url) => setViewImage(url)}
         onPrev={selectedIndex > 0 ? () => selectLead(filteredLeads[selectedIndex - 1].id) : undefined}
         onNext={selectedIndex >= 0 && selectedIndex < filteredLeads.length - 1 ? () => selectLead(filteredLeads[selectedIndex + 1].id) : undefined}
-        onClose={() => setMobileDetailOpen(false)}
+        onClose={() => { setMobileDetailOpen(false); setDetailHidden(true); }}
       />
     );
   };
@@ -862,10 +864,20 @@ export default function CampaignPage() {
               tone: mapTone(l),
             }))}
           />
+          {detailHidden && !scraping && (
+            <button
+              onClick={() => setDetailHidden(false)}
+              title={t('campaign.showDetails')}
+              className="absolute top-3 end-3 z-10 max-w-[260px] inline-flex items-center gap-2 h-9 ps-3 pe-3.5 rounded-xl bg-white/95 dark:bg-zinc-900/95 border border-zinc-200 dark:border-zinc-700/60 shadow-lg backdrop-blur-sm text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+            >
+              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" /></svg>
+              <span className="truncate">{selectedLead?.business.name || t('campaign.showDetails')}</span>
+            </button>
+          )}
         </section>
 
         {/* ── Right: lead details (desktop) ── */}
-        <aside className="hidden lg:flex w-[400px] xl:w-[420px] shrink-0 flex-col min-h-0 border-s border-zinc-200 dark:border-zinc-700/50">
+        <aside className={`hidden ${detailHidden && !scraping ? '' : 'lg:flex'} w-[400px] xl:w-[420px] shrink-0 flex-col min-h-0 border-s border-zinc-200 dark:border-zinc-700/50`}>
           {scraping ? (
             <div className="flex-1 min-h-0 overflow-y-auto flex flex-col p-5"><ScrapeProgressPanel campaignId={id} /></div>
           ) : selectedLead ? (

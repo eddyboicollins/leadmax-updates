@@ -1,0 +1,2 @@
+/** Max active (non-deleted) photos per lead: uploads, imports from discovered photos and restores. */
+export const MAX_LEAD_IMAGES = 50;

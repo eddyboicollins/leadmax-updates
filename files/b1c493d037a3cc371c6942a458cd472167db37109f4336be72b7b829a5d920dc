@@ -1,0 +1,463 @@
+'use client';
+
+import { createContext, useContext, useCallback, useRef, useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { v4 as uuidv4 } from 'uuid';
+import { useToast } from '@/components/Toast';
+import i18n from '@/lib/i18n';
+import { useSettings } from '@/lib/query/useCampaign';
+import type { StudioNote } from '@/lib/site/notes';
+
+export type GenerationPhase = 'checking' | 'generating' | 'deploying' | 'fixing' | 'done' | 'error';
+
+export interface GenerationJob {
+  id: string;
+  campaignId: string;
+  leadId: string;
+  leadName: string;
+  kind: 'generate' | 'modify' | 'publish' | 'unpublish';
+  userPrompt?: string;
+  /** generate/modify: the local version created; publish: the version put online. */
+  versionId?: string;
+  phase: GenerationPhase;
+  /** Raw message (technical errors). Empty when messageKey is used. */
+  message: string;
+  /** i18n key for friendly status text, resolved at render time so language switches apply live. */
+  messageKey?: string;
+  messageParams?: Record<string, string | number>;
+  error?: string;
+  url?: string;
+  liveCode?: string;
+  /** What started the job: lets a failed job be retried as-is, or its prompt edited and resent. */
+  input?: StartJobInput;
+}
+
+export interface StartJobInput {
+  campaignId: string;
+  leadId: string;
+  leadName: string;
+  kind: 'generate' | 'modify' | 'publish' | 'unpublish';
+  userPrompt?: string;
+  /** modify: version the edit is based on. publish: version to put online. */
+  versionId?: string;
+  /** modify: element-specific notes sent together in one request. */
+  notes?: StudioNote[];
+  /** Text shown in the chat for this request (defaults to userPrompt). */
+  displayPrompt?: string;
+  domain?: string;
+  hasDeployment?: boolean;
+  enrichHint?: boolean;
+}
+
+/**
+ * Provider quota errors are walls of text (several metrics, URLs, the model
+ * repeated): reduce them to the model and how long to wait. Null otherwise.
+ */
+export function friendlyAiError(message: string): { key: string; params: Record<string, string> } | null {
+  if (!/exceeded your current quota|quota exceeded|RESOURCE_EXHAUSTED/i.test(message)) return null;
+  const model = message.match(/model:\s*([\w.-]+)/i)?.[1];
+  const retry = message.match(/retry in\s*(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:([\d.]+)s)?/i);
+  const parts: string[] = [];
+  if (retry?.[1]) parts.push(`${retry[1]} h`);
+  if (retry?.[2]) parts.push(`${retry[2]} min`);
+  if (retry?.[3]) parts.push(`${Math.ceil(Number(retry[3]))} s`);
+  return {
+    key: parts.length ? 'campaign.aiQuotaRetry' : 'campaign.aiQuota',
+    params: { model: model ? ` (${model})` : '', wait: parts.join(' ') },
+  };
+}
+
+/** Resolve a job's display text in the current language. Raw technical errors stay as-is. */
+export function resolveJobMessage(
+  job: Pick<GenerationJob, 'message' | 'messageKey' | 'messageParams'> | null | undefined,
+  t: (key: string, params?: Record<string, string | number>) => string,
+  fallbackKey?: string,
+): string {
+  if (!job) return fallbackKey ? t(fallbackKey) : '';
+  if (job.messageKey) return t(job.messageKey, job.messageParams);
+  if (job.message) return job.message;
+  return fallbackKey ? t(fallbackKey) : '';
+}
+
+/** 1 → "1st", 2 → "2nd", … (fr: "1er"/"2e", ar: bare number). */
+function ordinalFor(lang: string | undefined, n: number): string {
+  const l = (lang || '').toLowerCase();
+  if (l.startsWith('fr')) return n === 1 ? '1er' : `${n}e`;
+  if (l.startsWith('ar')) return String(n);
+  const s = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+interface GenerationContextValue {
+  jobs: GenerationJob[];
+  activeJobs: GenerationJob[];
+  expanded: boolean;
+  setExpanded: (v: boolean) => void;
+  startJob: (input: StartJobInput) => boolean;
+  /** Run a failed job again with exactly the same input. False if it can't start now. */
+  retryJob: (jobId: string) => boolean;
+  /** Stop a running job: the AI request is cancelled server-side, nothing is saved; the job stays (as cancelled) so it can be retried or edited. */
+  cancelJob: (jobId: string) => void;
+  dismissJob: (jobId: string) => void;
+}
+
+const GenerationContext = createContext<GenerationContextValue | null>(null);
+
+export function useGeneration() {
+  const ctx = useContext(GenerationContext);
+  if (!ctx) throw new Error('useGeneration must be used within GenerationProvider');
+  return ctx;
+}
+
+async function findAvailableDomain(base: string): Promise<string | null> {
+  const slug = (s: string) =>
+    (s || '').toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').slice(0, 30).replace(/^-|-$/g, '');
+  const candidates = [slug(base)];
+  if (!candidates[0]) candidates[0] = 'lp-lead';
+  for (let i = 1; i <= 6; i++) candidates.push(`${candidates[0]}-${i}`);
+  for (const name of candidates) {
+    try {
+      const res = await fetch(`/api/check-name?name=${encodeURIComponent(name)}`);
+      const data = await res.json();
+      if (res.ok && data.available) return name;
+    } catch { /* keep trying */ }
+  }
+  return null;
+}
+
+export default function GenerationProvider({ children }: { children: React.ReactNode }) {
+  const queryClient = useQueryClient();
+  const [jobs, setJobs] = useState<GenerationJob[]>([]);
+  const [expanded, setExpanded] = useState(false);
+  const aborters = useRef<Record<string, AbortController>>({});
+  const autoClearTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Global single-flight: at most ONE AI job at a time across the whole app.
+  const busyLeadIds = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    for (const j of jobs) {
+      if (j.phase === 'done' && !autoClearTimers.current[j.id]) {
+        autoClearTimers.current[j.id] = setTimeout(() => {
+          delete autoClearTimers.current[j.id];
+          setJobs(prev => prev.filter(x => x.id !== j.id));
+        }, 6000);
+      }
+    }
+  }, [jobs]);
+
+  useEffect(() => {
+    return () => {
+      for (const t of Object.values(autoClearTimers.current)) clearTimeout(t);
+      autoClearTimers.current = {};
+    };
+  }, []);
+
+  const updateJob = useCallback((id: string, patch: Partial<GenerationJob>) => {
+    setJobs(prev => prev.map(j => (j.id === id ? { ...j, ...patch } : j)));
+  }, []);
+
+  /** Store a translatable status (clears any raw message) so it re-renders in the active language. */
+  const setJobMsg = useCallback((id: string, messageKey: string, messageParams?: Record<string, string | number>, extra?: Partial<GenerationJob>) => {
+    setJobs(prev => prev.map(j => (j.id === id ? { ...j, message: '', messageKey, messageParams, ...extra } : j)));
+  }, []);
+
+  const { toast } = useToast();
+  const { data: settingsData } = useSettings();
+  const isOfficialApi = true;
+
+  const invalidate = useCallback((campaignId: string) => {
+    queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] });
+    queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    queryClient.invalidateQueries({ queryKey: ['generations'] });
+    queryClient.invalidateQueries({ queryKey: ['site-versions'] });
+  }, [queryClient]);
+
+  const startJob = useCallback((input: StartJobInput) => {
+    // Global single-flight: only ONE AI job runs at a time (any lead). The
+    // ref covers rapid double-starts before state flushes; the state check
+    // covers the rest.
+    const anyBusy =
+      busyLeadIds.current.size > 0 ||
+      jobs.some(j => j.phase !== 'done' && j.phase !== 'error');
+    if (anyBusy) {
+      toast(i18n.t('campaign.genBusy'), 'info');
+      return false;
+    }
+    busyLeadIds.current.add(input.leadId);
+    const jobId = uuidv4();
+    const job: GenerationJob = {
+      id: jobId,
+      campaignId: input.campaignId,
+      leadId: input.leadId,
+      leadName: input.leadName,
+      kind: input.kind,
+      userPrompt: input.displayPrompt ?? input.userPrompt,
+      phase: 'checking',
+      message: '',
+      liveCode: '',
+      input,
+    };
+    setJobs(prev => [job, ...prev]);
+    setExpanded(false);
+
+    const ac = new AbortController();
+    aborters.current[jobId] = ac;
+
+    (async () => {
+      try {
+        let deploymentName: string | undefined = input.domain;
+
+        // Phase 1: check name availability (fresh generates, and the first publish)
+        if ((input.kind === 'generate' || input.kind === 'publish') && !input.hasDeployment) {
+          setJobMsg(jobId, 'campaign.checkingName', undefined, { phase: 'checking' });
+          const available = await findAvailableDomain(deploymentName || 'lp-lead');
+          if (!available) {
+            setJobMsg(jobId, 'campaign.domainTaken', undefined, { phase: 'error' });
+            return;
+          }
+          deploymentName = available;
+          if (available !== input.domain) {
+            await fetch(`/api/campaigns/${input.campaignId}/leads/${input.leadId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ deploymentName: available }),
+            }).catch(() => {});
+          }
+        }
+
+        // Phase 1b: live web search for emails/socials (first generate only,
+        // proxy source only — skipped entirely on official API).
+        // Runs BEFORE generation so findings land on the lead card instantly,
+        // and are then reused by generation / regenerate / modify.
+        if (input.kind === 'generate' && input.enrichHint !== false && !isOfficialApi) {
+          setJobMsg(jobId, 'campaign.searchingContacts', undefined, { phase: 'generating' });
+          try {
+            const enrichRes = await fetch(`/api/campaigns/${input.campaignId}/leads/${input.leadId}/enrich`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: AbortSignal.any([ac.signal, AbortSignal.timeout(130 * 1000)]),
+            });
+            if (enrichRes.ok) {
+              const data = await enrichRes.json().catch(() => null);
+              // Refresh instantly only when findings were actually persisted.
+              if (data?.success) invalidate(input.campaignId);
+            }
+          } catch {
+            // Enrichment is best-effort; generation falls back to searching server-side.
+            // Still refetch (unless the user cancelled) so a late server-side
+            // persist still surfaces on the lead card.
+            if (!ac.signal.aborted) invalidate(input.campaignId);
+          }
+        }
+        // Phase 2: AI code generation → a new LOCAL version (previewed in the
+        // studio). Publishing to Vercel is a separate, explicit 'publish' job.
+        if (input.kind === 'generate' || input.kind === 'modify') {
+          setJobMsg(jobId, input.kind === 'modify' ? 'campaign.updatingSite' : 'campaign.generatingSite', undefined, { phase: 'generating' });
+          const genUrl = input.kind === 'modify'
+            ? `/api/campaigns/${input.campaignId}/leads/${input.leadId}/landing-page/modify`
+            : `/api/campaigns/${input.campaignId}/leads/${input.leadId}/landing-page`;
+          const genBody = input.kind === 'modify'
+            ? { userPrompt: input.userPrompt, baseVersionId: input.versionId, notes: input.notes }
+            : { extraInstructions: input.userPrompt };
+          // The generation endpoint streams progress (SSE): "generating" and
+          // "generating_chunk" events, then "complete"/"error". Single
+          // attempt — any failure throws and lands in the catch below, which
+          // toasts the real message. No hard timeout — liveness is proven by
+          // the events; user cancel via ac.signal.
+          const genRes = await fetch(genUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(genBody),
+            signal: ac.signal,
+          });
+          if (!genRes.ok) {
+            const e = await genRes.json().catch(() => ({}));
+            if (e.error) throw new Error(e.error);
+            const genErr: Error & { i18nKey?: string } = new Error('generationFailed');
+            genErr.i18nKey = 'campaign.generationFailed';
+            throw genErr;
+          }
+          if (!genRes.body) {
+            const noBodyErr: Error & { i18nKey?: string } = new Error('noGenerationResponse');
+            noBodyErr.i18nKey = 'campaign.noGenerationResponse';
+            throw noBodyErr;
+          }
+          const genReader = genRes.body.getReader();
+          const genDecoder = new TextDecoder();
+          let genBuffer = '';
+          let genResult: { success: boolean; error?: string; versionId?: string } = { success: false };
+          while (true) {
+            const { value, done } = await genReader.read();
+            if (done) break;
+            genBuffer += genDecoder.decode(value, { stream: true });
+            const blocks = genBuffer.split('\n\n');
+            genBuffer = blocks.pop() || '';
+            for (const block of blocks) {
+              const line = block.trim();
+              if (!line.startsWith('data: ')) continue;
+              let data;
+              try { data = JSON.parse(line.slice(6)); } catch { continue; }
+              if (data.step === 'generating') {
+                setJobMsg(jobId, input.kind === 'modify' ? 'campaign.updatingSite' : 'campaign.generatingSite', undefined, { phase: 'generating' });
+              } else if (data.step === 'proxy_status') {
+                if (data.type === 'uploading') {
+                  setJobMsg(jobId, 'campaign.aiUploadingPrompt', undefined, { phase: 'generating' });
+                } else if (data.type === 'turn') {
+                  const turn = typeof data.turn === 'number' ? data.turn : 1;
+                  const total = typeof data.total === 'number' ? data.total : 1;
+                  setJobMsg(jobId, 'campaign.aiReceivingPrompt', { ordinal: ordinalFor(i18n.language, turn), turn, total }, { phase: 'generating' });
+                } else if (data.type === 'restream') {
+                  setJobs(prev => prev.map(j => (j.id === jobId ? { ...j, liveCode: '' } : j)));
+                } else if (data.type === 'streaming') {
+                  setJobMsg(jobId, input.kind === 'modify' ? 'campaign.updatingSite' : 'campaign.generatingSite', undefined, { phase: 'generating' });
+                }
+              } else if (data.step === 'generating_reset') {
+                // The server retries (corrected targeted edit / full rewrite): restart the live stream.
+                setJobs(prev => prev.map(j => (j.id === jobId ? { ...j, liveCode: '' } : j)));
+              } else if (data.step === 'generating_chunk' && data.chunk) {
+                setJobs(prev => prev.map(j => (j.id === jobId ? { ...j, liveCode: (j.liveCode || '') + data.chunk } : j)));
+              } else if (data.step === 'complete') {
+                genResult = { success: !!data.success, error: data.error, versionId: data.versionId };
+              } else if (data.step === 'error') {
+                if (data.error) throw new Error(data.error);
+                const genErr: Error & { i18nKey?: string } = new Error('generationFailed');
+                genErr.i18nKey = 'campaign.generationFailed';
+                throw genErr;
+              }
+            }
+          }
+          if (!genResult.success) {
+            if (genResult.error) throw new Error(genResult.error);
+            const genFailedErr: Error & { i18nKey?: string } = new Error('generationFailed');
+            genFailedErr.i18nKey = 'campaign.generationFailed';
+            throw genFailedErr;
+          }
+          invalidate(input.campaignId);
+          setJobMsg(jobId, 'campaign.versionReady', undefined, { phase: 'done', versionId: genResult.versionId });
+          return;
+        }
+
+        // Phase 3 (publish / unpublish): deploy with auto-fix (streams progress)
+        setJobMsg(jobId, input.kind === 'unpublish' ? 'campaign.unpublishingSite' : 'campaign.deployingSite', undefined, { phase: 'deploying' });
+        const depUrl = input.kind === 'unpublish'
+          ? `/api/campaigns/${input.campaignId}/leads/${input.leadId}/unpublish`
+          : `/api/campaigns/${input.campaignId}/leads/${input.leadId}/deploy`;
+        const depBody = input.kind === 'unpublish'
+          ? {}
+          : { userPrompt: input.userPrompt, versionId: input.versionId };
+        const depRes = await fetch(depUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(depBody),
+          signal: ac.signal,
+        });
+        if (!depRes.body) {
+          const noDepErr: Error & { i18nKey?: string } = new Error('noDeployResponse');
+          noDepErr.i18nKey = 'campaign.noDeployResponse';
+          throw noDepErr;
+        }
+        const reader = depRes.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let result: { success: boolean; error?: string; url?: string; versionId?: string } = { success: false };
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const blocks = buffer.split('\n\n');
+          buffer = blocks.pop() || '';
+          for (const block of blocks) {
+            const line = block.trim();
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.step === 'deploying') setJobMsg(jobId, data.attempt && data.attempt > 1 ? 'campaign.deployingSiteAgain' : 'campaign.deployingSite', undefined, { phase: 'deploying' });
+              else if (data.step === 'fixing' || data.step === 'build_failed') setJobMsg(jobId, 'campaign.fixingSite', undefined, { phase: 'fixing' });
+
+              else if (data.step === 'success') setJobMsg(jobId, 'campaign.siteOnline');
+              else if (data.step === 'complete') result = { success: !!data.success, error: data.error, url: data.url, versionId: data.versionId };
+            } catch { /* ignore */ }
+          }
+        }
+        if (result.success) {
+          setJobMsg(jobId, 'campaign.deployed', undefined, { phase: 'done', url: result.url, versionId: result.versionId });
+        } else if (result.error) {
+          updateJob(jobId, { phase: 'error', message: result.error, messageKey: undefined, messageParams: undefined });
+          toast(result.error, 'error');
+        } else {
+          setJobMsg(jobId, 'campaign.deployFailed', undefined, { phase: 'error' });
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          setJobMsg(jobId, 'campaign.cancelled', undefined, { phase: 'error' });
+        } else if (err instanceof Error && (err as Error & { i18nKey?: string }).i18nKey) {
+          setJobMsg(jobId, (err as Error & { i18nKey?: string }).i18nKey as string, undefined, { phase: 'error' });
+        } else {
+          const rawMessage = err instanceof Error ? err.message : '';
+          if (!rawMessage) {
+            setJobMsg(jobId, 'campaign.generationFailed', undefined, { phase: 'error' });
+            toast(i18n.t('campaign.generationFailed'), 'error');
+          } else {
+            const friendly = friendlyAiError(rawMessage);
+            if (friendly) {
+              setJobMsg(jobId, friendly.key, friendly.params, { phase: 'error' });
+              toast(i18n.t(friendly.key, friendly.params), 'error');
+            } else {
+              updateJob(jobId, { phase: 'error', message: rawMessage, messageKey: undefined, messageParams: undefined });
+              toast(rawMessage, 'error');
+            }
+          }
+        }
+      } finally {
+        invalidate(input.campaignId);
+        delete aborters.current[jobId];
+        busyLeadIds.current.delete(input.leadId);
+      }
+    })();
+    return true;
+  }, [jobs, updateJob, invalidate, setJobMsg, isOfficialApi, toast]);
+
+  const dismissJob = useCallback((jobId: string) => {
+    aborters.current[jobId]?.abort();
+    delete aborters.current[jobId];
+    if (autoClearTimers.current[jobId]) {
+      clearTimeout(autoClearTimers.current[jobId]);
+      delete autoClearTimers.current[jobId];
+    }
+    setJobs(prev => {
+      const job = prev.find(j => j.id === jobId);
+      if (job) busyLeadIds.current.delete(job.leadId);
+      return prev.filter(j => j.id !== jobId);
+    });
+  }, []);
+
+  const retryJob = useCallback((jobId: string) => {
+    const job = jobs.find(j => j.id === jobId);
+    if (!job?.input || job.phase !== 'error') return false;
+    const input = job.input;
+    const started = startJob(input);
+    // Replace the failed entry only once the new attempt is actually running.
+    if (started) setJobs(prev => prev.filter(j => j.id !== jobId));
+    return started;
+  }, [jobs, startJob]);
+
+  const cancelJob = useCallback((jobId: string) => {
+    aborters.current[jobId]?.abort();
+  }, []);
+
+  const activeJobs = jobs.filter(j => j.phase !== 'done' && j.phase !== 'error');
+
+  const value: GenerationContextValue = {
+    jobs,
+    activeJobs,
+    expanded,
+    setExpanded,
+    startJob,
+    retryJob,
+    cancelJob,
+    dismissJob,
+  };
+
+  return <GenerationContext.Provider value={value}>{children}</GenerationContext.Provider>;
+}

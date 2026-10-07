@@ -1,0 +1,64 @@
+/**
+ * Server-only AI router — picks Official API vs free Proxy.
+ *
+ * IMPORTANT: this module (and `@/lib/aiProxy`) must never be imported from a
+ * client component. `gemini.ts` stays client-safe (pure fetch logic only);
+ * all proxy branching lives here, reachable solely from API routes and other
+ * server-only lib files. Importing this from client code will break the
+ * browser build (puppeteer / `fs` have no browser equivalent).
+ */
+
+import { retryAskGemini, type GeminiModel, type AiSource, type ProxyStatus } from '@/lib/gemini';
+import { buildProfilePrompt, parseProfileResponse } from '@/lib/businessProfiles';
+import type { BusinessProfile } from '@/lib/types';
+
+/**
+ * Ask the AI via the selected source. Single attempt, no retries —
+ * failures throw immediately.
+ * - 'official': Google AI Studio API (needs apiKey).
+ * - 'chatgpt': free ChatGPT web-UI automation, logged out (see chatgptProxy.ts).
+ * - 'proxy': free Gemini web-UI automation (no key; needs one-time sign-in,
+ *   see aiProxy.ts). `onChunk` receives incremental deltas on both paths;
+ *   `onStatus` receives proxy progress (uploading/turn/streaming).
+ */
+export async function askAIWithSource(
+  prompt: string,
+  apiKey: string,
+  model: GeminiModel,
+  onChunk?: (text: string) => void,
+  source: AiSource = 'official',
+  onStatus?: (event: ProxyStatus) => void,
+  /** Cancels the request (the user stopped the job): rejects with an AbortError. */
+  signal?: AbortSignal,
+): Promise<string> {
+  if (source === 'proxy') {
+    const { askProxy } = await import('@/lib/aiProxy');
+    return askProxy(prompt, onChunk, onStatus, signal);
+  }
+  if (source === 'chatgpt') {
+    const { askChatGPTProxy } = await import('@/lib/chatgptProxy');
+    return askChatGPTProxy(prompt, onChunk, onStatus, signal);
+  }
+  return retryAskGemini(prompt, apiKey, model, onChunk, signal);
+}
+
+/** Asks the AI to invent a prospect's profile. Returns null on failure (caller can fall back). */
+export async function generateProfileWithAI(
+  apiKey: string,
+  model: GeminiModel,
+  existingNames: string[] = [],
+  source: AiSource = 'official',
+): Promise<BusinessProfile | null> {
+  try {
+    const raw = await askAIWithSource(
+      buildProfilePrompt(existingNames),
+      apiKey,
+      model,
+      undefined,
+      source,
+    );
+    return parseProfileResponse(raw || '');
+  } catch {
+    return null;
+  }
+}

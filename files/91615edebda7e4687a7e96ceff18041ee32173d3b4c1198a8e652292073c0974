@@ -1,0 +1,462 @@
+/**
+ * AI Proxy — ChatGPT web UI automation (server-only), logged out.
+ *
+ * Third AI source next to the official Gemini API and the Gemini proxy
+ * (aiProxy.ts). Same contract as askProxy: one serialized queue, a fresh chat
+ * per request, oversized prompts sent as same-chat turns, `onChunk` deltas of
+ * the code being written, cancellable through an AbortSignal.
+ *
+ * Unlike the Gemini proxy (which reads Google's network stream), the reply is
+ * read from the page itself: ChatGPT's wire format changes often, the
+ * rendered conversation much less. Both layouts ChatGPT currently serves are
+ * supported: the classic one (contenteditable composer,
+ * [data-message-author-role]) and the newer one (textarea composer,
+ * li[data-message-role]).
+ *
+ * No account needed: chatgpt.com answers logged-out visitors. Its own profile
+ * (`<data>/chatgpt-proxy-profile`) keeps cookies between runs. Headless by
+ * default; CHATGPT_PROXY_HEADLESS=false shows the window (e.g. to pass a
+ * one-time verification).
+ */
+/* eslint-disable @typescript-eslint/no-explicit-any -- puppeteer page fns */
+
+import path from 'path';
+import { promises as fs } from 'fs';
+import type { ProxyStatus } from '@/lib/gemini';
+import { dataDir, loadPuppeteer, systemBrowserCandidates, splitPrompt, stripCodeFence } from '@/lib/aiProxy';
+
+const CHATGPT_URL = 'https://chatgpt.com/';
+const NAV_TIMEOUT_MS = Number(process.env.PROXY_NAV_TIMEOUT_MS || 60_000);
+// Absolute ceiling for one turn.
+const TURN_TIMEOUT_MS = Number(process.env.PROXY_STREAM_TIMEOUT_MS || 600_000);
+// No new text for this long while ChatGPT still says it is writing: stuck.
+const STALL_TIMEOUT_MS = Number(process.env.PROXY_STALL_TIMEOUT_MS || 180_000);
+// Longest message sent in one turn; longer prompts go out as several turns.
+const CHUNK_LIMIT = Number(process.env.CHATGPT_PROXY_CHUNK_LIMIT || 30_000);
+const POLL_MS = 400;
+
+const COMPOSER = '#prompt-textarea, textarea#mobile-composer-prompt, div[contenteditable="true"], textarea';
+const ASSISTANT = '[data-message-author-role="assistant"], [data-message-role="assistant"], [data-turn="assistant"]';
+
+const holdSuffix = (i: number, n: number): string =>
+  `\n\n[Note: this request continues in part ${i + 1} of ${n} — reply with exactly "OK" and nothing else.]`;
+const GO_SUFFIX = `\n\n[Note: this is the final part. Now fulfill the complete request above.]`;
+// ChatGPT renders replies as Markdown: unfenced code loses its line breaks and
+// tags. The fences are stripped afterwards, so a fenced reply is always safe.
+const FENCE_NOTE = `\n\n[Output format for this chat: put your ENTIRE reply inside ONE fenced code block (\`\`\`), nothing before or after it. This overrides any "no markdown fences" instruction above.]`;
+
+function profileDir(): string {
+  return path.join(dataDir(), 'chatgpt-proxy-profile');
+}
+function isHeadless(): boolean {
+  return process.env.CHATGPT_PROXY_HEADLESS !== 'false';
+}
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+const abortError = () => Object.assign(new Error('Cancelled'), { name: 'AbortError' });
+
+// ── Browser singleton + serialized queue (shared across dev HMR reloads) ──
+
+type PuppeteerModule = typeof import('puppeteer');
+type Browser = Awaited<ReturnType<PuppeteerModule['launch']>>;
+type Page = Awaited<ReturnType<Browser['newPage']>>;
+
+interface Shared {
+  browser: Browser | null;
+  page: Page | null;
+  launching: Promise<Page> | null;
+  queue: Promise<unknown>;
+}
+
+function shared(): Shared {
+  const g = globalThis as unknown as { __leadmaxChatgptProxy?: Shared };
+  if (!g.__leadmaxChatgptProxy) {
+    g.__leadmaxChatgptProxy = { browser: null, page: null, launching: null, queue: Promise.resolve() };
+  }
+  return g.__leadmaxChatgptProxy;
+}
+
+async function ensureBrowser(): Promise<Page> {
+  const s = shared();
+  if (s.page && s.browser?.connected && !s.page.isClosed()) return s.page;
+  s.page = null;
+  if (!s.launching) {
+    s.launching = (async () => {
+      try {
+        const { browser, page } = await launch();
+        s.browser = browser;
+        s.page = page;
+        return page;
+      } finally {
+        shared().launching = null;
+      }
+    })();
+  }
+  return s.launching;
+}
+
+async function launch(): Promise<{ browser: Browser; page: Page }> {
+  const puppeteer = await loadPuppeteer();
+  await fs.mkdir(profileDir(), { recursive: true });
+  const headless = isHeadless();
+  const options = {
+    headless: headless ? ('new' as any) : false,
+    userDataDir: profileDir(),
+    defaultViewport: { width: 1400, height: 1000 },
+    args: [
+      '--disable-blink-features=AutomationControlled',
+      '--window-size=1400,1000',
+      '--lang=en-US',
+      '--disable-extensions',
+      '--mute-audio',
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+    ],
+  };
+  let browser: Browser | null = null;
+  try {
+    browser = await puppeteer.launch({
+      ...options,
+      ...(process.env.PUPPETEER_EXECUTABLE_PATH ? { executablePath: process.env.PUPPETEER_EXECUTABLE_PATH } : {}),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/already running/i.test(msg)) {
+      throw new Error('The ChatGPT proxy browser is already running in another LeadMax instance using the same data folder. Close it and retry.');
+    }
+    // Bundled Chromium missing/failed: try an installed browser.
+    for (const candidate of systemBrowserCandidates()) {
+      try { await fs.access(candidate); } catch { continue; }
+      try { browser = await puppeteer.launch({ ...options, executablePath: candidate }); break; } catch { /* next */ }
+    }
+    if (!browser) throw err;
+  }
+  const page = await browser.newPage();
+  if (headless) {
+    // Text only: skip images/media/fonts (faster, lighter).
+    await page.setRequestInterception(true).catch(() => {});
+    page.on('request', (req: any) => {
+      const type = req.resourceType();
+      if (type === 'image' || type === 'media' || type === 'font') req.abort('blockedbyclient').catch(() => {});
+      else req.continue().catch(() => {});
+    });
+  }
+  try {
+    const ua = await browser.userAgent();
+    await page.setUserAgent(ua.replace('HeadlessChrome', 'Chrome'));
+  } catch { /* keep default UA */ }
+  return { browser, page };
+}
+
+// ── Page driving ───────────────────────────────────────────────────────────
+
+/** Fresh logged-out chat with a ready composer. */
+async function openFreshChat(p: Page): Promise<void> {
+  await p.goto(CHATGPT_URL, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
+  const deadline = Date.now() + NAV_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const state = await p.evaluate((composerSel: string) => {
+      const text = (document.body?.innerText || '').toLowerCase();
+      if (/verify you are human|just a moment|checking your browser|unusual activity/.test(text) && !document.querySelector(composerSel)) {
+        return 'challenge';
+      }
+      const ed = Array.from(document.querySelectorAll<HTMLElement>(composerSel)).find(e => e.offsetParent !== null);
+      return ed ? 'ready' : 'loading';
+    }, COMPOSER).catch(() => 'loading');
+    if (state === 'ready') break;
+    if (state === 'challenge' && Date.now() > deadline - NAV_TIMEOUT_MS / 2) {
+      throw new Error('ChatGPT showed a verification page. Set CHATGPT_PROXY_HEADLESS=false, retry once and complete it in the window, then switch back.');
+    }
+    await sleep(500);
+  }
+  await dismissPopups(p);
+  const ready = await p.$(COMPOSER);
+  if (!ready) throw new Error('ChatGPT did not load its message box. Check your connection and retry.');
+}
+
+/** Close login/upsell popups and decline optional cookies (keeps chatting logged out). */
+async function dismissPopups(p: Page): Promise<void> {
+  await p.evaluate(() => {
+    const visible = (el: Element) => (el as HTMLElement).offsetParent !== null;
+    const buttons = Array.from(document.querySelectorAll<HTMLElement>('button, a[role="button"], a'));
+    for (const b of buttons) {
+      if (!visible(b)) continue;
+      const t = (b.innerText || b.getAttribute('aria-label') || '').trim().toLowerCase();
+      if (t === 'stay logged out' || t === 'reject non-essential' || t === 'reject all' || t === 'decline') b.click();
+    }
+    for (const d of Array.from(document.querySelectorAll('[role="dialog"]'))) {
+      if (!visible(d)) continue;
+      const close = d.querySelector<HTMLElement>('button[aria-label="Close"], button[data-testid="close-button"]');
+      close?.click();
+    }
+  }).catch(() => {});
+}
+
+/** Put the text in the composer (textarea or rich editor), newlines kept, nothing submitted. */
+async function fillComposer(p: Page, text: string): Promise<void> {
+  const landed = await p.evaluate((composerSel: string, value: string) => {
+    const ed = Array.from(document.querySelectorAll<HTMLElement>(composerSel)).find(e => e.offsetParent !== null);
+    if (!ed) return -1;
+    ed.focus();
+    if (ed instanceof HTMLTextAreaElement) {
+      // React-controlled textarea: set through the native setter, then notify.
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+      setter?.call(ed, value);
+      ed.dispatchEvent(new Event('input', { bubbles: true }));
+      return ed.value.length;
+    }
+    // Rich editor (ProseMirror): a synthetic paste inserts everything at once.
+    const sel = window.getSelection();
+    if (sel) { const r = document.createRange(); r.selectNodeContents(ed); sel.removeAllRanges(); sel.addRange(r); }
+    const dt = new DataTransfer();
+    dt.setData('text/plain', value);
+    ed.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    if ((ed.innerText || '').length < value.length * 0.9) {
+      // Paste ignored: type it line by line (Enter would submit).
+      value.split('\n').forEach((line, i) => {
+        if (i > 0) document.execCommand('insertLineBreak');
+        if (line) document.execCommand('insertText', false, line);
+      });
+    }
+    return (ed.innerText || '').length;
+  }, COMPOSER, text).catch(() => -1);
+  if (landed < 0) throw new Error('ChatGPT message box not found.');
+  if (landed < text.length * 0.9) {
+    throw new Error(`The prompt did not land in ChatGPT's message box (holds ${landed} chars, expected ~${text.length}).`);
+  }
+}
+
+async function submit(p: Page): Promise<void> {
+  for (let i = 0; i < 20; i++) {
+    const clicked = await p.evaluate(() => {
+      const btn = document.querySelector<HTMLButtonElement>(
+        'button[data-testid="send-button"], button[aria-label="Send message"], button[aria-label="Send prompt"], #composer-submit-button',
+      );
+      if (btn && !btn.disabled) { btn.click(); return true; }
+      return false;
+    }).catch(() => false);
+    if (clicked) return;
+    await sleep(250);
+  }
+  await p.keyboard.press('Enter');
+}
+
+interface ReplyState {
+  count: number;
+  generating: boolean;
+  /** Fenced markdown of the latest reply: code blocks as ```lang fences, the rest as text. */
+  text: string;
+  /** The largest code block of the latest reply (what a code request returns). */
+  code: string;
+  error: string | null;
+  canContinue: boolean;
+}
+
+async function readReply(p: Page): Promise<ReplyState> {
+  return p.evaluate((assistantSel: string) => {
+    const replies = Array.from(document.querySelectorAll<HTMLElement>(assistantSel))
+      // Nested matches (a role wrapper inside a turn): keep the outermost.
+      .filter((el, _i, all) => !all.some(o => o !== el && o.contains(el)));
+    const last = replies[replies.length - 1];
+    const buttons = Array.from(document.querySelectorAll<HTMLElement>('button'));
+    const generating = buttons.some(b => {
+      const id = `${b.getAttribute('data-testid') || ''} ${b.getAttribute('aria-label') || ''}`;
+      return /stop-button|stop generating|stop streaming|stop response/i.test(id) && b.offsetParent !== null;
+    });
+    const canContinue = buttons.some(b => /continue generating/i.test(b.innerText || '') && b.offsetParent !== null);
+    let text = '';
+    let code = '';
+    if (last) {
+      const parts: string[] = [];
+      const walk = (node: Node) => {
+        if (node.nodeType === 3) { parts.push((node as Text).data); return; }
+        if (node.nodeType !== 1) return;
+        const el = node as HTMLElement;
+        if (el.tagName === 'PRE') {
+          const c = el.querySelector('code') || el;
+          const lang = (c.className.match(/language-([\w-]+)/) || [])[1] || '';
+          const body = c.textContent || '';
+          if (body.length > code.length) code = body;
+          parts.push('\n```' + lang + '\n' + body.replace(/\n$/, '') + '\n```\n');
+          return;
+        }
+        if (/^(BUTTON|svg|SVG)$/.test(el.tagName) || el.getAttribute('aria-hidden') === 'true') return;
+        const block = /^(P|DIV|LI|H[1-6]|BR|TR|UL|OL|BLOCKQUOTE)$/.test(el.tagName);
+        if (block) parts.push('\n');
+        el.childNodes.forEach(walk);
+        if (block) parts.push('\n');
+      };
+      walk(last);
+      text = parts.join('').replace(/^\s*ChatGPT said:\s*/i, '').replace(/\n{3,}/g, '\n\n').trim();
+    }
+    const errEl = last?.querySelector('.text-token-text-error, [class*="text-red"]');
+    const pageText = document.body.innerText || '';
+    const errMatch = pageText.match(/(you've reached (?:our|the) limit[^.\n]*|something went wrong[^.\n]*|too many requests[^.\n]*|the message you submitted was too long[^.\n]*|message is too long[^.\n]*)/i);
+    return {
+      count: replies.length,
+      generating,
+      text,
+      code,
+      error: (errEl?.textContent || '').trim() || (errMatch ? errMatch[1] : null),
+      canContinue,
+    };
+  }, ASSISTANT).catch(() => ({ count: 0, generating: false, text: '', code: '', error: null, canContinue: false }));
+}
+
+async function clickStop(p: Page): Promise<void> {
+  await p.evaluate(() => {
+    const btn = Array.from(document.querySelectorAll<HTMLElement>('button')).find(b =>
+      /stop-button|stop generating|stop streaming|stop response/i.test(`${b.getAttribute('data-testid') || ''} ${b.getAttribute('aria-label') || ''}`));
+    btn?.click();
+  }).catch(() => {});
+}
+
+/**
+ * Send one message and wait for ChatGPT's complete reply. `onCode` receives
+ * the growing code block while it is written.
+ */
+async function sendAndWait(
+  p: Page,
+  text: string,
+  signal: AbortSignal | undefined,
+  onCode?: (code: string) => void,
+): Promise<ReplyState> {
+  const before = (await readReply(p)).count;
+  await fillComposer(p, text);
+  await sleep(300);
+  await submit(p);
+
+  const start = Date.now();
+  let lastText = '';
+  let lastGrowth = Date.now();
+  let stableSince = 0;
+  let state = await readReply(p);
+  while (true) {
+    if (signal?.aborted) { await clickStop(p); throw abortError(); }
+    await sleep(POLL_MS);
+    state = await readReply(p);
+    const mine = state.count > before;
+    if (mine && state.text !== lastText) {
+      lastText = state.text;
+      lastGrowth = Date.now();
+      stableSince = 0;
+      if (state.code) onCode?.(state.code);
+    }
+    if (state.error && (!mine || !state.generating)) {
+      throw new Error(`ChatGPT stopped with an error: "${state.error.slice(0, 160)}". Try again later or switch the AI source.`);
+    }
+    if (mine && state.canContinue && !state.generating) {
+      // Long answer cut by ChatGPT: let it continue in the same reply.
+      await p.evaluate(() => {
+        const b = Array.from(document.querySelectorAll<HTMLElement>('button')).find(x => /continue generating/i.test(x.innerText || ''));
+        b?.click();
+      }).catch(() => {});
+      lastGrowth = Date.now();
+      continue;
+    }
+    if (mine && !state.generating && state.text) {
+      // Done once the reply stops changing for a moment.
+      if (!stableSince) stableSince = Date.now();
+      if (Date.now() - stableSince >= 1500) return state;
+    }
+    const now = Date.now();
+    if (now - start > TURN_TIMEOUT_MS) throw new Error(`ChatGPT did not finish within ${Math.round(TURN_TIMEOUT_MS / 1000)}s. Try again or switch the AI source.`);
+    if (mine && state.generating && now - lastGrowth > STALL_TIMEOUT_MS) {
+      await clickStop(p);
+      throw new Error(`ChatGPT stopped responding mid-reply (no output for ${Math.round(STALL_TIMEOUT_MS / 1000)}s). Try again or split the request.`);
+    }
+    if (!mine && now - start > 90_000) {
+      throw new Error('ChatGPT did not start answering. It may be rate-limiting logged-out use — try again later or switch the AI source.');
+    }
+  }
+}
+
+async function runRequest(
+  prompt: string,
+  onChunk: ((text: string) => void) | undefined,
+  onStatus: ((event: ProxyStatus) => void) | undefined,
+  signal: AbortSignal | undefined,
+): Promise<string> {
+  onStatus?.({ type: 'uploading' });
+  const p = await ensureBrowser();
+  if (signal?.aborted) throw abortError();
+  // Every request starts a new chat: no context carried from the last one.
+  await openFreshChat(p);
+
+  const pieces = splitPrompt(prompt, CHUNK_LIMIT);
+  if (pieces.length > 1) console.log(`[chatgpt-proxy] prompt is ${prompt.length} chars, sending as ${pieces.length} same-chat turns`);
+  let final: ReplyState | null = null;
+  for (let i = 0; i < pieces.length; i++) {
+    if (signal?.aborted) throw abortError();
+    const isLast = i === pieces.length - 1;
+    const text = (pieces.length > 1 ? pieces[i] + (isLast ? GO_SUFFIX : holdSuffix(i, pieces.length)) : pieces[i])
+      + (isLast ? FENCE_NOTE : '');
+    if (pieces.length > 1) {
+      console.log(`[chatgpt-proxy] turn ${i + 1}/${pieces.length}`);
+      onStatus?.({ type: 'turn', turn: i + 1, total: pieces.length });
+    }
+    if (!isLast) {
+      await sendAndWait(p, text, signal);
+      await sleep(800);
+      continue;
+    }
+    let emitted = '';
+    let announced = false;
+    const t0 = Date.now();
+    final = await sendAndWait(p, text, signal, (code) => {
+      if (!announced) {
+        announced = true;
+        onStatus?.({ type: 'streaming' });
+      }
+      if (code.startsWith(emitted)) {
+        const delta = code.slice(emitted.length);
+        if (delta) onChunk?.(delta);
+      } else {
+        // The rendered block changed earlier text: restart the live view.
+        onStatus?.({ type: 'restream' });
+        onChunk?.(code);
+      }
+      emitted = code;
+    });
+    console.log(`[chatgpt-proxy] reply: ${final.text.length} chars (code ${final.code.length}) in ${Math.round((Date.now() - t0) / 1000)}s`);
+  }
+  if (!final) throw new Error('ChatGPT returned no reply.');
+  // Code request: the code block is the answer. Otherwise the reply text.
+  if (final.code && final.code.length >= Math.min(200, final.text.length * 0.5)) return final.code.trim();
+  return stripCodeFence(final.text).trim();
+}
+
+/** Ask the ChatGPT web UI (logged out). Serialized; cancellable via `signal`. */
+export async function askChatGPTProxy(
+  prompt: string,
+  onChunk?: (text: string) => void,
+  onStatus?: (event: ProxyStatus) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (typeof window !== 'undefined') throw new Error('askChatGPTProxy is server-only.');
+  if (!prompt || !prompt.trim()) throw new Error('Empty prompt.');
+  const s = shared();
+  const task = s.queue.then(() => {
+    if (signal?.aborted) throw abortError(); // stopped while waiting: never sent
+    return runRequest(prompt, onChunk, onStatus, signal);
+  });
+  s.queue = task.catch(() => {});
+  if (!signal) return task;
+  return new Promise<string>((resolve, reject) => {
+    const onAbort = () => {
+      if (s.page) void clickStop(s.page);
+      reject(abortError());
+    };
+    if (signal.aborted) { onAbort(); return; }
+    signal.addEventListener('abort', onAbort, { once: true });
+    task.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
+
+export async function closeChatGPTProxy(): Promise<void> {
+  const s = shared();
+  try { await s.browser?.close(); } catch { /* already closed */ }
+  s.browser = null;
+  s.page = null;
+}

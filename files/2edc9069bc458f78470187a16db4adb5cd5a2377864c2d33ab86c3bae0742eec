@@ -1,0 +1,199 @@
+/**
+ * Does a business really have its own website?
+ *
+ * Google Business Profile's "website" field often holds something else: a
+ * Facebook / Instagram page, a link-in-bio page, a listing on a marketplace or
+ * a magazine article. A link counts as the business's OWN site when its domain
+ * carries the business's name: a distinctive word of it ("lindas.ae" for
+ * "Linda's Real Estate"), its initials ("ushre.com" for "Union Square House
+ * Real Estate"), or the name written together ("kestates.ae" for "K Estates").
+ */
+
+export type WebsiteKind =
+  | 'own'        // the business's own domain
+  | 'none'       // empty field
+  | 'social'     // social network, link-in-bio, chat link
+  | 'listing'    // marketplace / directory / booking platform page
+  | 'unrelated'; // some other site (magazine, parent company, builder default…)
+
+/** Platforms that host a page FOR the business, never its own site. */
+const SOCIAL = [
+  'facebook.com', 'fb.com', 'fb.me', 'instagram.com', 'instagr.am', 'linkedin.com', 'twitter.com', 'x.com',
+  'tiktok.com', 'youtube.com', 'youtu.be', 'pinterest.com', 'snapchat.com', 'threads.net', 'wa.me',
+  'whatsapp.com', 't.me', 'telegram.me', 'linktr.ee', 'linktree.com', 'beacons.ai', 'bio.link', 'lnk.bio',
+  'taplink.cc', 'msha.ke', 'carrd.co', 'about.me',
+];
+const LISTING = [
+  // Google's own pages
+  'google.com', 'goo.gl', 'g.page', 'business.site', 'g.co',
+  // directories, booking, delivery, marketplaces
+  'yelp.com', 'tripadvisor.com', 'booking.com', 'airbnb.com', 'expedia.com', 'hotels.com', 'agoda.com',
+  'opentable.com', 'thefork.com', 'resy.com', 'sevenrooms.com', 'zomato.com', 'talabat.com', 'deliveroo.com',
+  'deliveroo.ae', 'ubereats.com', 'doordash.com', 'grubhub.com', 'justeat.com', 'careem.com', 'noon.com',
+  'propertyfinder.ae', 'bayut.com', 'realestate.com.au', 'domain.com.au', 'idealista.com', 'immoweb.be', 'immoscout24.de', 'tayara.tn', 'mubawab.tn', 'dubizzle.com', 'zillow.com', 'realtor.com', 'rightmove.co.uk',
+  'zoopla.co.uk', 'seloger.com', 'leboncoin.fr', 'pagesjaunes.fr', 'yellowpages.com', 'yell.com',
+  'doctolib.fr', 'zocdoc.com', 'practo.com', 'treatwell.com', 'fresha.com', 'booksy.com', 'vagaro.com',
+  'calendly.com', 'square.site', 'etsy.com', 'amazon.com', 'ebay.com', 'trustpilot.com', 'foursquare.com',
+  'wikipedia.org',
+];
+/** Free website builders: the business's name is in the SUBDOMAIN. */
+const BUILDER_HOSTS = ['wixsite.com', 'weebly.com', 'wordpress.com', 'blogspot.com', 'webflow.io', 'squarespace.com', 'godaddysites.com', 'site123.me', 'jimdosite.com', 'ueniweb.com', 'mystrikingly.com', 'business.site'];
+
+/** Words too common in business names to identify one. */
+const GENERIC = new Set([
+  'the', 'and', 'of', 'in', 'at', 'by', 'for', 'de', 'du', 'des', 'la', 'le', 'les', 'el', 'al',
+  'llc', 'ltd', 'inc', 'co', 'corp', 'company', 'group', 'sarl', 'sas', 'gmbh', 'fze', 'fzco', 'fzc', 'dmcc', 'est',
+  'real', 'estate', 'estates', 'realty', 'realtors', 'property', 'properties', 'brokerage', 'broker', 'brokers',
+  'agency', 'agent', 'agents', 'office', 'head', 'branch', 'international', 'global', 'services', 'service',
+  'restaurant', 'cafe', 'coffee', 'bar', 'grill', 'kitchen', 'clinic', 'dental', 'medical', 'center', 'centre',
+  'salon', 'spa', 'beauty', 'shop', 'store', 'studio', 'gym', 'fitness', 'hotel', 'consulting', 'solutions',
+  'dubai', 'uae', 'abu', 'dhabi', 'sharjah', 'miami', 'paris', 'london',
+  'immobilier', 'immobiliere', 'immo', 'agence', 'residence', 'societe', 'ste', 'pour', 'et', 'du',
+]);
+/** Words businesses add to their domain around their name. */
+const FILLER = ['dxb', 'nyc', 'la', 'ae', 'us', 'uk', 'usa', 'fr', 'tn', 'hq', 'my', 'get', 'go', 'app', 'web', 'site', 'online', 'official', 'shop', 'store', 'home', 'world', 'city', 'online', 'group', 'team', 'dr', 'by', 'est', 're', 'rest', 'realest', 'prop', 'props', 'realty', 'homes', 'living', 'immo'];
+
+const PUBLIC_SECOND =new Set(['co', 'com', 'net', 'org', 'gov', 'edu', 'ac', 'gen', 'ltd', 'plc']);
+
+const fold = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+function hostOf(url: string): string | null {
+  try {
+    const u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : `https://${url}`);
+    return u.hostname.toLowerCase().replace(/^www\d?\./, '').replace(/\.$/, '');
+  } catch {
+    return null;
+  }
+}
+
+const onDomain = (host: string, list: string[]) => list.some(d => host === d || host.endsWith(`.${d}`));
+
+/** The labels that name the site: the registrable label, plus a builder subdomain. */
+function nameLabels(host: string): string[] {
+  const labels = host.split('.');
+  const builder = BUILDER_HOSTS.find(b => host.endsWith(`.${b}`));
+  if (builder) return labels.slice(0, labels.length - builder.split('.').length);
+  // drop the TLD, then a "co." / "com." second level (example.co.uk)
+  let end = labels.length - 1;
+  if (end >= 2 && PUBLIC_SECOND.has(labels[end - 1])) end--;
+  return labels.slice(0, end).filter(l => !/^(www\d?|m|en|fr|ar|ru|de|es|shop|web|site|home)$/.test(l));
+}
+
+/** Name words: apostrophes dropped, runs of single letters merged ("T J R E" → "tjre"). */
+function nameWords(name: string, ampersand: string): string[] {
+  const words = fold(name)
+    .replace(/&/g, ampersand)
+    .replace(/['’`]/g, '')
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  const out: string[] = [];
+  let letters = '';
+  for (const w of words) {
+    if (w.length === 1 && /[a-z]/.test(w)) { letters += w; continue; }
+    if (letters) { out.push(letters); letters = ''; }
+    out.push(w);
+  }
+  if (letters) out.push(letters);
+  return out;
+}
+
+/** Length of the longest common substring. */
+function commonRun(a: string, b: string): number {
+  let best = 0;
+  const prev = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    let diag = 0;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = prev[j];
+      prev[j] = a[i - 1] === b[j - 1] ? diag + 1 : 0;
+      if (prev[j] > best) best = prev[j];
+      diag = tmp;
+    }
+  }
+  return best;
+}
+
+/** `d` starts with word starts of consecutive name words ("kahimm" = KAHloun IMMobiliere). */
+function startsWithWordStarts(d: string, words: string[]): boolean {
+  const go = (pos: number, wi: number, parts: number): boolean => {
+    if (parts >= 2 && pos >= 5 && leftover(d.slice(pos), []).length <= 4) return true;
+    if (wi >= words.length || pos >= d.length) return false;
+    const w = words[wi];
+    for (let n = Math.min(w.length, d.length - pos); n >= 2; n--) {
+      if (d.startsWith(w.slice(0, n), pos) && go(pos + n, wi + 1, parts + 1)) return true;
+    }
+    return false;
+  };
+  return words.some((_, i) => go(0, i, 0));
+}
+
+/** What is left of the domain once name words, generic words and fillers are removed. */
+function leftover(d: string, words: string[]): string {
+  let rest = d;
+  const strip = [...new Set([...words, ...GENERIC, ...FILLER])].filter(w => w.length >= 2).sort((a, b) => b.length - a.length);
+  for (const w of strip) rest = rest.split(w).join('');
+  return rest;
+}
+
+function matchesWords(d: string, words: string[]): boolean {
+  if (!words.length) return false;
+  const joined = words.join('');
+  const distinctive = words.filter(w => !GENERIC.has(w) && (w.length >= 3 || /\d/.test(w)));
+  // A domain of generic words only ("realestate") is the business's only when
+  // its name starts that way too ("Real Dubai", "The Property").
+  if (!leftover(d, []).length) return d.length >= 6 && joined.startsWith(d);
+
+  // A distinctive word of the name in the domain ("lindas" in lindas, "haus51"…),
+  // with nothing much else in it ("primetime-news" is not "Prime Homes").
+  if (distinctive.some(w => d.includes(w))) {
+    const rest = leftover(d, words);
+    if (rest.length <= 4 || rest.length <= d.length * 0.3) return true;
+  }
+  // Merged initials of the name ("H&S" → "hs" in hsproperty).
+  if (words.some(w => w.length >= 2 && /^[a-z]+$/.test(w) && w.length <= 4 && !GENERIC.has(w) && d.startsWith(w))) return true;
+  // The domain is the name written together ("kestates", "realdubai"), or starts like it ("dandb…").
+  if (d.length >= 4 && joined.includes(d)) return true;
+  if (joined.length >= 4 && d.includes(joined)) return true;
+  let prefix = 0;
+  while (prefix < d.length && d[prefix] === joined[prefix]) prefix++;
+  if (prefix >= 5 && prefix > words[0].length) return true; // spans several name words
+  // Initials: of every word ("ushre"), or of the distinctive part ("hsh" for Home Sweet Home).
+  const initials = (ws: string[]) => ws.map(w => w[0]).join('');
+  const core = words.filter(w => !GENERIC.has(w) || w === 'real' || w === 'estate');
+  for (const ini of [initials(words), initials(core), initials(words.filter(w => !GENERIC.has(w)))]) {
+    if (ini.length >= 3 && d.startsWith(ini)) return true;
+  }
+  // A shortened name: most of the domain is a run of the name's distinctive part
+  // ("bhomes" ← betterhomes, "superdxb" ← superiority).
+  const distinctJoined = distinctive.join('');
+  const run = commonRun(d, distinctJoined);
+  if (run >= 5 && run >= d.length * 0.6) return true;
+  if (run >= 5 && d.startsWith(distinctJoined.slice(0, run)) && leftover(d.slice(run), []).length <= 4) return true;
+  // Word starts strung together ("kahimm").
+  return startsWithWordStarts(d, words.filter(w => w.length >= 2));
+}
+
+/** True when the domain label carries the business name. */
+export function domainMatchesName(label: string, name: string): boolean {
+  const d = label.replace(/[^a-z0-9]/g, '');
+  if (d.length < 2) return false;
+  // "&" read both ways: "D&B" → "dandb" / "db".
+  return matchesWords(d, nameWords(name, ' and ')) || matchesWords(d, nameWords(name, ''));
+}
+
+export function classifyWebsite(name: string, url: string | null | undefined): WebsiteKind {
+  const raw = (url || '').trim();
+  if (!raw) return 'none';
+  const host = hostOf(raw);
+  if (!host || !host.includes('.')) return 'none';
+  if (onDomain(host, SOCIAL)) return 'social';
+  if (onDomain(host, LISTING)) return 'listing';
+  // A name we cannot compare (non-Latin script): trust the link.
+  if (!/[a-z]/.test(fold(name))) return 'own';
+  return nameLabels(host).some(l => domainMatchesName(l, name)) ? 'own' : 'unrelated';
+}
+
+/** The business has a website of its own (not a social page, listing or foreign site). */
+export function hasOwnWebsite(name: string, url: string | null | undefined): boolean {
+  return classifyWebsite(name, url) === 'own';
+}

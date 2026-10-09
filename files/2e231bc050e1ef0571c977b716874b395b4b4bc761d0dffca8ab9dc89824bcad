@@ -1,0 +1,110 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
+
+interface Status {
+  connected: boolean;
+  connectedAt: string | null;
+  connecting: 'idle' | 'waiting-login' | 'verifying' | 'error';
+  error: string | null;
+}
+
+/**
+ * DeepSeek needs an account: "Connect" opens a Chrome window on
+ * chat.deepseek.com, the user logs in there, and the session is captured
+ * automatically (see lib/deepseekProxy.ts).
+ */
+export default function DeepSeekConnect({ compact = false }: { compact?: boolean }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+
+  const { data: status } = useQuery<Status>({
+    queryKey: ['deepseek-status'],
+    queryFn: async () => (await fetch('/api/deepseek')).json(),
+    // Poll while the login window is open.
+    refetchInterval: q => (q.state.data?.connecting === 'waiting-login' || q.state.data?.connecting === 'verifying' ? 1500 : false),
+  });
+  const waiting = status?.connecting === 'waiting-login' || status?.connecting === 'verifying';
+
+  // Connected / disconnected: the studio picker reads it from the settings.
+  const connected = status?.connected;
+  useEffect(() => {
+    if (connected !== undefined) queryClient.invalidateQueries({ queryKey: ['settings'] });
+  }, [connected, queryClient]);
+
+  const run = async (action: 'connect' | 'cancel' | 'disconnect') => {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/deepseek', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) });
+      if (res.ok) queryClient.setQueryData(['deepseek-status'], await res.json());
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!status) return null;
+
+  const statusLine = (
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${status.connected ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${status.connected ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+      {status.connected ? t('settings.deepseekConnected') : t('settings.deepseekNotConnected')}
+    </span>
+  );
+
+  // Studio picker: status only — connecting / reconnecting lives in Settings.
+  if (compact) {
+    return (
+      <div className="px-2.5 pt-1 pb-1.5 flex items-center gap-2">
+        {statusLine}
+        {!status.connected && (
+          <Link href="/settings" className="ms-auto text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hover:underline">
+            {t('settings.deepseekConnectInSettings')}
+          </Link>
+        )}
+      </div>
+    );
+  }
+
+  const btn = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50';
+  return (
+    <div className="mt-4 p-3 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/60">
+      {waiting ? (
+        <div className="flex items-start gap-2.5">
+          <span className="mt-0.5 animate-spin w-3.5 h-3.5 rounded-full border-2 border-emerald-500 border-t-transparent shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-zinc-800 dark:text-zinc-100">
+              {status.connecting === 'verifying' ? t('settings.deepseekVerifying') : t('settings.deepseekWaitingLogin')}
+            </p>
+            {status.connecting === 'waiting-login' && <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">{t('settings.deepseekWaitingLoginHint')}</p>}
+          </div>
+          <button type="button" disabled={busy} onClick={() => run('cancel')} className={`${btn} text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800`}>
+            {t('campaign.cancel')}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {statusLine}
+          <span className="flex-1" />
+          <button type="button" disabled={busy} onClick={() => run('connect')} className={`${btn} bg-emerald-600 hover:bg-emerald-500 text-white`}>
+            {status.connected ? t('settings.deepseekReconnect') : t('settings.deepseekConnect')}
+          </button>
+          {status.connected && (
+            <button type="button" disabled={busy} onClick={() => run('disconnect')} className={`${btn} text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800`}>
+              {t('settings.deepseekDisconnect')}
+            </button>
+          )}
+          {status.connecting === 'error' && status.error && (
+            <p className="basis-full text-[11px] text-red-600 dark:text-red-400 [overflow-wrap:anywhere]">{status.error}</p>
+          )}
+          {!status.connected && status.connecting !== 'error' && (
+            <p className="basis-full text-[11px] text-zinc-500 dark:text-zinc-400">{t('settings.deepseekConnectHint')}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

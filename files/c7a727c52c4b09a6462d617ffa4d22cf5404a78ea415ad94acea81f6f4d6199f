@@ -1,0 +1,1304 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { sortLeadsByRating } from '@/lib/leads';
+import { useCampaign, useUpdateLeadStatus, useDeleteLead, useRestoreLead } from '@/lib/query/useCampaign';
+import { SetNavbar } from '@/components/AppShell';
+import { useToast } from '@/components/Toast';
+import { useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
+import { useLockBodyScroll } from '@/lib/useLockBodyScroll';
+import { useScrape } from '@/lib/scrape/ScrapeProvider';
+import ScrapeProgressPanel from '@/components/ScrapeProgressPanel';
+import { useGeneration, resolveJobMessage } from '@/lib/generate/GenerationProvider';
+import ModifyStudio from '@/components/ModifyStudio';
+import { formatRequestForDisplay, type StudioNote } from '@/lib/site/notes';
+import SafeImg from '@/components/SafeImg';
+import { cleanAddress } from '@/lib/address';
+import { setLastVisitedCampaign } from '@/lib/lastVisitedCampaign';
+import InteractiveMap from '@/components/InteractiveMap';
+import CampaignMap, { type MapLead } from '@/components/campaign/CampaignMap';
+import { hasOwnWebsite } from '@/lib/website';
+import LeadDetail from '@/components/campaign/LeadDetail';
+import { MAX_LEAD_IMAGES } from '@/lib/limits';
+import { useTheme } from '@/components/ThemeProvider';
+
+interface Business {
+  id: string;
+  name: string;
+  rating: number;
+  ratingCount: number;
+  address: string;
+  phone: string;
+  website: string;
+  category: string;
+  reviews: { author: string; text: string; rating: number; date: string }[];
+  latitude?: number;
+  longitude?: number;
+  placeId: string;
+  googleUrl: string;
+  hours?: string[];
+  scrapedImages?: { id: string; url: string; width?: number; height?: number }[];
+  scrapedAt?: string;
+  enrichedEmail?: string;
+  enrichedSocials?: { instagram?: string; facebook?: string; linkedin?: string; twitter?: string; tiktok?: string; youtube?: string };
+  enrichmentDone?: boolean;
+}
+
+function activeImages<T extends { deleted?: boolean }>(imgs?: T[]): T[] {
+  return (imgs || []).filter(i => !i.deleted);
+}
+
+interface Lead {
+  id: string;
+  business: Business;
+  status: 'pending' | 'contacted' | 'negotiating' | 'not_interested' | 'sold';
+  deleted?: boolean;
+  deletedAt?: string;
+  notes: string;
+  deploymentName?: string;
+  landingPage?: { tsx: string; generatedAt: string; version: number };
+  images?: { id: string; url: string; alt: string; aiCaption?: string; deleted?: boolean; deletedAt?: string }[];
+  deployment?: { provider: string; url: string; deployedAt: string; projectName?: string };
+  deploymentHistory?: { id: string; vercelDeploymentId: string; url: string; aliasUrl: string; deployedAt: string; userPrompt?: string; isMain: boolean; comingSoon?: boolean; tsx: string }[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export default function CampaignPage() {
+  const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const id = params.id as string;
+
+  const queryClient = useQueryClient();
+  const { data: campaign, isLoading, refetch: refetchCampaign } = useCampaign(id);
+  const updateStatusMutation = useUpdateLeadStatus();
+  const deleteLeadMutation = useDeleteLead();
+  const restoreLeadMutation = useRestoreLead();
+  const { t } = useTranslation();
+  const { toast, confirm } = useToast();
+  const scrape = useScrape();
+  const generation = useGeneration();
+  const scraping = scrape.running && scrape.campaignId === id;
+  const genJobForLead = (leadId: string) =>
+    generation.jobs.find(j => j.leadId === leadId && j.phase !== 'done' && j.phase !== 'error');
+  const isComingSoonActive = (lead: Lead) =>
+    !!lead.deployment && !!lead.deploymentHistory?.some(e => e.isMain && e.comingSoon);
+
+  const STATUSES: { key: Lead['status']; label: string }[] = [
+    { key: 'pending', label: t('campaign.pending') },
+    { key: 'contacted', label: t('campaign.contacted') },
+    { key: 'negotiating', label: t('campaign.negotiating') },
+    { key: 'not_interested', label: t('campaign.notInterested') },
+    { key: 'sold', label: t('campaign.sold') },
+  ];
+
+  // Sorting-only filters (NOT lead statuses): site presence.
+  const SITE_FILTERS: { key: string; label: string }[] = [
+    { key: 'has_site', label: t('campaign.hasSite') },
+    { key: 'no_website', label: t('campaign.noWebsite') },
+  ];
+
+  const filterLabel = (key: string) =>
+    STATUSES.find(st => st.key === key)?.label ?? SITE_FILTERS.find(st => st.key === key)?.label ?? key;
+
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [genCounts, setGenCounts] = useState<Record<string, number>>({});
+  const [studioLeadId, setStudioLeadId] = useState<string | null>(null);
+  const [imagesLead, setImagesLead] = useState<Lead | null>(null);
+  const [showImagesModal, setShowImagesModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [imagesTab, setImagesTab] = useState<'uploaded' | 'discovered' | 'deleted'>('uploaded');
+  const [selectedScraped, setSelectedScraped] = useState<Set<string>>(new Set());
+  const [importedScrapedIds, setImportedScrapedIds] = useState<Set<string>>(new Set());
+  const [importing, setImporting] = useState(false);
+  const [viewImage, setViewImage] = useState<string | null>(null);
+  const [generateLeadId, setGenerateLeadId] = useState<string | null>(null);
+  const [generatePrompt, setGeneratePrompt] = useState('');
+  const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [showAddClients, setShowAddClients] = useState(false);
+  const [manualRows, setManualRows] = useState([{ name: '', mapsUrl: '' }]);
+  const [resolvingClients, setResolvingClients] = useState(false);
+  const [interactiveMapOpen, setInteractiveMapOpen] = useState(false);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  // Desktop: the details panel can be folded away for a clear look at the map.
+  const [detailHidden, setDetailHidden] = useState(false);
+  const { theme } = useTheme();
+
+  const [domainEditLeadId, setDomainEditLeadId] = useState<string | null>(null);
+  const [domainDraft, setDomainDraft] = useState<Record<string, string>>({});
+  const [domainAvailability, setDomainAvailability] = useState<Record<string, { checking: boolean; available?: boolean; error?: string }>>({});
+  const domainCheckTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [pendingGenerateLeadId, setPendingGenerateLeadId] = useState<string | null>(null);
+
+  useLockBodyScroll(
+    !!viewImage || !!studioLeadId || !!domainEditLeadId || showGenerateModal || showImagesModal || showAddClients,
+  );
+
+  useEffect(() => {
+    if (isLoading || !campaign?.leads) return;
+    fetch(`/api/generations/count?campaignId=${id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setGenCounts(data); })
+      .catch(() => {});
+  }, [isLoading, campaign?.leads, id]);
+
+  useEffect(() => {
+    if (!id) return;
+    setLastVisitedCampaign(id);
+  }, [id]);
+
+  async function loadCampaign() {
+    const c = await refetchCampaign();
+    return c.data || null;
+  }
+
+  function handleImageUploadError(err: any, context?: string) {
+    const reason = err?.message || 'Upload failed';
+    toast(context ? `${context}: ${reason}` : reason, 'error');
+    if (err?.code === 'IMGXX_KEY_MISSING' || err?.code === 'IMGXX_KEY_INVALID') {
+      setTimeout(() => router.push('/settings?focus=imgxxKey'), 250);
+    } else if (err?.code === 'FILEBASE_KEY_MISSING') {
+      setTimeout(() => router.push('/settings?focus=filebaseKey'), 250);
+    }
+  }
+
+  async function refreshImagesLead(leadId: string) {
+    queryClient.invalidateQueries({ queryKey: ['campaign', id] });
+    const fresh = await loadCampaign();
+    const updated = fresh?.leads.find((l: any) => l.id === leadId);
+    if (updated) setImagesLead(updated as Lead);
+  }
+
+  async function deleteLeadImage(leadId: string, imageId: string) {
+    await fetch(`/api/campaigns/${id}/leads/${leadId}/images`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageId }) });
+    await refreshImagesLead(leadId);
+  }
+
+  async function restoreLeadImage(leadId: string, imageId: string) {
+    try {
+      const res = await fetch(`/api/campaigns/${id}/leads/${leadId}/images/restore`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageId }) });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Restore failed');
+      }
+      await refreshImagesLead(leadId);
+    } catch (err: any) {
+      toast(err.message, 'error');
+    }
+  }
+
+  // Runs async jobs with limited parallelism (3 at a time): fast uploads stay
+  // fast without hammering imgbb / Gemini web into rate limits.
+  async function eachLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>) {
+    const queue = [...items];
+    await Promise.all(Array.from({ length: Math.min(limit, queue.length) }, async () => {
+      while (queue.length > 0) {
+        const item = queue.shift()!;
+        await fn(item);
+      }
+    }));
+  }
+
+  /** Uploads photos to the lead; resolves with the hosted URLs that succeeded (in order). */
+  async function uploadFilesForLead(lead: Lead, files: File[]): Promise<string[]> {
+    if (files.length === 0) return [];
+    const leadId = lead.id;
+    const remaining = MAX_LEAD_IMAGES - activeImages(lead.images).length;
+    if (files.length > remaining) { toast(t('campaign.maxImages', { count: remaining }), 'error'); return []; }
+    const urls: (string | null)[] = files.map(() => null);
+    setUploading(true);
+    try {
+      await eachLimit(files, 3, async (file) => {
+        const index = files.indexOf(file);
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('alt', file.name.replace(/\.[^/.]+$/, ''));
+          const res = await fetch(`/api/campaigns/${id}/leads/${leadId}/images`, { method: 'POST', body: formData });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+            const error = new Error(err.error || t('campaign.uploadFailed', { status: res.status }));
+            (error as any).code = err.code;
+            throw error;
+          }
+          const uploaded = await res.json();
+          urls[index] = typeof uploaded?.url === 'string' ? uploaded.url : null;
+        } catch (err: any) {
+          handleImageUploadError(err, `Upload of "${file.name}" failed`);
+        }
+      });
+      await refreshImagesLead(leadId);
+    } finally {
+      setUploading(false);
+    }
+    return urls.filter((u): u is string => !!u);
+  }
+
+  async function handleFileUpload(files: File[]) {
+    if (!imagesLead) return;
+    await uploadFilesForLead(imagesLead, files);
+  }
+
+  async function openImagesModal(lead: Lead) {
+    const fresh = await loadCampaign();
+    const updated = fresh?.leads.find((l: any) => l.id === lead.id);
+    if (updated) {
+      setImagesTab('uploaded');
+      setSelectedScraped(new Set());
+      setImportedScrapedIds(new Set());
+      setViewImage(null);
+      setImagesLead(updated as Lead);
+      setShowImagesModal(true);
+    }
+  }
+
+  async function importSelectedImages() {
+    if (!imagesLead || selectedScraped.size === 0) return;
+    const leadId = imagesLead.id;
+    const remaining = MAX_LEAD_IMAGES - activeImages(imagesLead.images).length;
+    const scraped = imagesLead.business.scrapedImages || [];
+    const toImport = scraped.filter(s => selectedScraped.has(s.id)).slice(0, remaining);
+    if (toImport.length === 0) return;
+    setImporting(true);
+    let importedCount = 0;
+    let failedCount = 0;
+    let firstError = '';
+    try {
+      await eachLimit(toImport, 3, async (item) => {
+        try {
+          const res = await fetch(`/api/campaigns/${id}/leads/${leadId}/images/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ urls: [item.url] }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: 'Import failed' }));
+            const error = new Error(err.error || 'Import failed');
+            (error as any).code = err.code;
+            throw error;
+          }
+          const data = await res.json();
+          const result = data.results?.[0];
+          if (!result?.ok) throw new Error(result?.error || 'Import failed');
+          importedCount++;
+          setImportedScrapedIds(prev => { const next = new Set(prev); next.add(item.id); return next; });
+        } catch (err: any) {
+          failedCount++;
+          if (!firstError) firstError = err?.message || 'Import failed';
+        }
+      });
+      await refreshImagesLead(leadId);
+      setSelectedScraped(new Set());
+      if (failedCount > 0) toast(`${t('campaign.importPartial', { ok: importedCount, failed: failedCount })}${firstError ? ` — ${firstError}` : ''}`, 'success');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function leadFeaturedImage(lead: Lead): string | null {
+    // Skip unreliable session-gated Google photo URLs (googleusercontent / google.com)
+    const discovered = lead.business.scrapedImages?.find(s => !/googleusercontent|\.google\.com/.test(s.url))?.url;
+    if (discovered) return discovered;
+    const uploaded = activeImages(lead.images)[0]?.url;
+    if (uploaded) return uploaded;
+    if (lead.business.website) {
+      try {
+        const domain = new URL(lead.business.website).hostname;
+        return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+      } catch { /* ignore */ }
+    }
+    return null;
+  }
+
+  async function startScrape() {
+    const regions: { keyword: string; location: string }[] =
+      campaign?.regions && campaign.regions.length > 0
+        ? campaign.regions.map(rg => ({
+            keyword: rg.keyword,
+            location: rg.location,
+          }))
+        : [{
+            keyword: campaign!.keyword,
+            location: campaign!.location,
+          }];
+
+    scrape.startScrape({
+      campaignId: id,
+      keyword: campaign!.keyword,
+      location: campaign!.location,
+      regions,
+    });
+  }
+
+  async function updateLeadStatus(leadId: string, status: Lead['status']) {
+    updateStatusMutation.mutate({ campaignId: id, leadId, status });
+  }
+
+  async function deleteLead(leadId: string) {
+    if (!(await confirm({ message: t('campaign.deleteConfirm') }))) return;
+    deleteLeadMutation.mutate({ campaignId: id, leadId });
+  }
+
+  async function restoreLead(leadId: string) {
+    restoreLeadMutation.mutate({ campaignId: id, leadId });
+  }
+
+  async function doGenerate(leadId: string, extraInstructions?: string) {
+    const lead = allLeads.find((l: any) => l.id === leadId);
+    const hasDeployment = !!lead?.deployment?.url || (lead?.deploymentHistory?.length || 0) > 0;
+    const started = generation.startJob({
+      campaignId: id,
+      leadId,
+      leadName: lead?.business?.name || 'Lead',
+      kind: 'generate',
+      userPrompt: extraInstructions,
+      domain: lead ? effectiveDomain(lead) : undefined,
+      hasDeployment,
+      enrichHint: leadNeedsEnrichment(lead),
+    });
+    // Open the studio on the generating lead so progress (and the result)
+    // shows live there, same as a modify sent from inside the studio.
+    if (started) setStudioLeadId(leadId);
+  }
+
+  // True only when an enrichment request would actually run (fields still empty).
+  function leadNeedsEnrichment(lead: any): boolean {
+    const b = (lead as any)?.business;
+    if (!b || b.enrichmentDone) return false;
+    return !(
+      b.enrichedEmail ||
+      b.enrichedSocials?.instagram ||
+      b.enrichedSocials?.linkedin ||
+      b.enrichedSocials?.facebook ||
+      b.enrichedSocials?.twitter ||
+      b.enrichedSocials?.tiktok ||
+      b.enrichedSocials?.youtube
+    );
+  }
+
+  async function setMainDeployment(leadId: string, entryId: string) {
+    try {
+      const res = await fetch(`/api/campaigns/${id}/leads/${leadId}/deploy/set-main`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entryId }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      await loadCampaign();
+      queryClient.invalidateQueries({ queryKey: ['campaign'] });
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    } catch (err: any) {
+      toast(err.message, 'error');
+    }
+  }
+
+  async function unpublishWebsite(lead: Lead) {
+    if (!(await confirm({ message: t('campaign.unpublishConfirm') }))) return;
+    generation.startJob({
+      campaignId: id,
+      leadId: lead.id,
+      leadName: lead.business.name,
+      kind: 'unpublish',
+      hasDeployment: true,
+    });
+  }
+  function slugifyDomain(input: string): string {
+    return (input || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '-')
+      .replace(/-+/g, '-')
+      .slice(0, 30)
+      .replace(/^-|-$/g, '');
+  }
+
+  function defaultDomain(lead: Lead): string {
+    return `lp-${slugifyDomain(lead.business.name || 'lead')}` || 'lp-lead';
+  }
+
+  function effectiveDomain(lead: Lead): string {
+    return lead.deploymentName || defaultDomain(lead);
+  }
+
+  // "View website" must open the stable main domain (<project>.vercel.app),
+  // never the per-build deployment URL. deploymentName is the exact project
+  // name sent to the Vercel API; stored deployment.url can be a unique build
+  // URL when alias assignment failed or for entries written by older builds.
+  function mainSiteUrl(lead: Lead): string {
+    const project = lead.deploymentName || lead.deployment?.projectName || defaultDomain(lead);
+    return `https://${project}.vercel.app`;
+  }
+
+  async function checkDomainAvailability(leadId: string, name: string) {
+    if (!name) {
+      setDomainAvailability(prev => ({ ...prev, [leadId]: { checking: false, error: 'Enter a domain name' } }));
+      return;
+    }
+    setDomainAvailability(prev => ({ ...prev, [leadId]: { checking: true } }));
+    try {
+      const res = await fetch(`/api/check-name?name=${encodeURIComponent(name)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setDomainAvailability(prev => ({ ...prev, [leadId]: { checking: false, error: data.error || 'Could not check availability' } }));
+        return;
+      }
+      setDomainAvailability(prev => ({ ...prev, [leadId]: { checking: false, available: data.available } }));
+    } catch {
+      setDomainAvailability(prev => ({ ...prev, [leadId]: { checking: false, error: 'Availability check failed' } }));
+    }
+  }
+
+  function onDomainDraftChange(leadId: string, raw: string) {
+    // Clean as-you-type so the field can only ever contain what will actually
+    // be checked and saved — no "garbage shown, slug checked" mismatch.
+    const cleaned = raw
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-{2,}/g, '-')
+      .slice(0, 30);
+    setDomainDraft(prev => ({ ...prev, [leadId]: cleaned }));
+    const slug = slugifyDomain(cleaned);
+    if (domainCheckTimers.current[leadId]) clearTimeout(domainCheckTimers.current[leadId]);
+    if (!slug) {
+      setDomainAvailability(prev => ({ ...prev, [leadId]: { checking: false, error: 'Enter a domain name' } }));
+      return;
+    }
+    setDomainAvailability(prev => ({ ...prev, [leadId]: { checking: true } }));
+    domainCheckTimers.current[leadId] = setTimeout(() => {
+      checkDomainAvailability(leadId, slug);
+    }, 500);
+  }
+
+  async function saveDomain(lead: Lead) {
+    const draft = (domainDraft[lead.id] || '').trim();
+    const next = slugifyDomain(draft);
+    if (!next) { setDomainEditLeadId(null); return; }
+    try {
+      const res = await fetch(`/api/check-name?name=${encodeURIComponent(next)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to check domain availability');
+      if (!data.available) {
+        setDomainAvailability(prev => ({ ...prev, [lead.id]: { checking: false, available: false } }));
+        toast(`"${next}.vercel.app" is already taken. Please choose a different name.`, 'error');
+        return;
+      }
+
+      const patchRes = await fetch(`/api/campaigns/${id}/leads/${lead.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deploymentName: next }),
+      });
+      if (!patchRes.ok) throw new Error((await patchRes.json()).error || 'Failed to save domain');
+      setDomainEditLeadId(null);
+      await loadCampaign();
+      queryClient.invalidateQueries({ queryKey: ['campaign'] });
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      if (pendingGenerateLeadId === lead.id) {
+        setPendingGenerateLeadId(null);
+        setGenerateLeadId(lead.id);
+        setGeneratePrompt('');
+        setShowGenerateModal(true);
+      }
+    } catch (err: any) {
+      toast(err.message, 'error');
+    }
+  }
+
+  function openGenerateModal(leadId: string) {
+    if (!leadId) {
+      setShowGenerateModal(true);
+      return;
+    }
+    const lead = allLeads.find((l: any) => l.id === leadId);
+    setPendingGenerateLeadId(leadId);
+    if (lead && !lead.landingPage) {
+      setDomainEditLeadId(lead.id);
+      setDomainDraft(prev => ({ ...prev, [lead.id]: effectiveDomain(lead) }));
+      setDomainAvailability(prev => ({ ...prev, [lead.id]: { checking: false } }));
+      return;
+    }
+    setPendingGenerateLeadId(null);
+    setGenerateLeadId(leadId);
+    setGeneratePrompt('');
+    setShowGenerateModal(true);
+  }
+
+  function submitGenerate() {
+    if (!generateLeadId) return;
+    const extra = generatePrompt.trim() || undefined;
+    setShowGenerateModal(false);
+    doGenerate(generateLeadId, extra);
+  }
+
+  function openModifyModal(lead: Lead) {
+    setStudioLeadId(lead.id);
+  }
+
+  function closeStudio() {
+    const closedId = studioLeadId;
+    setStudioLeadId(null);
+    // Flash the lead card green so the user lands back on the site just previewed.
+    if (closedId) router.replace(`/campaign/${id}?lead=${encodeURIComponent(closedId)}&focus=${Date.now()}`, { scroll: false });
+  }
+
+  function updateManualRow(i: number, patch: Partial<{ name: string; mapsUrl: string }>) {
+    setManualRows(prev => prev.map((r, idx) => idx === i ? { ...r, ...patch } : r));
+  }
+
+  async function submitAddClients() {
+    const valid = manualRows.filter(r => r.name.trim() && r.mapsUrl.trim());
+    if (valid.length === 0) return;
+    setResolvingClients(true);
+    try {
+      const res = await fetch(`/api/campaigns/${id}/leads/manual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: valid.map(r => ({ name: r.name.trim(), mapsUrl: r.mapsUrl.trim() })) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to add clients');
+      if (data.failed > 0) {
+        toast(t('campaign.manualAdded', { ok: data.added, failed: data.failed }), 'error');
+      } else {
+        toast(t('campaign.manualAdded', { ok: data.added, failed: 0 }), 'success');
+      }
+      setShowAddClients(false);
+      setManualRows([{ name: '', mapsUrl: '' }]);
+      await loadCampaign();
+      queryClient.invalidateQueries({ queryKey: ['campaign'] });
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    } catch (err: any) {
+      toast(err.message, 'error');
+    } finally {
+      setResolvingClients(false);
+    }
+  }
+
+  function sendStudioPrompt(userPrompt: string, baseVersionId: string | null, notes: StudioNote[] = []): boolean {
+    const studioLead = allLeads.find((l: any) => l.id === studioLeadId);
+    if (!studioLead || (!userPrompt.trim() && notes.length === 0)) return false;
+    // Clear any lingering error from a previous attempt so it doesn't linger next to the new one.
+    for (const j of generation.jobs) {
+      if (j.leadId === studioLead.id && (j.kind === 'modify' || j.kind === 'generate') && j.phase === 'error') generation.dismissJob(j.id);
+    }
+    return generation.startJob({
+      campaignId: id,
+      leadId: studioLead.id,
+      leadName: studioLead.business.name,
+      kind: 'modify',
+      userPrompt: userPrompt.trim(),
+      displayPrompt: formatRequestForDisplay(userPrompt, notes),
+      notes,
+      versionId: baseVersionId || undefined,
+      hasDeployment: true,
+    });
+  }
+
+  /** Put one local version online (Vercel). Only ever triggered by the user. */
+  function publishStudioVersion(versionId: string) {
+    const studioLead = allLeads.find((l: any) => l.id === studioLeadId);
+    if (!studioLead) return;
+    for (const j of generation.jobs) {
+      if (j.leadId === studioLead.id && j.kind === 'publish' && j.phase === 'error') generation.dismissJob(j.id);
+    }
+    generation.startJob({
+      campaignId: id,
+      leadId: studioLead.id,
+      leadName: studioLead.business.name,
+      kind: 'publish',
+      versionId,
+      domain: effectiveDomain(studioLead),
+      hasDeployment: !!studioLead.deployment?.url || (studioLead.deploymentHistory?.length || 0) > 0,
+    });
+  }
+
+  const allLeads = sortLeadsByRating([...new Map([...(scraping ? scrape.streamedLeads as any : []), ...(campaign?.leads || [])].map(l => [l.id, l])).values()] as any);
+  const leadParam = searchParams.get('lead');
+  const focusParam = searchParams.get('focus');
+  const [consumedFocus, setConsumedFocus] = useState<string | null>(null);
+  const highlightedLead = leadParam && focusParam && focusParam !== consumedFocus ? leadParam : null;
+  const effectiveFilter = highlightedLead ? 'all' : filterStatus;
+  const [seenHighlight, setSeenHighlight] = useState<string | null>(null);
+  if (highlightedLead && highlightedLead !== seenHighlight) {
+    setSeenHighlight(highlightedLead);
+    setSelectedLeadId(highlightedLead);
+  }
+  const filteredLeads = allLeads.filter(l => {
+    if (effectiveFilter === 'deleted') return !!l.deleted;
+    if (l.deleted) return false;
+    if (effectiveFilter === 'all') return true;
+    if (effectiveFilter === 'has_site') return !!l.deployment?.url;
+    if (effectiveFilter === 'no_website') return !(l.business.website || '').trim();
+    return l.status === effectiveFilter;
+  });
+
+  // Soft-deleted photos are hidden everywhere; only active ones count for slots.
+  const modalActiveImages = activeImages(imagesLead?.images);
+  const modalDeletedImages = (imagesLead?.images || []).filter(i => !!i.deleted);
+
+  useEffect(() => {
+    if (!focusParam) return;
+    const t = setTimeout(() => setConsumedFocus(focusParam), 4000);
+    return () => clearTimeout(t);
+  }, [focusParam]);
+
+  useEffect(() => {
+    if (!highlightedLead) return;
+    let cancelled = false;
+    let attempts = 0;
+    const scroll = () => {
+      if (cancelled) return;
+      const el = document.getElementById(`lead-card-${highlightedLead}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else if (attempts < 50) {
+        attempts++;
+        setTimeout(scroll, 100);
+      }
+    };
+    scroll();
+    return () => { cancelled = true; };
+  }, [highlightedLead, focusParam]);
+
+  if (isLoading) return (
+    <div className="flex-1 bg-gray-100 dark:bg-zinc-900 flex items-center justify-center transition-colors">
+      <div className="animate-spin w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full" />
+    </div>
+  );
+
+  if (!campaign) return null;
+
+  // ── 3-pane layout helpers (list · map · detail) ─────────────────────
+  const statusLabel = (lead: Lead) =>
+    lead.deleted ? t('campaign.deleted') : (STATUSES.find(s => s.key === lead.status)?.label ?? STATUSES[0].label);
+  const filterCount = (key: string) => allLeads.filter(l => {
+    if (key === 'deleted') return !!l.deleted;
+    if (l.deleted) return false;
+    if (key === 'all') return true;
+    if (key === 'has_site') return !!l.deployment?.url;
+    if (key === 'no_website') return !(l.business.website || '').trim();
+    return l.status === key;
+  }).length;
+  /** Discovered photos first (skipping session-gated Google URLs), then uploaded ones. */
+  const leadPhotos = (lead: Lead): string[] => {
+    const discovered = (lead.business.scrapedImages || []).map(s => s.url).filter(u => !/googleusercontent|\.google\.com/.test(u));
+    const uploaded = activeImages(lead.images).map(i => i.url);
+    return [...new Set([...discovered, ...uploaded])];
+  };
+  const mapTone = (lead: Lead): MapLead['tone'] =>
+    lead.deleted || lead.status === 'not_interested' ? 'muted'
+      : lead.landingPage || lead.deployment ? 'site'
+        : lead.status === 'pending' ? (hasOwnWebsite(lead.business.name, lead.business.website) ? 'new' : 'nosite') : 'worked';
+
+  const selectedLead = filteredLeads.find(l => l.id === selectedLeadId) ?? filteredLeads[0] ?? null;
+  const selectedIndex = selectedLead ? filteredLeads.findIndex(l => l.id === selectedLead.id) : -1;
+  const selectLead = (leadId: string, openOnMobile = true) => {
+    setSelectedLeadId(leadId);
+    if (openOnMobile) { setMobileDetailOpen(true); setDetailHidden(false); }
+  };
+
+  const detailFor = (lead: Lead) => {
+    const job = genJobForLead(lead.id);
+    return (
+      <LeadDetail
+        key={lead.id}
+        lead={lead}
+        statuses={STATUSES}
+        photos={leadPhotos(lead)}
+        uploadedCount={activeImages(lead.images).length}
+        siteUrl={lead.deployment && !isComingSoonActive(lead) ? mainSiteUrl(lead) : null}
+        canUnpublish={!!lead.deployment && !isComingSoonActive(lead)}
+        jobText={job ? resolveJobMessage(job, t, 'campaign.aiGenerating') : null}
+        onOpenJob={() => setStudioLeadId(lead.id)}
+        onStatus={(s) => updateLeadStatus(lead.id, s)}
+        onGenerate={() => openGenerateModal(lead.id)}
+        onOpenStudio={() => openModifyModal(lead)}
+        onRegenerate={() => openGenerateModal(lead.id)}
+        onImages={() => openImagesModal(lead)}
+        onUnpublish={() => unpublishWebsite(lead)}
+        onDelete={() => deleteLead(lead.id)}
+        onRestore={() => restoreLead(lead.id)}
+        onViewImage={(url) => setViewImage(url)}
+        onPrev={selectedIndex > 0 ? () => selectLead(filteredLeads[selectedIndex - 1].id) : undefined}
+        onNext={selectedIndex >= 0 && selectedIndex < filteredLeads.length - 1 ? () => selectLead(filteredLeads[selectedIndex + 1].id) : undefined}
+        onClose={() => { setMobileDetailOpen(false); setDetailHidden(true); }}
+      />
+    );
+  };
+
+  return (
+    <div className="flex-1 min-h-0 bg-white dark:bg-zinc-900 transition-colors flex flex-col">
+      <SetNavbar
+        title={campaign.keyword}
+        subtitle={campaign.location}
+      />
+
+      <div className="flex-1 min-h-0 flex lg:h-[calc(100dvh-var(--lm-navbar-h))] lg:max-h-[calc(100dvh-var(--lm-navbar-h))] lg:overflow-hidden">
+        {/* ── Left: leads ── */}
+        <aside className="w-full lg:w-[380px] xl:w-[400px] shrink-0 flex flex-col min-h-0 border-e border-zinc-200 dark:border-zinc-700/50 bg-white dark:bg-zinc-900">
+          <div className="px-5 pt-5 pb-3 shrink-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">{t('campaign.leadsFromCampaign')}</p>
+            <h1 className="mt-1 text-[22px] leading-tight font-semibold text-zinc-900 dark:text-white truncate">{campaign.displayName || campaign.keyword}</h1>
+            <p className="mt-0.5 text-[13px] text-zinc-500 dark:text-zinc-400 truncate">
+              {t('campaign.leadsCount', { count: filterCount('all') })}{campaign.location ? ` · ${campaign.location}` : ''}
+            </p>
+            <div className="mt-4 flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+              {['all', ...STATUSES.map(s => s.key), ...SITE_FILTERS.map(s => s.key), 'deleted'].map(s => {
+                const label = s === 'all' ? t('campaign.all') : s === 'deleted' ? t('campaign.deleted') : filterLabel(s);
+                const active = filterStatus === s;
+                const dot = s === 'pending' ? 'bg-emerald-400' : s === 'has_site' ? 'bg-zinc-900 dark:bg-white' : s === 'contacted' || s === 'negotiating' ? 'bg-zinc-400' : null;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setFilterStatus(s)}
+                    className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium border transition-all whitespace-nowrap ${active ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : 'border-zinc-200 dark:border-zinc-700/50 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:border-zinc-300 dark:hover:border-zinc-700'}`}
+                  >
+                    {dot && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
+                    {label}
+                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500">{filterCount(s)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Scrape progress (mobile: above the list; desktop: right panel) */}
+          {scraping && <div className="lg:hidden px-5 pb-4"><ScrapeProgressPanel campaignId={id} /></div>}
+
+          <div className="flex-1 min-h-0 overflow-y-auto border-t border-zinc-200 dark:border-zinc-700/50">
+            {filteredLeads.length === 0 && !scraping ? (
+              <div className="h-full min-h-[40vh] flex flex-col items-center justify-center text-center px-6">
+                <svg className="w-10 h-10 mb-3 text-zinc-400 dark:text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m1.1-4.15a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" /></svg>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                  {filterStatus === 'all'
+                    ? t('campaign.noLeadsAll')
+                    : filterStatus === 'deleted'
+                      ? t('campaign.noDeletedLeads')
+                      : t('campaign.noLeadsStatus', { status: filterLabel(filterStatus) })}
+                </p>
+                {filterStatus === 'all' && campaign.source !== 'manual' && (
+                  scrape.running ? (
+                    <button disabled title={t('scrape.oneAtATime')} className="mt-5 px-4 py-2 bg-zinc-200 dark:bg-zinc-700 text-zinc-500 font-medium rounded-xl cursor-not-allowed text-sm">{t('scrape.inProgress')}</button>
+                  ) : (
+                    <button onClick={startScrape} className="mt-5 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold rounded-xl transition-all shadow-lg shadow-emerald-500/20 text-sm inline-flex items-center gap-1.5">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                      {t('campaign.findClients')}
+                    </button>
+                  )
+                )}
+              </div>
+            ) : (
+              <ul>
+                {filteredLeads.map(lead => {
+                  const active = selectedLead?.id === lead.id;
+                  const job = genJobForLead(lead.id);
+                  return (
+                    <li key={lead.id}>
+                      <button
+                        id={`lead-card-${lead.id}`}
+                        onClick={() => selectLead(lead.id)}
+                        className={`w-full flex items-center gap-3 px-5 py-3.5 text-start border-b border-zinc-100 dark:border-zinc-800 transition-all ${active ? 'bg-emerald-500/[0.07] dark:bg-emerald-500/[0.08] shadow-[inset_3px_0_0_#10b981]' : 'hover:bg-zinc-50 dark:hover:bg-zinc-900/60'} ${highlightedLead === lead.id ? 'ring-2 ring-inset ring-emerald-400/60' : ''}`}
+                      >
+                        <SafeImg
+                          src={leadFeaturedImage(lead)}
+                          alt={lead.business.name}
+                          className="block w-14 h-14 rounded-xl overflow-hidden shrink-0 bg-zinc-200 dark:bg-zinc-700"
+                          imgClassName="w-14 h-14 object-cover"
+                          fallback={<span className="w-14 h-14 rounded-xl flex items-center justify-center bg-zinc-200 dark:bg-zinc-700 text-lg font-semibold text-zinc-400 dark:text-zinc-600">{(lead.business.name || '?').slice(0, 1)}</span>}
+                        />
+                        <span className="flex-1 min-w-0">
+                          <span className={`block text-[15px] font-semibold truncate ${lead.deleted ? 'text-zinc-400 line-through' : 'text-zinc-900 dark:text-white'}`}>{lead.business.name}</span>
+                          <span className="block text-[12px] text-zinc-500 dark:text-zinc-400 truncate">{lead.business.category || cleanAddress(lead.business.address || '')}</span>
+                          <span className="mt-0.5 flex items-center gap-1 text-[12px] text-zinc-500 dark:text-zinc-400">
+                            <svg className="w-3 h-3 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
+                            <span className="font-mono">{lead.business.rating}</span>
+                            <span className="font-mono text-zinc-400 dark:text-zinc-500">({lead.business.ratingCount})</span>
+                          </span>
+                        </span>
+                        <span className="shrink-0 flex flex-col items-end gap-1.5">
+                          {job ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                              <span className="animate-spin w-2.5 h-2.5 rounded-full border-2 border-emerald-500 border-t-transparent" />AI
+                            </span>
+                          ) : (lead.landingPage || lead.deployment) && !lead.deleted ? (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">{lead.deployment ? t('campaign.live') : t('campaign.siteDraft')}</span>
+                          ) : null}
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide ${lead.deleted ? 'bg-zinc-200 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400' : lead.status === 'pending' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'}`}>
+                            {statusLabel(lead)}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {campaign.source === 'manual' && (
+            <div className="shrink-0 p-3 border-t border-zinc-200 dark:border-zinc-700/50">
+              <button
+                onClick={() => { setManualRows([{ name: '', mapsUrl: '' }]); setShowAddClients(true); }}
+                className="w-full h-10 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-sm font-semibold transition-all"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                {t('campaign.addClients')}
+              </button>
+            </div>
+          )}
+        </aside>
+
+        {/* ── Center: map ── */}
+        <section className="hidden lg:block flex-1 min-w-0 relative bg-zinc-100 dark:bg-zinc-800">
+          <CampaignMap
+            dark={theme === 'dark'}
+            selectedId={selectedLead?.id ?? null}
+            onSelect={(leadId) => selectLead(leadId, false)}
+            leads={filteredLeads.map(l => ({
+              id: l.id,
+              name: l.business.name,
+              rating: l.business.rating,
+              lat: l.business.latitude,
+              lng: l.business.longitude,
+              tone: mapTone(l),
+            }))}
+          />
+          {detailHidden && !scraping && (
+            <button
+              onClick={() => setDetailHidden(false)}
+              title={t('campaign.showDetails')}
+              className="absolute top-3 end-3 z-10 max-w-[260px] inline-flex items-center gap-2 h-9 ps-3 pe-3.5 rounded-xl bg-white/95 dark:bg-zinc-900/95 border border-zinc-200 dark:border-zinc-700/60 shadow-lg backdrop-blur-sm text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+            >
+              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" /></svg>
+              <span className="truncate">{selectedLead?.business.name || t('campaign.showDetails')}</span>
+            </button>
+          )}
+        </section>
+
+        {/* ── Right: lead details (desktop) ── */}
+        <aside className={`hidden ${detailHidden && !scraping ? '' : 'lg:flex'} w-[400px] xl:w-[420px] shrink-0 flex-col min-h-0 border-s border-zinc-200 dark:border-zinc-700/50`}>
+          {scraping ? (
+            <div className="flex-1 min-h-0 overflow-y-auto flex flex-col p-5"><ScrapeProgressPanel campaignId={id} /></div>
+          ) : selectedLead ? (
+            detailFor(selectedLead)
+          ) : (
+            <div className="flex-1 flex items-center justify-center p-8 text-center text-sm text-zinc-500 dark:text-zinc-400">{t('campaign.selectLead')}</div>
+          )}
+        </aside>
+      </div>
+
+      {/* Lead details (mobile sheet) */}
+      {mobileDetailOpen && selectedLead && (
+        <div className="lg:hidden fixed inset-0 z-[105] bg-white dark:bg-zinc-900">
+          {detailFor(selectedLead)}
+        </div>
+      )}
+
+      {/* Full-size photo from the lead panel */}
+      {viewImage && !showImagesModal && (
+        <div className="fixed inset-0 z-[120] bg-black/90 flex items-center justify-center p-6" onClick={() => setViewImage(null)}>
+          <SafeImg
+            src={viewImage}
+            className="block max-w-full max-h-full"
+            imgClassName="max-w-full max-h-full rounded-lg shadow-2xl select-none"
+            fallback={<div className="text-zinc-400 p-12">{t('campaign.imageUnavailable')}</div>}
+          />
+          <button onClick={(e) => { e.stopPropagation(); setViewImage(null); }} className="absolute top-4 right-4 w-10 h-10 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-colors" title={t('campaign.close')}>
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
+
+      {/* Modify Studio: fullscreen chat + live preview */}
+      {studioLeadId && (() => {
+        const sl = allLeads.find((l: any) => l.id === studioLeadId);
+        if (!sl) return null;
+        const liveJob = generation.jobs.find(j => j.leadId === sl.id && (j.kind === 'modify' || j.kind === 'generate') && j.phase !== 'done' && j.phase !== 'error') || null;
+        const publishJob = generation.jobs.find(j => j.leadId === sl.id && (j.kind === 'publish' || j.kind === 'unpublish') && j.phase !== 'done' && j.phase !== 'error') || null;
+        const errorJob = !liveJob ? (generation.jobs.find(j => j.leadId === sl.id && (j.kind === 'modify' || j.kind === 'generate' || j.kind === 'publish') && j.phase === 'error') || null) : null;
+        const lastJobVersionId = generation.jobs.find(j => j.leadId === sl.id && j.phase === 'done' && j.versionId)?.versionId ?? null;
+        const studioHistory = sl.deploymentHistory || [];
+        const studioMainUrl = mainSiteUrl(sl);
+        return (
+          <ModifyStudio
+            campaignId={id}
+            leadId={sl.id}
+            businessName={sl.business.name}
+            mainUrl={studioMainUrl}
+            deployments={studioHistory}
+            images={activeImages(sl.images)}
+            uploading={uploading}
+            liveJob={liveJob}
+            publishJob={publishJob}
+            lastJobVersionId={lastJobVersionId}
+            error={errorJob ? (resolveJobMessage(errorJob, t) || null) : null}
+            onDismissError={errorJob ? () => generation.dismissJob(errorJob.id) : undefined}
+            failedRequest={errorJob?.input && errorJob.kind !== 'publish' ? {
+              // Only a modify's text/notes can go back into the composer; a regenerate's
+              // instructions are just shown (Retry re-runs the regenerate itself).
+              prompt: errorJob.kind === 'modify' ? errorJob.input.userPrompt || '' : '',
+              display: errorJob.userPrompt || '',
+              notes: errorJob.kind === 'modify' ? errorJob.input.notes || [] : [],
+              cancelled: errorJob.messageKey === 'campaign.cancelled',
+            } : null}
+            onRetry={errorJob?.input ? () => generation.retryJob(errorJob.id) : undefined}
+            onCancelJob={liveJob ? () => generation.cancelJob(liveJob.id) : undefined}
+            onSend={sendStudioPrompt}
+            onPublish={publishStudioVersion}
+            onUploadImages={(files) => uploadFilesForLead(sl, files)}
+            onDeleteImage={(imageId) => deleteLeadImage(sl.id, imageId)}
+            onSetMain={(entryId) => setMainDeployment(sl.id, entryId)}
+            onClose={closeStudio}
+          />
+        );
+      })()}
+
+      {/* Add Clients Modal (manual campaigns) */}
+      {showAddClients && (
+        <div className="fixed inset-0 z-[110] bg-black/70 flex items-center justify-center p-4" onClick={() => { if (!resolvingClients) setShowAddClients(false); }}>
+          <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-700">
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">{t('campaign.addClients')}</h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{t('home.ownClientsDesc')}</p>
+              </div>
+              <button onClick={() => { if (!resolvingClients) setShowAddClients(false); }} className="p-1 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg transition-all">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-5 space-y-3 max-h-[60vh] overflow-y-auto">
+              {manualRows.map((r, i) => (
+                <div key={i} className="flex gap-2 items-end">
+                  <div className="flex-1 min-w-0 grid gap-2 grid-cols-2">
+                    <div>
+                      <label className="block text-[10px] font-medium text-zinc-500 dark:text-zinc-400 mb-1 uppercase tracking-wider">{t('home.businessName')}</label>
+                      <input
+                        value={r.name}
+                        onChange={e => updateManualRow(i, { name: e.target.value })}
+                        placeholder={t('home.businessNamePlaceholder')}
+                        disabled={resolvingClients}
+                        className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all text-sm disabled:opacity-50"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-medium text-zinc-500 dark:text-zinc-400 mb-1 uppercase tracking-wide">{t('home.mapsLink')}</label>
+                      <input
+                        value={r.mapsUrl}
+                        onChange={e => updateManualRow(i, { mapsUrl: e.target.value })}
+                        placeholder={t('home.mapsLinkPlaceholder')}
+                        disabled={resolvingClients}
+                        className="w-full px-3 py-2 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all text-sm disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+                  <button onClick={() => setManualRows(prev => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)))} disabled={resolvingClients || manualRows.length === 1} className="p-2 text-zinc-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed shrink-0 mb-0.5" title={t('home.removeBusiness')}>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              ))}
+              <button onClick={() => setManualRows(prev => [...prev, { name: '', mapsUrl: '' }])} disabled={resolvingClients} className="w-full px-4 py-2 text-sm font-medium text-emerald-500 border border-dashed border-emerald-500/40 rounded-xl hover:bg-emerald-500/10 transition-all disabled:opacity-40 flex items-center justify-center gap-2">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                {t('home.addBusiness')}
+              </button>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-100/50 dark:bg-zinc-800/50">
+              <button onClick={() => setShowAddClients(false)} disabled={resolvingClients} className="px-4 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-zinc-200 dark:bg-zinc-700 rounded-lg hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-all disabled:opacity-40">{t('campaign.generateCancel')}</button>
+              <button onClick={submitAddClients} disabled={resolvingClients || !manualRows.some(r => r.name.trim() && r.mapsUrl.trim())} className="px-4 py-2 text-xs font-medium bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-lg hover:from-emerald-400 hover:to-teal-500 transition-all shadow-sm shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2">
+                {resolvingClients && (
+                  <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                )}
+                {resolvingClients ? t('home.resolvingClients') : t('campaign.addClients')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Generate Modal */}
+      {showGenerateModal && generateLeadId && (
+        <div className="fixed inset-0 z-[110] bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-700">
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">{t('campaign.generateTitle')}</h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{t('campaign.generateDesc')}</p>
+              </div>
+              <button onClick={() => setShowGenerateModal(false)} className="p-1 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg transition-all">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-5">
+              <label className="block text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">{t('campaign.generateLabel')}</label>
+              <textarea value={generatePrompt} onChange={e => setGeneratePrompt(e.target.value)} placeholder={t('campaign.generatePlaceholder')} className="w-full h-32 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-white text-sm p-3 resize-y focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all placeholder-zinc-400 dark:placeholder-zinc-500" />
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-100/50 dark:bg-zinc-800/50">
+              <button onClick={() => setShowGenerateModal(false)} className="px-4 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-zinc-200 dark:bg-zinc-700 rounded-lg hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-all">{t('campaign.generateCancel')}</button>
+              <button onClick={submitGenerate} className="px-4 py-2 text-xs font-medium bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-lg hover:from-emerald-400 hover:to-teal-500 transition-all shadow-sm shadow-emerald-500/20">{t('campaign.generateConfirm')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Images Modal */}
+      {showImagesModal && imagesLead && (
+        <div className="fixed inset-0 z-[110] bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-700">
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">{t('campaign.imagesTitle', { name: imagesLead.business.name })}</h3>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">{t('campaign.imagesDesc', { max: MAX_LEAD_IMAGES })}</p>
+              </div>
+              <button onClick={() => setShowImagesModal(false)} className="p-1 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg transition-all">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-5 max-h-[70vh] overflow-y-auto">
+              <div className="flex gap-1 mb-3 border-b border-zinc-200 dark:border-zinc-700">
+                <button onClick={() => setImagesTab('uploaded')} className={`px-4 py-2 text-xs font-medium rounded-t-lg transition-all ${imagesTab === 'uploaded' ? 'text-zinc-900 dark:text-white border-b-2 border-emerald-500' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}>
+                  {t('campaign.imagesTabUploaded')} ({modalActiveImages.length})
+                </button>
+                <button onClick={() => setImagesTab('discovered')} className={`px-4 py-2 text-xs font-medium rounded-t-lg transition-all ${imagesTab === 'discovered' ? 'text-zinc-900 dark:text-white border-b-2 border-emerald-500' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}>
+                  {t('campaign.imagesTabDiscovered')} ({(imagesLead.business.scrapedImages || []).length})
+                </button>
+                <button onClick={() => setImagesTab('deleted')} className={`px-4 py-2 text-xs font-medium rounded-t-lg transition-all ${imagesTab === 'deleted' ? 'text-zinc-900 dark:text-white border-b-2 border-emerald-500' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'}`}>
+                  {t('campaign.imagesTabDeleted')} ({modalDeletedImages.length})
+                </button>
+              </div>
+
+              {imagesTab === 'uploaded' ? (
+                <>
+                  {modalActiveImages.length > 0 && (
+                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
+                      {modalActiveImages.map((img) => (
+                        <div key={img.id} className="relative group bg-zinc-100 dark:bg-zinc-900 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 [content-visibility:auto] [contain-intrinsic-size:180px]">
+                          <SafeImg
+                            src={img.url}
+                            alt={img.alt}
+                            className="block w-full h-32"
+                            imgClassName="w-full h-32 object-cover"
+                            fallback={
+                              <div className="w-full h-32 flex items-center justify-center text-zinc-400 dark:text-zinc-600">
+                                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                              </div>
+                            }
+                          />
+                          <div className="p-2">
+                            <input value={img.alt} onChange={(e) => { const newAlt = e.target.value; setImagesLead((prev) => { if (!prev) return prev; return { ...prev, images: prev.images?.map(i => i.id === img.id ? { ...i, alt: newAlt } : i) }; });                         fetch(`/api/campaigns/${id}/leads/${imagesLead.id}/images`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageId: img.id, alt: newAlt }) }); }} placeholder={t('campaign.altTextPlaceholder')} className="w-full text-[11px] bg-transparent text-zinc-500 dark:text-zinc-400 placeholder-zinc-400 dark:placeholder-zinc-600 border-b border-zinc-200 dark:border-zinc-700 focus:border-emerald-500 focus:outline-none py-1" />
+                          </div>
+                          <button onClick={() => deleteLeadImage(imagesLead.id, img.id)} className="absolute top-1 right-1 w-6 h-6 bg-red-600/80 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 flex items-center justify-center">✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {modalActiveImages.length < MAX_LEAD_IMAGES && (
+                    <div className="border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-xl p-6 text-center hover:border-emerald-500/50 transition-colors">
+                      <input type="file" accept="image/*" multiple onChange={async (e) => { const files = Array.from(e.target.files || []); e.target.value = ''; await handleFileUpload(files); }} className="hidden" id="image-upload" />
+                      <label htmlFor="image-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                        <svg className="w-8 h-8 text-zinc-400 dark:text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        <span className="text-sm text-zinc-500 dark:text-zinc-400">{uploading ? t('campaign.uploading') : t('campaign.uploadLabel')}</span>
+                        <span className="text-[11px] text-zinc-400 dark:text-zinc-600">{t('campaign.slotsRemaining', { count: 10 - modalActiveImages.length })}</span>
+                      </label>
+                    </div>
+                  )}
+                </>
+              ) : imagesTab === 'deleted' ? (
+                <>
+                  {modalDeletedImages.length === 0 ? (
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center py-8">{t('campaign.noDeletedImages')}</p>
+                  ) : (
+                    <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-3">
+                      {modalDeletedImages.map((img) => (
+                        <div key={img.id} className="relative group bg-zinc-100 dark:bg-zinc-900 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 opacity-80 [content-visibility:auto] [contain-intrinsic-size:180px]">
+                          <SafeImg
+                            src={img.url}
+                            alt={img.alt}
+                            className="block w-full h-32"
+                            imgClassName="w-full h-32 object-cover grayscale"
+                            fallback={
+                              <div className="w-full h-32 flex items-center justify-center text-zinc-400 dark:text-zinc-600">
+                                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                              </div>
+                            }
+                          />
+                          <div className="p-2">
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate" title={img.alt}>{img.alt}</p>
+                            <button
+                              onClick={() => restoreLeadImage(imagesLead.id, img.id)}
+                              disabled={modalActiveImages.length >= MAX_LEAD_IMAGES}
+                              className="mt-1.5 w-full px-2 py-1 text-[11px] font-medium bg-emerald-600/15 text-emerald-600 dark:text-emerald-400 rounded-lg hover:bg-emerald-600/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              {t('campaign.restore')}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                (() => {
+                  const scrapedImages = imagesLead.business.scrapedImages || [];
+                  const remaining = MAX_LEAD_IMAGES - activeImages(imagesLead.images).length;
+                  const allSelected = scrapedImages.length > 0 && scrapedImages.every(s => selectedScraped.has(s.id));
+                  if (scrapedImages.length === 0) {
+                    return <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center py-8">{t('campaign.noDiscovered')}</p>;
+                  }
+                  return (
+                    <>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3">{t('campaign.discoveredDesc', { count: remaining })}</p>
+                      <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+                        {scrapedImages.map((img) => {
+                          const selected = selectedScraped.has(img.id);
+                          const done = importedScrapedIds.has(img.id);
+                          return (
+                            <div key={img.id} className={`relative group bg-zinc-100 dark:bg-zinc-900 rounded-xl overflow-hidden border transition-all [content-visibility:auto] [contain-intrinsic-size:180px] ${selected ? 'border-emerald-500 ring-2 ring-emerald-500/40' : 'border-zinc-200 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-500'}`}>
+                              <div className="block w-full">
+                                <button
+                                  type="button"
+                                  onClick={() => { if (!done) { setSelectedScraped(prev => { const next = new Set(prev); if (next.has(img.id)) next.delete(img.id); else if (next.size < remaining) next.add(img.id); return next; }); } }}
+                                  className="block w-full cursor-pointer"
+                                  title={t('campaign.toggleSelect')}
+                                >
+                                  <SafeImg
+                                    src={img.url}
+                                    className="block w-full h-32"
+                                    imgClassName="w-full h-32 object-cover"
+                                    fallback={
+                                      <div className="w-full h-32 flex items-center justify-center text-zinc-400 dark:text-zinc-600">
+                                        <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                      </div>
+                                    }
+                                  />
+                                </button>
+                                {selected && !done && (
+                                  <div className="absolute inset-0 ring-2 ring-inset ring-emerald-500/70 bg-emerald-500/10 pointer-events-none" />
+                                )}
+                              </div>
+                              <button type="button" onClick={() => setViewImage(img.url)} title={t('campaign.viewFullSize')} className="absolute top-1 right-1 w-6 h-6 bg-black/60 hover:bg-black/80 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>
+                              </button>
+                              {done && <div className="absolute bottom-0 inset-x-0 bg-emerald-600/90 text-white text-[10px] text-center py-0.5">{t('campaign.alreadyUploaded')}</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <button onClick={() => { if (allSelected) { setSelectedScraped(new Set()); } else { setSelectedScraped(new Set(scrapedImages.filter(s => !importedScrapedIds.has(s.id)).slice(0, remaining).map(s => s.id))); } }} className="px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-300 bg-zinc-200 dark:bg-zinc-700/50 rounded-lg hover:bg-zinc-300 dark:hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-white transition-all">
+                          {allSelected ? t('campaign.deselectAll') : t('campaign.selectAll')}
+                        </button>
+                        <button onClick={importSelectedImages} disabled={importing || selectedScraped.size === 0 || remaining <= 0} className="px-4 py-2 text-xs font-medium bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-lg hover:from-emerald-400 hover:to-teal-500 transition-all shadow-sm shadow-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed">
+                          {importing ? t('campaign.importing') : t('campaign.uploadSelected', { count: selectedScraped.size })}
+                        </button>
+                      </div>
+                    </>
+                  );
+                })()
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-100/50 dark:bg-zinc-800/50">
+              <button onClick={() => setShowImagesModal(false)} className="px-4 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-zinc-200 dark:bg-zinc-700 rounded-lg hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-all">{t('campaign.done')}</button>
+            </div>
+          </div>
+
+          {viewImage && (
+            <div className="fixed inset-0 z-[120] bg-black/90 flex items-center justify-center p-6" onClick={() => setViewImage(null)}>
+              <SafeImg
+                src={viewImage}
+                className="block max-w-full max-h-full"
+                imgClassName="max-w-full max-h-full rounded-lg shadow-2xl select-none"
+                fallback={
+                  <div className="text-zinc-400 flex items-center justify-center p-12">
+                    <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  </div>
+                }
+              />
+              <button onClick={(e) => { e.stopPropagation(); setViewImage(null); }} className="absolute top-4 right-4 w-10 h-10 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-colors" title={t('campaign.close')}>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {domainEditLeadId && (() => {
+        const dl = allLeads.find((l: any) => l.id === domainEditLeadId);
+        if (!dl) return null;
+        const av = domainAvailability[domainEditLeadId];
+        return (
+          <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => { setDomainEditLeadId(null); setPendingGenerateLeadId(null); }}>
+            <div className="w-full max-w-sm bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl p-5 shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">{t('campaign.changeSubDomain')}</h3>
+                <button onClick={() => { setDomainEditLeadId(null); setPendingGenerateLeadId(null); }} className="p-1 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-700 rounded-lg transition-all">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <div className="text-[11px] text-zinc-400 dark:text-zinc-500 mb-2 truncate">{dl.business.name}</div>
+              <div className="flex items-center gap-1.5 bg-zinc-100 dark:bg-zinc-900 rounded-lg px-3 py-2 border border-zinc-200 dark:border-zinc-700 focus-within:border-emerald-500/50">
+                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 shrink-0">https://</span>
+                <input
+                  value={domainDraft[domainEditLeadId] || ''}
+                  onChange={e => onDomainDraftChange(domainEditLeadId, e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveDomain(dl); if (e.key === 'Escape') { setDomainEditLeadId(null); setPendingGenerateLeadId(null); } }}
+                  autoFocus
+                  placeholder="my-domain"
+                  className="flex-1 min-w-0 bg-transparent text-sm text-zinc-900 dark:text-white focus:outline-none placeholder-zinc-400 dark:placeholder-zinc-600"
+                />
+                <span className="text-[11px] text-zinc-400 dark:text-zinc-500 shrink-0">.vercel.app</span>
+              </div>
+              <div className="mt-2 text-[11px]">
+                {av?.checking ? (
+                  <span className="text-zinc-500 dark:text-zinc-400 animate-pulse">Checking...</span>
+                ) : av?.available ? (
+                  <span className="text-emerald-600 dark:text-emerald-400">Available</span>
+                ) : av?.available === false ? (
+                  <span className="text-red-600 dark:text-red-400">Taken</span>
+                ) : av?.error ? (
+                  <span className="text-amber-600 dark:text-amber-400">{av.error}</span>
+                ) : null}
+              </div>
+              <div className="mt-3 flex items-start gap-1.5 text-[10px] text-amber-600 dark:text-amber-400/90 bg-amber-100/60 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-lg px-2.5 py-2">
+                <svg className="w-3 h-3 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                <span>{t('campaign.subDomainLockWarning')}</span>
+              </div>
+              <div className="flex justify-end gap-2 mt-5">
+                <button onClick={() => { setDomainEditLeadId(null); setPendingGenerateLeadId(null); }} className="px-4 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-300 bg-zinc-200 dark:bg-zinc-700 rounded-lg hover:bg-zinc-300 dark:hover:bg-zinc-600 transition-all">{t('campaign.cancel')}</button>
+                <button onClick={() => saveDomain(dl)} disabled={av?.checking} className="px-4 py-2 text-xs font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-all disabled:opacity-40">{t('campaign.confirm')}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Floating actions — above ScrollToTop (bottom-5): + for manual, then map */}
+      {(campaign as any)?.source === 'manual' && (
+        <button
+          onClick={() => { setManualRows([{ name: '', mapsUrl: '' }]); setShowAddClients(true); }}
+          aria-label={t('campaign.addClients')}
+          title={t('campaign.addClients')}
+          className="lg:hidden fixed bottom-[132px] end-5 z-[120] w-10 h-10 rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 flex items-center justify-center hover:bg-emerald-400 hover:scale-110 transition-all"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+        </button>
+      )}
+      <button
+        onClick={() => {
+          if (Array.isArray((campaign as any)?.regions) && (campaign as any).regions.length > 1) {
+            toast('Interactive map is not available for multi-regional campaigns', 'error');
+            return;
+          }
+          setInteractiveMapOpen(true);
+        }}
+        aria-label="Interactive map"
+        title={Array.isArray((campaign as any)?.regions) && (campaign as any).regions.length > 1 ? 'Interactive map not available for multi-regional' : 'Interactive map'}
+        className={`lg:hidden fixed bottom-[76px] end-5 z-[120] w-10 h-10 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 hover:scale-110 ${Array.isArray((campaign as any)?.regions) && (campaign as any).regions.length > 1 ? 'bg-zinc-400 text-white opacity-60' : 'bg-emerald-500 text-white shadow-emerald-500/30 hover:bg-emerald-400 hover:scale-110'}`}
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+      </button>
+      <InteractiveMap open={interactiveMapOpen} onClose={() => setInteractiveMapOpen(false)} campaign={campaign} />
+    </div>
+  );
+}

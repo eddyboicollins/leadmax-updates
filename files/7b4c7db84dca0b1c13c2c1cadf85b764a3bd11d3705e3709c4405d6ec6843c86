@@ -1,0 +1,121 @@
+'use client';
+
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Modal, ModalBody, ModalFooter, btn } from './ui/Modal';
+
+type ToastType = 'info' | 'success' | 'error';
+
+interface ToastItem {
+  id: number;
+  message: string;
+  type: ToastType;
+}
+
+interface ConfirmOptions {
+  message: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+}
+
+interface ToastContextValue {
+  toast: (message: string, type?: ToastType) => void;
+  confirm: (options: ConfirmOptions) => Promise<boolean>;
+}
+
+const ToastContext = createContext<ToastContextValue | null>(null);
+
+export function useToast(): ToastContextValue {
+  const ctx = useContext(ToastContext);
+  if (!ctx) throw new Error('useToast must be used within ToastProvider');
+  return ctx;
+}
+
+let nextId = 1;
+
+const typeStyles: Record<ToastType, string> = {
+  info: 'border-zinc-200 dark:border-zinc-800',
+  success: 'border-emerald-500/40',
+  error: 'border-red-500/40',
+};
+
+const dotStyles: Record<ToastType, string> = {
+  info: 'bg-zinc-400',
+  success: 'bg-emerald-500',
+  error: 'bg-red-400',
+};
+
+export default function ToastProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const [confirmState, setConfirmState] = useState<ConfirmOptions & { resolve: (v: boolean) => void } | null>(null);
+  const timers = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(item => item.id !== id));
+    if (timers.current[id]) {
+      clearTimeout(timers.current[id]);
+      delete timers.current[id];
+    }
+  }, []);
+
+  const toast = useCallback((message: string, type: ToastType = 'info') => {
+    const id = nextId++;
+    setToasts(prev => [...prev, { id, message, type }]);
+    timers.current[id] = setTimeout(() => dismissToast(id), 6000);
+  }, [dismissToast]);
+
+  const confirm = useCallback((options: ConfirmOptions) => {
+    return new Promise<boolean>(resolve => {
+      setConfirmState({ ...options, resolve });
+    });
+  }, []);
+
+  const answerConfirm = useCallback((value: boolean) => {
+    if (confirmState) confirmState.resolve(value);
+    setConfirmState(null);
+  }, [confirmState]);
+
+  return (
+    <ToastContext.Provider value={{ toast, confirm }}>
+      {children}
+
+      {/* Toast stack */}
+      <div className="fixed top-4 end-4 z-[300] flex flex-col gap-2 w-80 max-w-[calc(100vw-2rem)]">
+        {toasts.map(item => (
+          <div
+            key={item.id}
+            className={`lm-pop-in flex items-start gap-2.5 rounded-xl ps-3.5 pe-3 py-3 text-sm shadow-2xl shadow-black/30 backdrop-blur-md border bg-white/95 dark:bg-zinc-900/95 text-zinc-800 dark:text-zinc-100 ${typeStyles[item.type]}`}
+          >
+            <span className={`mt-1 w-2 h-2 rounded-full shrink-0 ${dotStyles[item.type]}`} />
+            {/* min-w-0 + overflow-wrap:anywhere: long URLs wrap inside the toast; very long errors are clamped (full text on hover). */}
+            <span title={item.message.length > 280 ? item.message : undefined} className="text-xs font-medium leading-relaxed flex-1 min-w-0 [overflow-wrap:anywhere] line-clamp-6">{item.message}</span>
+            <button
+              onClick={() => dismissToast(item.id)}
+              aria-label={t('update.dismiss')}
+              className="text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors leading-none shrink-0"
+            >
+              <i className="fa-solid fa-xmark" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Confirm dialog */}
+      <Modal open={!!confirmState} onClose={() => answerConfirm(false)} size="sm" z="z-[400]">
+        <ModalBody className="pt-6">
+          <div className="flex items-start gap-3">
+            <span className="shrink-0 w-9 h-9 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-center">
+              <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.9}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
+            </span>
+            <p className="pt-1.5 text-sm text-zinc-700 dark:text-zinc-200 leading-relaxed">{confirmState?.message}</p>
+          </div>
+        </ModalBody>
+        <ModalFooter>
+          <button onClick={() => answerConfirm(false)} className={btn.secondary}>{confirmState?.cancelLabel || t('update.cancel')}</button>
+          <button onClick={() => answerConfirm(true)} className={btn.danger} autoFocus>{confirmState?.confirmLabel || t('update.confirm')}</button>
+        </ModalFooter>
+      </Modal>
+    </ToastContext.Provider>
+  );
+}

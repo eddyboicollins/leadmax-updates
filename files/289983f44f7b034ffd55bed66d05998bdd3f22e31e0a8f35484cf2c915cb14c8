@@ -1,0 +1,72 @@
+'use client';
+
+import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import GlobalSearchModal, { openGlobalSearch } from './GlobalSearchModal';
+import i18n from '@/lib/i18n';
+
+interface NavbarProps {
+  title: string;
+  subtitle?: string;
+  badge?: { label: string; color: 'emerald' | 'amber' } | null;
+  rightActions?: React.ReactNode;
+  onOpenMenu: () => void;
+}
+
+/**
+ * Page header: what you're looking at + page actions + search. App-wide
+ * controls (theme, language, settings, about) live in the sidebar.
+ */
+export default function Navbar({ title, subtitle, badge, rightActions, onOpenMenu }: NavbarProps) {
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    const stored = localStorage.getItem('i18nextLng');
+    if (stored && stored !== i18n.language) i18n.changeLanguage(stored);
+  }, []);
+
+  const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform);
+
+  return (
+    <>
+      <GlobalSearchModal />
+      <header className="sticky top-0 z-50 border-b border-zinc-200/80 dark:border-zinc-800 bg-white/85 dark:bg-zinc-950/85 backdrop-blur-md transition-colors">
+        <div className="px-4 sm:px-6 h-14 sm:h-[60px] flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              onClick={onOpenMenu}
+              className="md:hidden -ms-1 p-2 text-zinc-500 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors shrink-0"
+              title={t('nav.menu')}
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+            </button>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h1 className="text-[15px] sm:text-lg font-semibold text-zinc-900 dark:text-white tracking-tight truncate">{title}</h1>
+                {badge && (
+                  <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded-md whitespace-nowrap ${badge.color === 'emerald' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-zinc-400/10 text-zinc-600 dark:text-zinc-300'}`}>
+                    {badge.label}
+                  </span>
+                )}
+              </div>
+              {subtitle && <p className="text-[11px] sm:text-xs text-zinc-500 dark:text-zinc-400 truncate -mt-0.5">{subtitle}</p>}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {rightActions}
+            <button
+              onClick={openGlobalSearch}
+              title={t('search.title')}
+              className="inline-flex items-center gap-2 h-9 ps-2.5 pe-2.5 sm:pe-2 rounded-xl border border-zinc-200 dark:border-zinc-700/70 bg-zinc-50 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:border-zinc-300 dark:hover:border-zinc-600 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              <span className="hidden sm:inline text-[13px] pe-6">{t('search.title')}</span>
+              <kbd className="hidden sm:inline-flex items-center h-5 px-1.5 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-[10px] font-medium text-zinc-400">{isMac ? '⌘' : 'Ctrl'} K</kbd>
+            </button>
+          </div>
+        </div>
+      </header>
+    </>
+  );
+}

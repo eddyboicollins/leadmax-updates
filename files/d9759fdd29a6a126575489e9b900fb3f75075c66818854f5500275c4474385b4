@@ -1,0 +1,24 @@
+'use client';
+
+import { useEffect } from 'react';
+
+// Prevents the page behind from scrolling while a modal/overlay is active.
+// The modal itself controls its own scroll independently.
+//
+// Shared counter: overlays can open and close in any order (a dialog over
+// the studio, search over a dialog…) and the page scrolls again only when the
+// last one closes. Saving/restoring per overlay left the page stuck on
+// "hidden" whenever two closed out of order.
+let locks = 0;
+
+export function useLockBodyScroll(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    locks++;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      locks = Math.max(0, locks - 1);
+      if (locks === 0) document.body.style.overflow = '';
+    };
+  }, [active]);
+}

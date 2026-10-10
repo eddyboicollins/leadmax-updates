@@ -1,0 +1,228 @@
+'use client';
+
+import { useEffect, useRef } from 'react';
+
+/** Minimal lead shape the map needs. */
+export interface MapLead {
+  id: string;
+  name: string;
+  rating?: number;
+  lat?: number;
+  lng?: number;
+  /** Marker tone: fresh lead (with / without a website of its own), has an AI site, or already being worked. */
+  tone: 'new' | 'nosite' | 'site' | 'worked' | 'muted';
+}
+
+interface Props {
+  leads: MapLead[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  dark: boolean;
+}
+
+// Standard OpenStreetMap tiles (same as the original Leaflet map, no API key).
+// Dark mode is produced with a CSS filter on the tile layer (see MAP_CSS).
+const TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+let leafletPromise: Promise<any> | null = null; // eslint-disable-line @typescript-eslint/no-explicit-any
+/* eslint-disable @typescript-eslint/no-explicit-any -- Leaflet is loaded from CDN (untyped global) */
+function loadLeaflet(): Promise<any> {
+  if ((window as any).L) return Promise.resolve((window as any).L);
+  if (leafletPromise) return leafletPromise;
+  leafletPromise = new Promise((resolve, reject) => {
+    if (!document.querySelector('link[data-leaflet]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      link.setAttribute('data-leaflet', '1');
+      document.head.appendChild(link);
+    }
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    s.onload = () => resolve((window as any).L);
+    s.onerror = () => { leafletPromise = null; reject(new Error('Failed to load the map')); };
+    document.head.appendChild(s);
+  });
+  return leafletPromise;
+}
+
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** Per-lead animation offset (0–1.6s) so bobbing pins don't move in unison. */
+function bobDelay(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return `${-((Math.abs(h) % 160) / 100)}s`;
+}
+
+function markerHtml(lead: MapLead, selected: boolean): string {
+  if (selected) {
+    return `<div class="lm-pin lm-pin-sel">
+      <span class="lm-pin-halo"></span><span class="lm-pin-core"></span>
+      <span class="lm-pin-label"><b>${esc(lead.name)}</b>${lead.rating ? `<i>${lead.rating}★</i>` : ''}</span>
+    </div>`;
+  }
+  const delay = lead.tone === 'nosite' ? ` style="animation-delay:${bobDelay(lead.id)}"` : '';
+  return `<div class="lm-pin lm-tone-${lead.tone}"${delay} title="${esc(lead.name)}"><span class="lm-pin-dot"></span></div>`;
+}
+
+const MAP_CSS = `
+.lm-map { background: #e4e4e7; }
+.dark .lm-map { background: #09090b; }
+/* Dark mode: invert the OSM tiles to a neutral dark grey with a faint emerald cast */
+.dark .lm-map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) grayscale(1) brightness(0.8) contrast(0.95) sepia(0.12) hue-rotate(95deg) saturate(1.6); }
+.lm-map .leaflet-control-zoom { border: none !important; box-shadow: 0 4px 14px rgba(0,0,0,.25); border-radius: 12px; overflow: hidden; }
+.lm-map .leaflet-control-zoom a { width: 34px; height: 34px; line-height: 34px; font-size: 18px; background: #fff; color: #27272a; border-color: #e4e4e7 !important; }
+.dark .lm-map .leaflet-control-zoom a { background: #18181b; color: #e4e4e7; border-color: #27272a !important; }
+.lm-map .leaflet-control-zoom a:hover { background: #f4f4f5; }
+.dark .lm-map .leaflet-control-zoom a:hover { background: #27272a; }
+.lm-pin { position: relative; width: 18px; height: 18px; cursor: pointer; }
+.lm-pin-dot { position: absolute; inset: 2px; border-radius: 999px; border: 2px solid #09090b; box-shadow: 0 0 0 2px rgba(255,255,255,.08), 0 2px 6px rgba(0,0,0,.4); transition: transform .15s; }
+.lm-pin:hover .lm-pin-dot { transform: scale(1.3); }
+.lm-tone-new .lm-pin-dot { background: #047857; }
+.lm-tone-nosite .lm-pin-dot { background: #34d399; box-shadow: 0 0 0 3px rgba(52,211,153,.25), 0 2px 6px rgba(0,0,0,.4); }
+.lm-tone-nosite { animation: lm-bob 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .lm-tone-nosite { animation: none; } }
+.lm-tone-site .lm-pin-dot { background: #ffffff; }
+.lm-tone-worked .lm-pin-dot { background: #a1a1aa; }
+.lm-tone-muted .lm-pin-dot { background: #52525b; }
+html:not(.dark) .lm-pin-dot { border-color: #ffffff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+html:not(.dark) .lm-tone-site .lm-pin-dot { background: #18181b; }
+.lm-pin-sel { width: 40px; height: 40px; z-index: 1000; }
+.lm-pin-halo { position: absolute; inset: -14px; border-radius: 999px; background: radial-gradient(circle, rgba(52,211,153,.35) 0%, rgba(52,211,153,.12) 45%, transparent 70%); animation: lm-halo 2.4s ease-out infinite; }
+.lm-pin-core { position: absolute; inset: 8px; border-radius: 999px; background: #34d399; border: 3px solid #064e3b; box-shadow: 0 0 0 6px rgba(52,211,153,.25), 0 4px 14px rgba(0,0,0,.45); }
+.lm-pin-label { position: absolute; left: 50%; bottom: calc(100% + 10px); transform: translateX(-50%); display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; padding: 6px 10px; border-radius: 10px; background: #18181b; color: #fafafa; font: 600 12px/1 system-ui, sans-serif; border: 1px solid #3f3f46; box-shadow: 0 8px 22px rgba(0,0,0,.45); }
+.lm-pin-label i { font-style: normal; color: #6ee7b7; font-weight: 600; }
+html:not(.dark) .lm-pin-label { background: #ffffff; color: #18181b; border-color: #e4e4e7; }
+html:not(.dark) .lm-pin-label i { color: #047857; }
+@keyframes lm-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes lm-halo { 0% { transform: scale(.7); opacity: 1; } 100% { transform: scale(1.4); opacity: 0; } }
+`;
+
+/** Embedded campaign map: one marker per lead, the selected lead highlighted and followed. */
+export default function CampaignMap({ leads, selectedId, onSelect, dark }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null);
+  const tilesRef = useRef<any>(null);
+  const markersRef = useRef<Map<string, any>>(new Map());
+  const onSelectRef = useRef(onSelect);
+  const fittedKeyRef = useRef('');
+  const placed = leads.filter(l => typeof l.lat === 'number' && typeof l.lng === 'number');
+  const placedKey = placed.map(l => `${l.id}:${l.tone}:${l.name}:${l.rating ?? ''}`).join('|');
+
+  useEffect(() => { onSelectRef.current = onSelect; });
+
+  // Create the map once.
+  useEffect(() => {
+    let cancelled = false;
+    let ro: ResizeObserver | null = null;
+    const markers = markersRef.current;
+    loadLeaflet().then(L => {
+      if (cancelled || !containerRef.current || mapRef.current) return;
+      const map = L.map(containerRef.current, {
+        zoomControl: false,
+        attributionControl: false, // OSM to be credited elsewhere in the app
+        minZoom: 3,
+        maxZoom: 19,
+        worldCopyJump: true,
+        maxBounds: [[-90, -540], [90, 540]],
+        maxBoundsViscosity: 1.0,
+      }).setView([20, 0], 3);
+      L.control.zoom({ position: 'bottomleft' }).addTo(map);
+      mapRef.current = map;
+      ro = new ResizeObserver(() => map.invalidateSize());
+      ro.observe(containerRef.current);
+      // Trigger the dependent effects now that the map exists.
+      fittedKeyRef.current = '';
+      setTiles(L, dark);
+      syncMarkers(L);
+    }).catch(() => { /* map unavailable offline — the list still works */ });
+    return () => {
+      cancelled = true;
+      ro?.disconnect();
+      if (mapRef.current) {
+        try { mapRef.current.remove(); } catch { /* already removed */ }
+        mapRef.current = null;
+        markers.clear();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function setTiles(L: any, isDark: boolean) {
+    const map = mapRef.current;
+    if (!map) return;
+    if (tilesRef.current) map.removeLayer(tilesRef.current);
+    void isDark; // same tiles in both themes; the dark look comes from CSS
+    tilesRef.current = L.tileLayer(TILE_URL, {
+      maxZoom: 19,
+    }).addTo(map);
+  }
+
+  function syncMarkers(L: any) {
+    const map = mapRef.current;
+    if (!map) return;
+    const store = markersRef.current;
+    const keep = new Set(placed.map(l => l.id));
+    for (const [id, m] of store) {
+      if (!keep.has(id)) { map.removeLayer(m); store.delete(id); }
+    }
+    for (const lead of placed) {
+      const sel = lead.id === selectedId;
+      const icon = L.divIcon({
+        className: '',
+        html: markerHtml(lead, sel),
+        iconSize: sel ? [40, 40] : [18, 18],
+        iconAnchor: sel ? [20, 20] : [9, 9],
+      });
+      const existing = store.get(lead.id);
+      if (existing) {
+        existing.setIcon(icon);
+        existing.setZIndexOffset(sel ? 1000 : 0);
+      } else {
+        const m = L.marker([lead.lat, lead.lng], { icon, zIndexOffset: sel ? 1000 : 0, keyboard: false })
+          .addTo(map)
+          .on('click', () => onSelectRef.current(lead.id));
+        store.set(lead.id, m);
+      }
+    }
+    // Frame all leads when the set of placed leads changes (not on selection).
+    const idsKey = placed.map(l => l.id).join('|');
+    if (idsKey && idsKey !== fittedKeyRef.current) {
+      fittedKeyRef.current = idsKey;
+      const pts = placed.map(l => [l.lat, l.lng]);
+      if (pts.length === 1) map.setView(pts[0], 15);
+      else map.fitBounds(L.latLngBounds(pts).pad(0.15), { animate: false, maxZoom: 16 });
+    }
+  }
+
+  useEffect(() => {
+    const L = (window as any).L;
+    if (L && mapRef.current) setTiles(L, dark);
+  }, [dark]);
+
+  useEffect(() => {
+    const L = (window as any).L;
+    if (L && mapRef.current) syncMarkers(L);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placedKey, selectedId]);
+
+  // Follow the selected lead.
+  useEffect(() => {
+    const map = mapRef.current;
+    const lead = placed.find(l => l.id === selectedId);
+    if (!map || !lead) return;
+    map.flyTo([lead.lat, lead.lng], Math.max(map.getZoom(), 15), { duration: 0.6 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
+  return (
+    <div className="relative w-full h-full isolate z-0">
+      <style>{MAP_CSS}</style>
+      <div ref={containerRef} className="lm-map absolute inset-0" />
+    </div>
+  );
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */

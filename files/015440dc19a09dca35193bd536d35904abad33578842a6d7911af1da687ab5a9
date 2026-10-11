@@ -1,0 +1,679 @@
+/**
+ * DeepSeek proxy: the DeepSeek web chat (chat.deepseek.com) used through its
+ * own web API with the user's logged-in session.
+ *
+ * Unlike the Gemini / ChatGPT proxies, DeepSeek needs an account:
+ *  1. CONNECT (once): a visible Chrome opens chat.deepseek.com with its own
+ *     profile; the user logs in there. As soon as the session token appears
+ *     it is captured with the cookies, client headers and proof-of-work WASM
+ *     URL, verified, saved to <data>/deepseek-auth.json, and the window closes.
+ *  2. ASK: no browser. Each request solves DeepSeek's proof-of-work challenge,
+ *     creates a chat, streams the completion (SSE), then deletes the chat so
+ *     the account history stays clean. Long prompts go out as same-chat turns.
+ *
+ * An expired session surfaces as a "reconnect DeepSeek" error.
+ */
+/* eslint-disable @typescript-eslint/no-explicit-any -- DeepSeek SSE payloads + puppeteer */
+
+import path from 'path';
+import net from 'net';
+import { spawn } from 'child_process';
+import { promises as fs } from 'fs';
+import type { ProxyStatus } from '@/lib/gemini';
+import { dataDir, loadPuppeteer, systemBrowserCandidates, splitPrompt } from '@/lib/aiProxy';
+
+const SITE = 'https://chat.deepseek.com';
+const API = `${SITE}/api/v0`;
+const COMPLETION_PATH = '/api/v0/chat/completion';
+const DEFAULT_WASM = 'https://fe-static.deepseek.com/chat/static/sha3_wasm_bg.7b9ca65ddd.wasm';
+const FETCH_TIMEOUT_MS = 60_000;
+// Absolute ceiling for one streamed answer, and silence that counts as stuck.
+const TURN_TIMEOUT_MS = Number(process.env.DEEPSEEK_PROXY_TIMEOUT_MS || 600_000);
+const STALL_TIMEOUT_MS = Number(process.env.DEEPSEEK_PROXY_STALL_MS || 180_000);
+// Longest message sent in one turn; longer prompts go out as several turns.
+const CHUNK_LIMIT = Number(process.env.DEEPSEEK_PROXY_CHUNK_LIMIT || 60_000);
+// 'default' = DeepSeek "Instant"; 'expert' = DeepSeek "Expert" (limited quota).
+const MODEL_TYPE = process.env.DEEPSEEK_PROXY_MODEL_TYPE || 'default';
+const THINKING = process.env.DEEPSEEK_PROXY_THINKING === 'true';
+// How long the connect window waits for the user to log in.
+const CONNECT_TIMEOUT_MS = 10 * 60_000;
+
+const RECONNECT = 'Reconnect DeepSeek in Settings → AI source.';
+
+const holdSuffix = (i: number, n: number): string =>
+  `\n\n[Note: this request continues in part ${i + 1} of ${n} — reply with exactly "OK" and nothing else.]`;
+const GO_SUFFIX = `\n\n[Note: this is the final part. Now fulfill the complete request above.]`;
+
+const abortError = () => Object.assign(new Error('Cancelled'), { name: 'AbortError' });
+
+// ── Saved session ─────────────────────────────────────────────────────────
+
+interface DeepSeekAuth {
+  token: string;
+  cookie: string;
+  wasmUrl: string;
+  userAgent: string;
+  /** x-client-* / x-app-* / x-hif-* headers the web app sends. */
+  headers: Record<string, string>;
+  connectedAt: string;
+}
+
+const authPath = () => path.join(dataDir(), 'deepseek-auth.json');
+const profileDir = () => path.join(dataDir(), 'deepseek-proxy-profile');
+
+async function loadAuth(): Promise<DeepSeekAuth | null> {
+  try {
+    const a = JSON.parse(await fs.readFile(authPath(), 'utf8'));
+    return a && a.token && a.cookie ? a : null;
+  } catch {
+    return null;
+  }
+}
+
+function headersFor(auth: DeepSeekAuth): Record<string, string> {
+  return {
+    'x-client-platform': 'web',
+    'x-client-version': '2.0.0',
+    'x-app-version': '2.0.0',
+    'x-client-locale': 'en_US',
+    ...auth.headers,
+    'User-Agent': auth.userAgent,
+    Authorization: `Bearer ${auth.token}`,
+    Cookie: auth.cookie,
+    Origin: SITE,
+    Referer: `${SITE}/`,
+    'Content-Type': 'application/json',
+  };
+}
+
+// ── Shared state (survives dev HMR) ───────────────────────────────────────
+
+type ConnectState = 'idle' | 'waiting-login' | 'verifying' | 'error';
+
+interface Shared {
+  connect: ConnectState;
+  connectError: string | null;
+  connectBrowser: any | null;
+  connectPage: any | null;
+  connectRun: Promise<void> | null;
+  connectCancelled: boolean;
+  wasm: Map<string, Promise<WebAssembly.Module>>;
+}
+
+function shared(): Shared {
+  const g = globalThis as unknown as { __leadmaxDeepseekProxy?: Shared };
+  if (!g.__leadmaxDeepseekProxy) {
+    g.__leadmaxDeepseekProxy = { connect: 'idle', connectError: null, connectBrowser: null, connectPage: null, connectRun: null, connectCancelled: false, wasm: new Map() };
+  }
+  return g.__leadmaxDeepseekProxy;
+}
+
+export interface DeepSeekStatus {
+  connected: boolean;
+  connectedAt: string | null;
+  connecting: ConnectState;
+  error: string | null;
+}
+
+export async function getDeepSeekStatus(): Promise<DeepSeekStatus> {
+  const auth = await loadAuth();
+  const s = shared();
+  return { connected: !!auth, connectedAt: auth?.connectedAt ?? null, connecting: s.connect, error: s.connectError };
+}
+
+export async function hasDeepSeekAuth(): Promise<boolean> {
+  return !!(await loadAuth());
+}
+
+export async function disconnectDeepSeek(): Promise<void> {
+  await cancelConnect();
+  await fs.rm(authPath(), { force: true });
+}
+
+// ── Proof of work ─────────────────────────────────────────────────────────
+
+interface Challenge {
+  algorithm: string;
+  challenge: string;
+  salt: string;
+  signature: string;
+  difficulty: number;
+  expire_at: number;
+}
+
+function wasmModule(url: string): Promise<WebAssembly.Module> {
+  const cache = shared().wasm;
+  if (!cache.has(url)) {
+    const p = (async () => {
+      const res = await fetch(url, { signal: AbortSignal.timeout(20_000) });
+      if (!res.ok) throw new Error(`DeepSeek proof-of-work module unavailable (HTTP ${res.status}). ${RECONNECT}`);
+      return WebAssembly.compile(await res.arrayBuffer());
+    })();
+    cache.set(url, p);
+    p.catch(() => cache.delete(url));
+  }
+  return cache.get(url)!;
+}
+
+async function solvePow(ch: Challenge, wasmUrl: string): Promise<number> {
+  const instance = await WebAssembly.instantiate(await wasmModule(wasmUrl), { wbg: {} });
+  const e = instance.exports as any;
+  const enc = new TextEncoder();
+  const c = enc.encode(ch.challenge);
+  const prefix = enc.encode(`${ch.salt}_${ch.expire_at}_`);
+  const cP = e.__wbindgen_export_0(c.length, 1) >>> 0;
+  const pP = e.__wbindgen_export_0(prefix.length, 1) >>> 0;
+  new Uint8Array(e.memory.buffer, cP, c.length).set(c);
+  new Uint8Array(e.memory.buffer, pP, prefix.length).set(prefix);
+  const sp = e.__wbindgen_add_to_stack_pointer(-16);
+  e.wasm_solve(sp, cP, c.length, pP, prefix.length, ch.difficulty);
+  const view = new DataView(e.memory.buffer);
+  const ok = view.getInt32(sp, true);
+  const answer = view.getFloat64(sp + 8, true);
+  e.__wbindgen_add_to_stack_pointer(16);
+  if (ok === 0 || !Number.isFinite(answer) || answer <= 0) throw new Error('DeepSeek proof-of-work could not be solved.');
+  return Math.floor(answer);
+}
+
+// ── HTTP ──────────────────────────────────────────────────────────────────
+
+function timeoutSignal(ms: number, signal?: AbortSignal): AbortSignal {
+  return signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms);
+}
+
+function httpError(status: number, body: string): Error {
+  if (status === 401 || status === 403) return new Error(`DeepSeek session expired or was rejected (HTTP ${status}). ${RECONNECT}`);
+  if (status === 429) return new Error('DeepSeek is rate-limiting this account (HTTP 429). Wait a few minutes or switch the AI source.');
+  const detail = body.replace(/\s+/g, ' ').trim().slice(0, 200);
+  return new Error(`DeepSeek returned HTTP ${status}${detail ? `: ${detail}` : ''}`);
+}
+
+/** POST a JSON endpoint; DeepSeek reports most errors as `code != 0` with HTTP 200. */
+async function postJson(auth: DeepSeekAuth, endpoint: string, body: unknown, signal?: AbortSignal): Promise<any> {
+  const res = await fetch(`${API}${endpoint}`, {
+    method: 'POST',
+    headers: headersFor(auth),
+    body: JSON.stringify(body),
+    signal: timeoutSignal(FETCH_TIMEOUT_MS, signal),
+  });
+  const text = await res.text();
+  if (!res.ok) throw httpError(res.status, text);
+  let json: any;
+  try { json = JSON.parse(text); } catch {
+    throw new Error(`DeepSeek returned an unexpected page (Cloudflare check or login wall). ${RECONNECT}`);
+  }
+  if (json?.code && json.code !== 0) {
+    const msg = String(json.msg || json.data?.biz_msg || 'unknown error');
+    if (/auth|token|login|expired/i.test(msg) || json.code === 40002 || json.code === 40003) {
+      throw new Error(`DeepSeek session expired (${msg}). ${RECONNECT}`);
+    }
+    throw new Error(`DeepSeek error: ${msg}`);
+  }
+  if (json?.data?.biz_code && json.data.biz_code !== 0) {
+    throw new Error(`DeepSeek error: ${json.data.biz_msg || json.data.biz_code}`);
+  }
+  return json?.data?.biz_data;
+}
+
+async function powHeader(auth: DeepSeekAuth, targetPath: string, signal?: AbortSignal): Promise<string> {
+  const data = await postJson(auth, '/chat/create_pow_challenge', { target_path: targetPath }, signal);
+  const ch: Challenge | undefined = data?.challenge;
+  if (!ch) throw new Error(`DeepSeek did not send a proof-of-work challenge. ${RECONNECT}`);
+  const answer = await solvePow(ch, auth.wasmUrl || DEFAULT_WASM);
+  return Buffer.from(JSON.stringify({
+    algorithm: ch.algorithm, challenge: ch.challenge, salt: ch.salt,
+    answer, signature: ch.signature, target_path: targetPath,
+  })).toString('base64');
+}
+
+// ── Streaming answer ──────────────────────────────────────────────────────
+
+interface StreamResult {
+  text: string;
+  messageId: number | null;
+  /** FINISHED, INCOMPLETE (output cap hit: needs "Continue"), WIP (stream cut)… */
+  status: string | null;
+}
+
+// DeepSeek caps one answer (~8k tokens, ~27-33k chars). When it stops at the
+// cap the answer is INCOMPLETE and the web UI shows "Continue": this does the
+// same, up to:
+const MAX_CONTINUES = Number(process.env.DEEPSEEK_PROXY_MAX_CONTINUES || 8);
+const DEBUG = process.env.DEEPSEEK_PROXY_DEBUG === 'true';
+
+/** Longest overlap between the end of `a` and the start of `b` (a re-sent tail). */
+function overlap(a: string, b: string): number {
+  const max = Math.min(a.length, b.length, 2_000);
+  for (let n = max; n >= 20; n--) if (a.endsWith(b.slice(0, n))) return n;
+  return 0;
+}
+
+/**
+ * One full answer on `sessionId`, continued past DeepSeek's output cap.
+ * Calls `onText` with the whole answer so far (thinking excluded).
+ */
+async function completion(
+  auth: DeepSeekAuth,
+  sessionId: string,
+  parentId: number | null,
+  prompt: string,
+  onText: ((text: string) => void) | undefined,
+  signal: AbortSignal | undefined,
+): Promise<{ text: string; messageId: number | null }> {
+  let r = await streamCall(auth, '/chat/completion', COMPLETION_PATH, {
+    chat_session_id: sessionId,
+    parent_message_id: parentId,
+    model_type: MODEL_TYPE,
+    prompt,
+    ref_file_ids: [],
+    thinking_enabled: THINKING,
+    search_enabled: false,
+    action: null,
+    preempt: false,
+  }, '', onText, signal);
+  let text = r.text;
+  let messageId = r.messageId;
+
+  for (let i = 0; i < MAX_CONTINUES && r.status !== 'FINISHED' && messageId !== null; i++) {
+    console.log(`[deepseek-proxy] answer ${r.status || 'cut short'} at ${text.length} chars — continuing (${i + 1}/${MAX_CONTINUES})`);
+    try {
+      // What the web UI's "Continue" button does: the same message keeps
+      // growing. Its proof of work is issued for the completion path.
+      r = await streamCall(auth, '/chat/continue', COMPLETION_PATH, {
+        chat_session_id: sessionId,
+        message_id: messageId,
+        fallback_to_resume: true,
+      }, text, onText, signal);
+      text = r.text;
+      if (r.messageId !== null) messageId = r.messageId;
+    } catch (err) {
+      if (signal?.aborted) throw abortError();
+      // Continue endpoint unavailable: ask for the rest in a follow-up message.
+      console.log(`[deepseek-proxy] continue failed (${err instanceof Error ? err.message : err}) — asking for the rest`);
+      const before = text;
+      r = await streamCall(auth, '/chat/completion', COMPLETION_PATH, {
+        chat_session_id: sessionId,
+        parent_message_id: messageId,
+        model_type: MODEL_TYPE,
+        prompt: 'Your previous answer was cut off. Continue EXACTLY where it stopped, mid-line if needed: no repetition, no introduction, no code fence.',
+        ref_file_ids: [],
+        thinking_enabled: THINKING,
+        search_enabled: false,
+        action: null,
+        preempt: false,
+      }, '', (t) => onText?.(before + t.slice(overlap(before, t))), signal);
+      const rest = r.text.replace(/^```[\w+-]*[ \t]*\n/, '');
+      text = before + rest.slice(overlap(before, rest));
+      messageId = r.messageId;
+    }
+  }
+  if (r.status === 'INCOMPLETE') throw new Error(`DeepSeek's answer is still incomplete after ${MAX_CONTINUES} continues.`);
+  return { text, messageId };
+}
+
+/**
+ * POST one streaming endpoint and read the answer. `base` is the text already
+ * received for this message (continue): the stream either re-sends the whole
+ * message or only what follows, both are handled.
+ */
+async function streamCall(
+  auth: DeepSeekAuth,
+  endpoint: string,
+  targetPath: string,
+  body: Record<string, unknown>,
+  base: string,
+  onText: ((text: string) => void) | undefined,
+  signal: AbortSignal | undefined,
+): Promise<StreamResult> {
+  const pow = await powHeader(auth, targetPath, signal);
+  const turnAbort = new AbortController();
+  const stop = () => turnAbort.abort();
+  signal?.addEventListener('abort', stop, { once: true });
+  let lastGrowth = Date.now();
+  const started = Date.now();
+  const watchdog = setInterval(() => {
+    const now = Date.now();
+    if (now - lastGrowth > STALL_TIMEOUT_MS || now - started > TURN_TIMEOUT_MS) turnAbort.abort();
+  }, 2_000);
+
+  try {
+    const res = await fetch(`${API}${endpoint}`, {
+      method: 'POST',
+      headers: { ...headersFor(auth), 'X-DS-PoW-Response': pow },
+      body: JSON.stringify(body),
+      signal: turnAbort.signal,
+    });
+    if (!res.ok || !res.body) throw httpError(res.status, await res.text().catch(() => ''));
+    if (!/event-stream/.test(res.headers.get('content-type') || '')) {
+      // A JSON error instead of a stream (e.g. expired session, bad PoW).
+      const body = await res.text();
+      let msg = body.slice(0, 200);
+      try { const j = JSON.parse(body); msg = j.msg || j.data?.biz_msg || msg; } catch { /* raw */ }
+      if (/auth|token|login|expired/i.test(msg)) throw new Error(`DeepSeek session expired (${msg}). ${RECONNECT}`);
+      throw new Error(`DeepSeek refused the request: ${msg}`);
+    }
+
+    // Answer state: fragments (RESPONSE = answer, THINK = reasoning).
+    const fragments: { type: string; content: string }[] = [];
+    let plain = ''; // older stream shape: response/content
+    let messageId: number | null = null;
+    let lastPath: string | null = null;
+    let modelError: string | null = null;
+    let status: string | null = null;
+    let emitted = '';
+    const streamed = () => {
+      const fromFragments = fragments.filter(f => f.type === 'RESPONSE').map(f => f.content).join('');
+      return fromFragments || plain;
+    };
+    // Whole message so far: a re-sent snapshot already starts with `base`.
+    const answer = () => {
+      const s = streamed();
+      if (!base || s.startsWith(base)) return s || base;
+      return base + s;
+    };
+    const append = (v: any) => {
+      for (const f of Array.isArray(v) ? v : [v]) {
+        if (f && typeof f === 'object') fragments.push({ type: String(f.type || ''), content: typeof f.content === 'string' ? f.content : '' });
+      }
+    };
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for await (const chunk of res.body as any as AsyncIterable<Uint8Array>) {
+      buffer += decoder.decode(chunk, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue;
+        let d: any;
+        try { d = JSON.parse(line.slice(5).trim()); } catch { continue; }
+        if (d.type === 'error') modelError = String(d.content || d.msg || 'model error');
+        if (d.response_message_id !== undefined && messageId === null) messageId = d.response_message_id;
+        if (d.p !== undefined) lastPath = d.p;
+        const v = d.v;
+        if (DEBUG && !(typeof v === 'string' && (d.p === undefined || /content$/.test(String(d.p))))) {
+          console.log('[deepseek-proxy:event]', line.slice(0, 300));
+        }
+        // Status: snapshot field, a path update, or a batch of patch ops.
+        if (lastPath === 'response/status' && typeof v === 'string') status = v;
+        if (lastPath === 'response' && Array.isArray(v)) {
+          for (const op of v) if (op?.p === 'status' && typeof op.v === 'string') status = op.v;
+        }
+        if (v && typeof v === 'object' && v.response) {
+          if (typeof v.response.status === 'string') status = v.response.status;
+          if (v.response.message_id !== undefined) messageId = v.response.message_id;
+          if (Array.isArray(v.response.fragments)) { fragments.length = 0; append(v.response.fragments); }
+          if (typeof v.response.content === 'string') plain = v.response.content;
+        } else if (lastPath === 'response/fragments' && v !== undefined) {
+          append(v);
+        } else if (lastPath === 'response' && Array.isArray(v)) {
+          for (const op of v) if (op?.p === 'fragments' && op.o === 'APPEND') append(op.v);
+        } else if (lastPath === 'response/fragments/-1/content' && typeof v === 'string') {
+          if (fragments.length) fragments[fragments.length - 1].content += v;
+        } else if (lastPath === 'response/content' && typeof v === 'string') {
+          plain += v;
+        }
+        const now = answer();
+        if (now.length !== emitted.length || now !== emitted) {
+          lastGrowth = Date.now();
+          emitted = now;
+          onText?.(now);
+        }
+      }
+    }
+    const text = answer();
+    if (!text.trim()) {
+      if (modelError) throw new Error(/long|length|context/i.test(modelError) ? 'The request is too long for DeepSeek. Split it or switch the AI source.' : `DeepSeek error: ${modelError}`);
+      throw new Error('DeepSeek returned an empty answer. Try again or switch the AI source.');
+    }
+    if (DEBUG) console.log(`[deepseek-proxy] ${endpoint}: status=${status} message=${messageId} chars=${text.length}`);
+    return { text, messageId, status };
+  } catch (err) {
+    if (signal?.aborted) throw abortError();
+    if (turnAbort.signal.aborted) {
+      throw new Error(Date.now() - started > TURN_TIMEOUT_MS
+        ? `DeepSeek did not finish within ${Math.round(TURN_TIMEOUT_MS / 1000)}s.`
+        : `DeepSeek stopped responding mid-answer (no output for ${Math.round(STALL_TIMEOUT_MS / 1000)}s).`);
+    }
+    throw err;
+  } finally {
+    clearInterval(watchdog);
+    signal?.removeEventListener('abort', stop);
+  }
+}
+
+const fenceRe = /^```[\w+-]*[ \t]*\n([\s\S]*?)\n```[ \t]*$/;
+
+/** Ask DeepSeek (logged-in web session). Cancellable via `signal`. */
+export async function askDeepSeekProxy(
+  prompt: string,
+  onChunk?: (text: string) => void,
+  onStatus?: (event: ProxyStatus) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (typeof window !== 'undefined') throw new Error('askDeepSeekProxy is server-only.');
+  if (!prompt.trim()) throw new Error('Empty prompt.');
+  const auth = await loadAuth();
+  if (!auth) throw new Error('DeepSeek is not connected. Open Settings → AI source → Proxy DeepSeek and click "Connect DeepSeek".');
+  if (signal?.aborted) throw abortError();
+
+  onStatus?.({ type: 'uploading' });
+  const session = await postJson(auth, '/chat_session/create', {}, signal);
+  const sessionId: string | undefined = session?.chat_session?.id || session?.id;
+  if (!sessionId) throw new Error(`DeepSeek could not open a chat. ${RECONNECT}`);
+
+  try {
+    const pieces = splitPrompt(prompt, CHUNK_LIMIT);
+    let parentId: number | null = null;
+    let final = '';
+    for (let i = 0; i < pieces.length; i++) {
+      if (signal?.aborted) throw abortError();
+      const isLast = i === pieces.length - 1;
+      if (pieces.length > 1) onStatus?.({ type: 'turn', turn: i + 1, total: pieces.length });
+      const text = pieces.length > 1 ? pieces[i] + (isLast ? GO_SUFFIX : holdSuffix(i, pieces.length)) : pieces[i];
+      let emitted = '';
+      let announced = false;
+      const t0 = Date.now();
+      const turn = await completion(auth, sessionId, parentId, text, isLast ? (full) => {
+        if (!announced) { announced = true; onStatus?.({ type: 'streaming' }); }
+        if (full.startsWith(emitted)) {
+          const delta = full.slice(emitted.length);
+          if (delta) onChunk?.(delta);
+        } else {
+          onStatus?.({ type: 'restream' });
+          onChunk?.(full);
+        }
+        emitted = full;
+      } : undefined, signal);
+      parentId = turn.messageId;
+      if (isLast) {
+        final = turn.text;
+        console.log(`[deepseek-proxy] reply: ${final.length} chars in ${Math.round((Date.now() - t0) / 1000)}s${pieces.length > 1 ? ` (${pieces.length} turns)` : ''}`);
+      }
+    }
+    // A reply that is one fenced block: the block is the answer.
+    const trimmed = final.trim();
+    const m = fenceRe.exec(trimmed);
+    return m ? m[1] : trimmed;
+  } finally {
+    // Keep the account's chat history clean (best effort).
+    postJson(auth, '/chat_session/delete', { chat_session_id: sessionId })
+      .then(() => { if (DEBUG) console.log('[deepseek-proxy] chat deleted'); })
+      .catch(err => console.log(`[deepseek-proxy] could not delete the chat: ${err instanceof Error ? err.message : err}`));
+  }
+}
+
+// ── Connect (one-time login in a visible Chrome) ──────────────────────────
+
+/** Read the session token the web app keeps in localStorage. */
+function tokenFrom(raw: string | null): string {
+  if (!raw) return '';
+  try {
+    const j = JSON.parse(raw);
+    if (j && typeof j === 'object') return String(j.value || j.token || j.access_token || '');
+    return String(j || '');
+  } catch {
+    return raw.trim();
+  }
+}
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.once('error', reject);
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address() as net.AddressInfo;
+      srv.close(() => resolve(port));
+    });
+  });
+}
+
+/**
+ * A normal browser window on chat.deepseek.com, then attached over its
+ * DevTools port. Started like a user would start it (no automation flags):
+ * puppeteer-launched windows can render blank and look automated to the login.
+ */
+async function launchVisible(): Promise<any> {
+  const puppeteer = await loadPuppeteer();
+  await fs.mkdir(profileDir(), { recursive: true });
+  const candidates = [process.env.PUPPETEER_EXECUTABLE_PATH, ...systemBrowserCandidates()].filter(Boolean) as string[];
+  try { candidates.push(await puppeteer.executablePath()); } catch { /* no bundled browser */ }
+  let exe = '';
+  for (const c of candidates) {
+    try { await fs.access(c); exe = c; break; } catch { /* next */ }
+  }
+  if (!exe) throw new Error('No Chrome, Edge or Brave browser found to open the DeepSeek login.');
+
+  const port = await freePort();
+  const child = spawn(exe, [
+    `--user-data-dir=${profileDir()}`,
+    `--remote-debugging-port=${port}`,
+    '--remote-allow-origins=*',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--hide-crash-restore-bubble',
+    '--window-size=1100,900',
+    `${SITE}/`,
+  ], { stdio: 'ignore', detached: true });
+  child.unref();
+
+  // Wait for the DevTools endpoint, then attach.
+  const deadline = Date.now() + 20_000;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null) {
+      throw new Error('The browser closed right away — a DeepSeek login window may already be open. Close it and retry.');
+    }
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(1_000) });
+      if (res.ok) return await puppeteer.connect({ browserURL: `http://127.0.0.1:${port}`, defaultViewport: null });
+    } catch { /* not up yet */ }
+    await new Promise(r => setTimeout(r, 300));
+  }
+  try { child.kill(); } catch { /* gone */ }
+  throw new Error('The DeepSeek login browser did not start.');
+}
+
+const cancelledError = () => Object.assign(new Error('Login cancelled.'), { name: 'AbortError' });
+
+async function runConnect(): Promise<void> {
+  const s = shared();
+  const browser = await launchVisible();
+  s.connectBrowser = browser;
+  try {
+    if (s.connectCancelled) throw cancelledError(); // cancelled while Chrome was starting
+    const pages = await browser.pages();
+    const page = pages.find((p: any) => p.url().includes('deepseek.com')) || pages[0] || (await browser.newPage());
+    s.connectPage = page;
+    const userAgent = (await browser.userAgent()).replace('HeadlessChrome', 'Chrome');
+
+    // The web app's own client headers, read off its API requests.
+    const captured: Record<string, string> = {};
+    page.on('request', (req: any) => {
+      if (!req.url().startsWith(API)) return;
+      for (const [k, v] of Object.entries(req.headers() as Record<string, string>)) {
+        const key = k.toLowerCase();
+        if (/^x-(client|app|hif)-/.test(key) && v) captured[key] = v;
+      }
+    });
+
+    await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => {});
+    const deadline = Date.now() + CONNECT_TIMEOUT_MS;
+    let token = '';
+    while (Date.now() < deadline) {
+      if (s.connectCancelled) throw cancelledError();
+      if (!browser.connected || page.isClosed()) throw new Error('The DeepSeek window was closed before the login finished.');
+      const raw = await page.evaluate(() => {
+        for (const k of ['userToken', 'token', 'access_token']) {
+          const v = localStorage.getItem(k);
+          if (v) return v;
+        }
+        return null;
+      }).catch(() => null);
+      token = tokenFrom(raw);
+      if (token) break;
+      await new Promise(r => setTimeout(r, 1_000));
+    }
+    if (!token) throw new Error('Timed out waiting for the DeepSeek login (10 minutes).');
+
+    s.connect = 'verifying';
+    // Let the logged-in app load and make its first API calls (headers).
+    await new Promise(r => setTimeout(r, 4_000));
+    const client = await page.createCDPSession();
+    const { cookies } = await client.send('Network.getAllCookies') as { cookies: { name: string; value: string; domain: string }[] };
+    const cookie = cookies.filter(c => /deepseek\.com$/.test(c.domain)).map(c => `${c.name}=${c.value}`).join('; ');
+    const wasmUrl = await page.evaluate(() =>
+      performance.getEntriesByType('resource').map(r => r.name).find(n => /sha3.*\.wasm/.test(n)) || '',
+    ).catch(() => '');
+
+    const auth: DeepSeekAuth = {
+      token, cookie, userAgent, headers: captured,
+      wasmUrl: wasmUrl || DEFAULT_WASM,
+      connectedAt: new Date().toISOString(),
+    };
+    // Prove the session works before saving it.
+    await postJson(auth, '/chat/create_pow_challenge', { target_path: COMPLETION_PATH });
+    await fs.mkdir(dataDir(), { recursive: true });
+    await fs.writeFile(authPath(), JSON.stringify(auth, null, 2));
+    console.log(`[deepseek-proxy] connected (${Object.keys(captured).length} client headers, ${cookie.split(';').length} cookies)`);
+  } finally {
+    s.connectBrowser = null;
+    s.connectPage = null;
+    await browser.close().catch(() => {});
+  }
+}
+
+/**
+ * Open the login window and capture the session in the background (poll
+ * getDeepSeekStatus() for the outcome). Only one login runs at a time: while
+ * it is open, Connect just brings its window to the front.
+ */
+export function startConnect(): void {
+  const s = shared();
+  s.connectCancelled = false;
+  s.connectError = null;
+  if (s.connectRun) {
+    if (s.connect !== 'verifying') s.connect = 'waiting-login';
+    s.connectPage?.bringToFront().catch(() => {});
+    return;
+  }
+  s.connect = 'waiting-login';
+  s.connectRun = runConnect()
+    .then(() => { s.connect = 'idle'; })
+    .catch(err => {
+      if (s.connectCancelled) { s.connect = 'idle'; return; }
+      s.connect = 'error';
+      s.connectError = err instanceof Error ? err.message : String(err);
+      console.log(`[deepseek-proxy] connect failed: ${s.connectError}`);
+    })
+    .finally(() => { s.connectRun = null; });
+}
+
+/** Close the login window (also when Chrome is still starting). */
+export async function cancelConnect(): Promise<void> {
+  const s = shared();
+  s.connectCancelled = true;
+  await s.connectBrowser?.close().catch(() => {});
+  await s.connectRun;
+  s.connect = 'idle';
+  s.connectError = null;
+}

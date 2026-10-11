@@ -1,0 +1,281 @@
+'use client';
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- campaigns/leads arrive as loose API JSON */
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
+import SafeImg from '@/components/SafeImg';
+import CampaignExportModal from '@/components/CampaignExportModal';
+import { useScrape } from '@/lib/scrape/ScrapeProvider';
+import { resolveJobMessage } from '@/lib/generate/GenerationProvider';
+import { hasOwnWebsite } from '@/lib/website';
+import type { Generation } from '@/lib/query/useCampaigns';
+
+// ── Lead helpers ───────────────────────────────────────────────────────────
+
+export const liveLeads = (c: any): any[] => (c.leads || []).filter((l: any) => !l.deleted);
+
+/** Best photo for a lead: a discovered photo (not session-gated Google), then an upload. */
+export function leadPhoto(l: any): string | undefined {
+  const discovered = (l?.business?.scrapedImages || []).find((s: any) => s?.url && !/googleusercontent|\.google\.com/.test(s.url))?.url;
+  if (discovered) return discovered;
+  return (l?.images || []).find((i: any) => !i.deleted)?.url;
+}
+
+export const hasAiSite = (l: any) => !!(l.landingPage || l.deployment);
+/** No website of its own and no AI site yet: a ready opportunity. */
+export const isOpportunity = (l: any) => !hasAiSite(l) && !hasOwnWebsite(l.business?.name || '', l.business?.website);
+
+// Greys for leads not moving, a darker → brighter green as a deal progresses.
+export const PIPELINE = [
+  { status: 'pending', key: 'campaign.pending', color: 'bg-zinc-300 dark:bg-zinc-700', dot: 'bg-zinc-300 dark:bg-zinc-600' },
+  { status: 'contacted', key: 'campaign.contacted', color: 'bg-emerald-200 dark:bg-emerald-900', dot: 'bg-emerald-200 dark:bg-emerald-800' },
+  { status: 'negotiating', key: 'campaign.negotiating', color: 'bg-emerald-400 dark:bg-emerald-700', dot: 'bg-emerald-400 dark:bg-emerald-600' },
+  { status: 'sold', key: 'campaign.sold', color: 'bg-emerald-600 dark:bg-emerald-400', dot: 'bg-emerald-600 dark:bg-emerald-400' },
+  { status: 'not_interested', key: 'campaign.notInterested', color: 'bg-zinc-500 dark:bg-zinc-500', dot: 'bg-zinc-500' },
+] as const;
+
+export function pipelineCounts(leads: any[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const l of leads) out[l.status || 'pending'] = (out[l.status || 'pending'] || 0) + 1;
+  return out;
+}
+
+const fmtDate = (iso: string, lang: string) =>
+  new Date(iso).toLocaleDateString(lang?.startsWith('ar') ? 'ar' : lang?.startsWith('fr') ? 'fr-FR' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+function Svg({ d, className = 'w-4 h-4' }: { d: string; className?: string }) {
+  return <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d={d} /></svg>;
+}
+const D = {
+  pin: 'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z',
+  download: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4',
+  trash: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+  restore: 'M3 9a9 9 0 1 0 3-6.7M3 4v5h5',
+  eye: 'M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z',
+  external: 'M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14',
+  close: 'M6 18L18 6M6 6l12 12',
+  sites: 'M13 10V3L4 14h7v7l9-11h-7z',
+};
+
+// ── Stat tile ──────────────────────────────────────────────────────────────
+
+export function StatTile({ label, value, hint, accent, icon }: { label: string; value: number | string; hint?: React.ReactNode; accent: 'emerald' | 'zinc'; icon: string }) {
+  const tone = {
+    emerald: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+    zinc: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300',
+  }[accent];
+  return (
+    <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{label}</span>
+        <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${tone}`}><Svg d={icon} /></span>
+      </div>
+      <p className="mt-2 text-2xl sm:text-[28px] font-semibold tracking-tight text-zinc-900 dark:text-white tabular-nums">{value}</p>
+      {hint && <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400 truncate">{hint}</p>}
+    </div>
+  );
+}
+
+// ── Pipeline bar ───────────────────────────────────────────────────────────
+
+export function PipelineBar({ counts, total, thin = false }: { counts: Record<string, number>; total: number; thin?: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <div className={`flex w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800 ${thin ? 'h-1.5' : 'h-2.5'}`}>
+      {total > 0 && PIPELINE.map(p => {
+        const n = counts[p.status] || 0;
+        if (!n) return null;
+        return <span key={p.status} className={p.color} style={{ width: `${(n / total) * 100}%` }} title={`${t(p.key)}: ${n}`} />;
+      })}
+    </div>
+  );
+}
+
+// ── Campaign card ──────────────────────────────────────────────────────────
+
+export function CampaignCard({ c, deleted, onDelete, onRestore, onErase }: { c: any; deleted?: boolean; onDelete: (id: string) => void; onRestore: (id: string) => void; onErase: (id: string) => void }) {
+  const router = useRouter();
+  const { t, i18n } = useTranslation();
+  const scrape = useScrape();
+  const [exportOpen, setExportOpen] = useState(false);
+  const leads = liveLeads(c);
+  const total = leads.length;
+  const sites = leads.filter(hasAiSite).length;
+  const opportunities = leads.filter(isOpportunity).length;
+  const counts = pipelineCounts(leads);
+  const avatars = leads.slice(0, 4);
+  const regions = c.regions || [];
+  const isScraping = scrape.running && scrape.campaignId === c.id;
+  const name = c.displayName && c.source === 'manual' ? c.displayName : c.keyword || c.displayName;
+  const location = regions.length > 1 ? regions[0].location : c.location;
+  const iconBtn = 'p-1.5 rounded-lg text-zinc-400 transition-colors';
+
+  return (
+    <div
+      onClick={() => router.push(`/campaign/${c.id}`)}
+      className={`group relative flex flex-col rounded-2xl border bg-white dark:bg-zinc-900/60 p-4 sm:p-5 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-zinc-900/5 dark:hover:shadow-black/30 ${deleted ? 'border-dashed border-zinc-300 dark:border-zinc-700 opacity-80' : 'border-zinc-200 dark:border-zinc-800 hover:border-emerald-500/40'}`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold text-[15px] text-zinc-900 dark:text-white truncate" dir="auto">{name}</h3>
+          {location && (
+            <p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400 min-w-0">
+              <Svg d={D.pin} className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate" dir="auto">{location}</span>
+              {regions.length > 1 && <span className="shrink-0 px-1.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-[10px] font-medium">+{regions.length - 1}</span>}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-0.5 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+          <button onClick={() => setExportOpen(true)} className={`${iconBtn} hover:text-emerald-500 hover:bg-emerald-500/10`} title={t('home.exportCampaign')}><Svg d={D.download} /></button>
+          {deleted ? (
+            <>
+              <button onClick={() => onRestore(c.id)} className={`${iconBtn} hover:text-emerald-500 hover:bg-emerald-500/10`} title={t('home.restoreCampaign')}><Svg d={D.restore} /></button>
+              <button onClick={() => onErase(c.id)} className={`${iconBtn} hover:text-red-500 hover:bg-red-500/10`} title={t('home.eraseCampaign')}><Svg d={D.trash} /></button>
+            </>
+          ) : sites === 0 && (
+            <button onClick={() => onDelete(c.id)} className={`${iconBtn} hover:text-red-500 hover:bg-red-500/10`} title={t('home.deleteCampaign')}><Svg d={D.trash} /></button>
+          )}
+        </div>
+      </div>
+      <CampaignExportModal open={exportOpen} onClose={() => setExportOpen(false)} campaign={c} />
+
+      {/* Numbers */}
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        {[
+          { v: total, l: t('home.statLeads'), cls: 'text-zinc-900 dark:text-white' },
+          { v: opportunities, l: t('home.statNoWebsite'), cls: 'text-zinc-900 dark:text-white' },
+          { v: sites, l: t('home.statSites'), cls: 'text-emerald-600 dark:text-emerald-400' },
+        ].map(s => (
+          <div key={s.l} className="rounded-xl bg-zinc-50 dark:bg-zinc-800/50 px-2.5 py-2">
+            <p className={`text-base font-semibold tabular-nums ${s.cls}`}>{s.v}</p>
+            <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate">{s.l}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4"><PipelineBar counts={counts} total={total} thin /></div>
+
+      <div className="mt-3 flex items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+        {isScraping ? (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium">
+            <span className="animate-spin w-3 h-3 rounded-full border-2 border-emerald-500 border-t-transparent" />
+            {t('home.scrapingActive')}
+          </span>
+        ) : avatars.length > 0 && (
+          <div className="flex items-center">
+            {avatars.map((l: any, i: number) => (
+              <SafeImg
+                key={l.id}
+                src={leadPhoto(l)}
+                title={l.business?.name}
+                className="w-6 h-6 rounded-full ring-2 ring-white dark:ring-zinc-900 overflow-hidden shrink-0 -ms-1.5 first:ms-0"
+                style={{ zIndex: avatars.length - i }}
+                imgClassName="w-full h-full object-cover"
+                fallback={<span className="w-full h-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[10px] font-semibold">{(l.business?.name || '?').trim().charAt(0).toUpperCase()}</span>}
+              />
+            ))}
+            {total > avatars.length && <span className="ms-1.5 tabular-nums">+{total - avatars.length}</span>}
+          </div>
+        )}
+        <span className="ms-auto">{fmtDate(c.createdAt, i18n.language)}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── AI site card ───────────────────────────────────────────────────────────
+
+export function SiteCard({ g, lead, onOpen }: { g: Generation; lead?: any; onOpen: () => void }) {
+  const { t, i18n } = useTranslation();
+  const live = !!g.deploymentUrl;
+  const photo = lead ? leadPhoto(lead) : undefined;
+  return (
+    <div
+      data-gen-id={g.id}
+      onClick={onOpen}
+      className="group flex gap-3 items-center rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/60 p-3 cursor-pointer transition-all hover:border-emerald-500/40 hover:shadow-lg hover:shadow-zinc-900/5 dark:hover:shadow-black/30"
+    >
+      <SafeImg
+        src={photo}
+        className="w-14 h-14 rounded-xl overflow-hidden shrink-0 bg-zinc-100 dark:bg-zinc-800"
+        imgClassName="w-full h-full object-cover"
+        fallback={<span className="w-full h-full flex items-center justify-center text-emerald-600 dark:text-emerald-400"><Svg d={D.sites} className="w-5 h-5" /></span>}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2 min-w-0">
+          <h3 className="font-semibold text-sm text-zinc-900 dark:text-white truncate" dir="auto">{g.businessName}</h3>
+          <span className={`shrink-0 inline-flex items-center gap-1 px-1.5 py-px rounded-md text-[10px] font-semibold ${live ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${live ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
+            {live ? t('home.siteLive') : t('home.siteDraft')}
+          </span>
+        </div>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5" dir="auto">{g.campaignName}</p>
+        <p className="text-[11px] text-zinc-400 dark:text-zinc-500 truncate mt-0.5">
+          {live && g.deploymentUrl ? g.deploymentUrl.replace(/^https?:\/\//, '') : g.projectName || ''} · {fmtDate(g.createdAt, i18n.language)}
+        </p>
+      </div>
+      {live && (
+        <a
+          href={g.deploymentUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+          className="p-2 rounded-lg text-zinc-400 hover:text-emerald-500 hover:bg-emerald-500/10 transition-colors shrink-0"
+          title={t('generations.liveSite')}
+        >
+          <Svg d={D.external} />
+        </a>
+      )}
+    </div>
+  );
+}
+
+// ── Job in progress ────────────────────────────────────────────────────────
+
+export function JobRow({ job, campaignName, onOpen, onDismiss }: {
+  job: { id: string; leadName: string; phase: string; message: string; messageKey?: string; messageParams?: Record<string, string | number> };
+  campaignName: string;
+  onOpen: () => void;
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslation();
+  const text = resolveJobMessage(job as any, t);
+  return (
+    <div onClick={onOpen} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-zinc-50 dark:hover:bg-zinc-800/60 cursor-pointer transition-colors">
+      <span className="relative flex h-2.5 w-2.5 shrink-0">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-zinc-900 dark:text-white truncate" dir="auto">{job.leadName} <span className="font-normal text-zinc-400">· {campaignName}</span></p>
+        {text && <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{text}</p>}
+      </div>
+      <button onClick={e => { e.stopPropagation(); onDismiss(); }} className="p-1.5 rounded-lg text-zinc-400 hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0" title={t('generations.dismiss')}>
+        <Svg d={D.close} />
+      </button>
+    </div>
+  );
+}
+
+// ── Pagination ─────────────────────────────────────────────────────────────
+
+export function Pager({ page, pages, onPage }: { page: number; pages: number; onPage: (n: number) => void }) {
+  if (pages <= 1) return null;
+  const btn = 'min-w-8 h-8 px-2 text-xs font-medium rounded-lg transition-colors disabled:opacity-40';
+  // Window of pages around the current one.
+  const nums = Array.from({ length: pages }, (_, i) => i + 1).filter(n => n === 1 || n === pages || Math.abs(n - page) <= 1);
+  return (
+    <div className="flex items-center justify-center gap-1 mt-5">
+      <button onClick={() => onPage(page - 1)} disabled={page <= 1} className={`${btn} text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800`}>‹</button>
+      {nums.map((n, i) => (
+        <span key={n} className="flex items-center gap-1">
+          {i > 0 && n - nums[i - 1] > 1 && <span className="px-1 text-xs text-zinc-400">…</span>}
+          <button onClick={() => onPage(n)} className={`${btn} ${n === page ? 'bg-zinc-900 dark:bg-white text-white dark:text-zinc-900' : 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}>{n}</button>
+        </span>
+      ))}
+      <button onClick={() => onPage(page + 1)} disabled={page >= pages} className={`${btn} text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800`}>›</button>
+    </div>
+  );
+}

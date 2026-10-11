@@ -1,0 +1,25 @@
+import { NextResponse } from 'next/server';
+import { cancelConnect, disconnectDeepSeek, getDeepSeekStatus, startConnect } from '@/lib/deepseekProxy';
+
+/** DeepSeek proxy session state (connected / login window open / last error). */
+export async function GET() {
+  return NextResponse.json(await getDeepSeekStatus());
+}
+
+/**
+ * POST { action: 'connect' }    — open the login window (poll GET for the outcome)
+ *      { action: 'cancel' }     — close the login window
+ *      { action: 'disconnect' } — forget the saved session
+ */
+export async function POST(request: Request) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    if (body?.action === 'connect') startConnect();
+    else if (body?.action === 'cancel') await cancelConnect();
+    else if (body?.action === 'disconnect') await disconnectDeepSeek();
+    else return NextResponse.json({ error: 'unknown action' }, { status: 400 });
+    return NextResponse.json(await getDeepSeekStatus());
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'DeepSeek action failed' }, { status: 500 });
+  }
+}

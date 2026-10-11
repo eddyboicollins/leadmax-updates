@@ -1,0 +1,50 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getLead } from '@/lib/store';
+import { getVersion, commitVersion } from '@/lib/site/versions';
+import { applyVisualEdits, VisualEditError, type VisualEdit } from '@/lib/site/visualEdit';
+
+/**
+ * Apply no-AI edits (text, rich text runs, link, image) from the visual editor
+ * to a version's source. `edits` are applied atomically (e.g. every text run
+ * of one rich heading). Consecutive visual edits merge into one draft version.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  const { leadId } = await params;
+  const body = await request.json().catch(() => ({}));
+  const baseVersionId: string | undefined = body.baseVersionId;
+  const edits: VisualEdit[] = Array.isArray(body.edits) ? body.edits : body.edit ? [body.edit] : [];
+  if (!baseVersionId || edits.length === 0 || edits.some(e => !e || typeof e.loc !== 'number')) {
+    return NextResponse.json({ error: 'baseVersionId and edits are required' }, { status: 400 });
+  }
+
+  const lead = await getLead(leadId);
+  if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+  const base = await getVersion(lead, baseVersionId);
+  if (!base) return NextResponse.json({ error: 'Version not found' }, { status: 404 });
+  // Element positions come from the page as it was displayed: refuse if the
+  // version changed since (another edit landed first).
+  if (body.baseUpdatedAt && body.baseUpdatedAt !== base.updatedAt) {
+    return NextResponse.json({ error: 'The page changed while you were editing. Please try again.' }, { status: 409 });
+  }
+
+  try {
+    const { code, summary, shifts, everywhere } = applyVisualEdits(base.tsx, edits);
+    if (code === base.tsx) return NextResponse.json({ status: 'unchanged', version: base });
+    const { version, status } = await commitVersion(lead, {
+      tsx: code,
+      source: 'visual',
+      parentId: base.id,
+      change: summary,
+    });
+    // shifts: lets the studio keep the current preview (no reload) in sync.
+    // everywhere: the value was swapped in every place it appears (live-update them all).
+    return NextResponse.json({ status, version, shifts, everywhere });
+  } catch (err) {
+    if (err instanceof VisualEditError) return NextResponse.json({ error: err.message }, { status: 422 });
+    const message = err instanceof Error ? err.message : 'Edit failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

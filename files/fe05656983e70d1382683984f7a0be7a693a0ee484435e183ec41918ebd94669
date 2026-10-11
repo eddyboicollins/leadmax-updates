@@ -1,0 +1,86 @@
+import { NextRequest, NextResponse } from 'next/server';
+import sharp from 'sharp';
+import { getLead, getSettings } from '@/lib/store';
+import { uploadToFilebase } from '@/lib/filebase';
+import { recordImageVariant, resolveImageVariant } from '@/lib/site/versions';
+
+export const maxDuration = 120;
+
+const MAX_WIDTH = 1920;
+
+/** Where a (possibly already cropped) image came from, so re-cropping starts from the original. */
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  const { leadId } = await params;
+  const url = request.nextUrl.searchParams.get('url') || '';
+  const lead = await getLead(leadId);
+  if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+  const variant = url ? await resolveImageVariant(lead, url) : null;
+  return NextResponse.json(variant ? { sourceUrl: variant.sourceUrl, crop: variant.crop } : { sourceUrl: url, crop: null });
+}
+
+/**
+ * Crop / zoom / reframe a photo (no AI): cuts the requested region out of the
+ * original image, hosts it, and returns the new URL. The original is untouched.
+ * `crop` is normalized to the image: x, y, w, h in 0..1.
+ */
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string; leadId: string }> },
+) {
+  try {
+    const { leadId } = await params;
+    const { sourceUrl, crop } = await request.json();
+    if (typeof sourceUrl !== 'string' || !/^https?:\/\//.test(sourceUrl)) {
+      return NextResponse.json({ error: 'A valid image URL is required' }, { status: 400 });
+    }
+    const c = crop || {};
+    const nums = [c.x, c.y, c.w, c.h];
+    if (!nums.every(n => typeof n === 'number' && Number.isFinite(n)) || c.w <= 0 || c.h <= 0) {
+      return NextResponse.json({ error: 'Invalid crop' }, { status: 400 });
+    }
+
+    const lead = await getLead(leadId);
+    if (!lead) return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+
+    const settings = await getSettings();
+    if (!settings.filebaseAccessKey || !settings.filebaseSecretKey || !settings.filebaseBucket) {
+      return NextResponse.json({ code: 'FILEBASE_KEY_MISSING', error: 'Filebase keys not configured. Set them in Settings.' }, { status: 400 });
+    }
+
+    const res = await fetch(sourceUrl);
+    if (!res.ok) throw new Error(`Could not download the photo (${res.status})`);
+    // Bake EXIF orientation in so coordinates match what the browser displayed.
+    const oriented = await sharp(Buffer.from(await res.arrayBuffer())).rotate().toBuffer();
+    const meta = await sharp(oriented).metadata();
+    const W = meta.width || 0;
+    const H = meta.height || 0;
+    if (!W || !H) throw new Error('Unreadable image');
+
+    const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+    const left = clamp(Math.round(c.x * W), 0, W - 1);
+    const top = clamp(Math.round(c.y * H), 0, H - 1);
+    const width = clamp(Math.round(c.w * W), 1, W - left);
+    const height = clamp(Math.round(c.h * H), 1, H - top);
+
+    const out = await sharp(oriented)
+      .extract({ left, top, width, height })
+      .resize({ width: MAX_WIDTH, withoutEnlargement: true })
+      .webp({ quality: 82 })
+      .toBuffer();
+
+    const { url } = await uploadToFilebase(out.toString('base64'), settings.filebaseAccessKey, settings.filebaseSecretKey, settings.filebaseBucket);
+    await recordImageVariant(lead, {
+      url,
+      sourceUrl,
+      crop: { x: left / W, y: top / H, w: width / W, h: height / H },
+      createdAt: new Date().toISOString(),
+    });
+    return NextResponse.json({ url });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Crop failed';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

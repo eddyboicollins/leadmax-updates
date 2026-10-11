@@ -1,0 +1,208 @@
+/**
+ * "I have my own clients": scrape each user-provided Google Maps link directly
+ * (no AI). Uses the same place-page extraction as the main scraper, so rating,
+ * review count, phone, website, hours, coordinates, reviews and photos come out
+ * identical — just driven by a list of links instead of a search feed.
+ */
+import { v4 as uuidv4 } from 'uuid';
+import type { BusinessData } from './types';
+import { cleanAddress } from './address';
+import { scrapeLog } from './scrapeLog';
+import {
+  extractFieldsJS,
+  scrollPanelJS,
+  persistScrapedImages,
+  resolvePuppeteerExecutablePath,
+  PHONE_POLL_ATTEMPTS,
+  PHONE_POLL_INTERVAL_MS,
+} from './scraper';
+
+export interface PlaceEntry {
+  name: string;
+  mapsUrl: string;
+}
+
+export interface PlaceResult {
+  name: string;
+  ok: boolean;
+  business?: BusinessData;
+  error?: string;
+}
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+/** Force English so labels/selectors match the main scraper's extraction. */
+function withEnglish(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.set('hl', 'en');
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** The place URL as stored on the lead (without the forced language). */
+function withoutLang(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete('hl');
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** Accept "maps.app.goo.gl/…", "goo.gl/maps/…", bare domains pasted without https://. */
+function normalizeLink(raw: string): string | null {
+  const s = raw.trim();
+  if (!s) return null;
+  const url = /^https?:\/\//i.test(s) ? s : `https://${s.replace(/^\/+/, '')}`;
+  try {
+    const u = new URL(url);
+    return /(^|\.)google\.[a-z.]+$|(^|\.)goo\.gl$|^maps\.app\.goo\.gl$/i.test(u.hostname) ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- puppeteer page/browser handles */
+async function acceptConsent(page: any): Promise<void> {
+  try {
+    await page.waitForSelector('form[action*="consent"] button', { timeout: 2000 });
+    await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('form[action*="consent"] button'));
+      const accept = buttons.find(b => /Accept|Agree|Tout accepter|Alle akzeptieren|Aceptar/i.test((b as HTMLElement).innerText));
+      (accept as HTMLElement | undefined)?.click();
+    });
+    await sleep(600);
+  } catch { /* no consent wall */ }
+}
+
+/**
+ * Open a link and end on the business's place page: follows short links,
+ * re-opens in English, and opens the first result when a link (or the
+ * name fallback) lands on a search list.
+ */
+async function openPlace(page: any, entry: PlaceEntry, log: (m: string) => void): Promise<string> {
+  const link = normalizeLink(entry.mapsUrl);
+  const start = link || `https://www.google.com/maps/search/${encodeURIComponent(entry.name)}`;
+  if (!link) log(`"${entry.name}": link is not a Google Maps link — searching Maps by name instead`);
+
+  await page.goto(start, { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await acceptConsent(page);
+  // Short links redirect via JS; wait until we're on a Maps URL.
+  await page.waitForFunction(() => /\/maps\//.test(location.href), { timeout: 15000 }).catch(() => {});
+
+  if (!/[?&]hl=en\b/.test(page.url())) {
+    await page.goto(withEnglish(page.url()), { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await acceptConsent(page);
+  }
+
+  // A search/list page: open the first place.
+  if (!/\/maps\/place\//.test(page.url())) {
+    const first = await page
+      .waitForSelector('div[role="feed"] a[href*="/maps/place/"], a[href*="/maps/place/"]', { timeout: 12000 })
+      .then(() => page.evaluate(() => (document.querySelector('div[role="feed"] a[href*="/maps/place/"], a[href*="/maps/place/"]') as HTMLAnchorElement | null)?.href || ''))
+      .catch(() => '');
+    if (first) await page.goto(withEnglish(first), { waitUntil: 'domcontentloaded', timeout: 45000 });
+  }
+
+  await page.waitForSelector('h1', { timeout: 10000 }).catch(() => {});
+  // Wait for the rating widget (review count) when the place has one.
+  await page.waitForSelector('div.F7nice', { timeout: 6000 }).catch(() => {});
+  await sleep(1000);
+  return page.url();
+}
+
+async function scrapeOne(page: any, entry: PlaceEntry, log: (m: string) => void): Promise<BusinessData> {
+  const placeUrl = await openPlace(page, entry, log);
+  if (!/\/maps\/place\//.test(placeUrl)) throw new Error('Could not find this business on Google Maps');
+
+  // Reveal phone / details (same polling as the main scraper).
+  await page.evaluate(scrollPanelJS);
+  for (let poll = 0; poll < PHONE_POLL_ATTEMPTS; poll++) {
+    const hasPhone = await page.evaluate(() => {
+      const main = document.querySelector('div[role="main"][aria-label]');
+      return !!(main?.querySelector('button[data-item-id^="phone:"], a[data-item-id^="phone:"]'));
+    });
+    if (hasPhone) break;
+    await page.evaluate(scrollPanelJS);
+    await sleep(PHONE_POLL_INTERVAL_MS);
+  }
+  await page.evaluate(() => {
+    const main = document.querySelector('div[role="main"][aria-label]') || document.querySelector('div[role="main"]');
+    if (main) main.scrollTop = 0;
+  });
+  await sleep(500);
+
+  const details = (await page.evaluate(extractFieldsJS, entry.name)) as any;
+  // Session-gated Google photo URLs are downloaded now and served locally.
+  const scrapedImages = await persistScrapedImages(page, details.scrapedImages || []);
+
+  return {
+    id: uuidv4(),
+    name: details.title || entry.name,
+    rating: parseFloat(details.rating) || 0,
+    ratingCount: details.ratingCount || 0,
+    address: cleanAddress(details.address || ''),
+    phone: details.phone || '',
+    website: details.website || '',
+    category: details.category || '',
+    reviews: details.reviews || [],
+    latitude: details.latitude || 0,
+    longitude: details.longitude || 0,
+    placeId: details.placeId || '',
+    googleUrl: withoutLang(placeUrl),
+    hours: details.hours || [],
+    scrapedImages,
+    scrapedAt: new Date().toISOString(),
+  };
+}
+
+/** Scrape every link with one headless browser, in order. Failures are per-entry. */
+export async function scrapePlaceLinks(
+  entries: PlaceEntry[],
+  onLog?: (msg: string) => void,
+): Promise<PlaceResult[]> {
+  const log = (m: string) => { onLog?.(m); scrapeLog('[places]', m); };
+  if (entries.length === 0) return [];
+
+  let puppeteer: any;
+  try {
+    puppeteer = await import('puppeteer');
+    if (puppeteer.default && typeof puppeteer.default.launch === 'function') puppeteer = puppeteer.default;
+  } catch (err) {
+    throw new Error('Failed to load puppeteer: ' + (err instanceof Error ? err.message : String(err)));
+  }
+  const executablePath = await resolvePuppeteerExecutablePath();
+  const browser = await puppeteer.launch({
+    headless: true,
+    executablePath,
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--window-size=1920,1080'],
+  });
+
+  const results: PlaceResult[] = [];
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1920, height: 1080 });
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+    for (const entry of entries) {
+      try {
+        log(`Opening "${entry.name}"`);
+        const business = await scrapeOne(page, entry, log);
+        log(`${business.name}: ${business.rating}★ (${business.ratingCount} reviews), ${business.scrapedImages?.length || 0} photos`);
+        results.push({ name: entry.name, ok: true, business });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        log(`"${entry.name}" failed: ${message}`);
+        results.push({ name: entry.name, ok: false, error: `Could not fetch details for "${entry.name}": ${message}` });
+      }
+    }
+  } finally {
+    try { await browser.close(); } catch { /* Windows may lock the temp profile; results are already collected */ }
+  }
+  return results;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */

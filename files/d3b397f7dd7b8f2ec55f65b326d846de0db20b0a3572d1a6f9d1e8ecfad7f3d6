@@ -1,0 +1,228 @@
+import path from 'path';
+import { promises as fs } from 'fs';
+
+/**
+ * Real-browser Gemini session keeper (server-only — imports puppeteer lazily).
+ *
+ * Why a browser instead of plain fetch: session endpoints discriminate by TLS
+ * fingerprint. Plain-Node calls get correct protocol responses but no cookie
+ * renewal; a real Chrome profile behaves like the user just using Gemini, so
+ * Google rotates and persists state normally.
+ *
+ * - Dedicated profile under DATA_DIR/chrome-profile (excluded from updates,
+ *   no lock contention with the user's own Chrome).
+ * - refreshBrowserSession(): headless visit, seeded from stored cookies when
+ *   the profile is empty; returns the live jar (or null).
+ * - Headed one-time sign-in when nothing exists to seed from.
+ */
+
+type PuppeteerModule = typeof import('puppeteer');
+type Browser = Awaited<ReturnType<PuppeteerModule['launch']>>;
+
+function dataDir(): string {
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'data');
+  }
+  return path.join(process.cwd(), 'data');
+}
+
+export function browserProfileDir(): string {
+  return path.join(dataDir(), 'chrome-profile');
+}
+
+async function loadPuppeteer(): Promise<PuppeteerModule> {
+  const mod = await import('puppeteer');
+  if ('default' in mod && mod.default && typeof (mod.default as any).launch === 'function') {
+    return mod.default as unknown as PuppeteerModule;
+  }
+  return mod as unknown as PuppeteerModule;
+}
+
+async function resolveBrowserExecutable(): Promise<string> {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
+  const isWin = process.platform === 'win32';
+  const isMac = process.platform === 'darwin';
+  const localAppData = process.env.LOCALAPPDATA || '';
+  const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
+  const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+  const candidates: string[] = [];
+  if (isWin) {
+    candidates.push(
+      path.join(programFiles, 'Google\\Chrome\\Application\\chrome.exe'),
+      path.join(programFilesX86, 'Google\\Chrome\\Application\\chrome.exe'),
+      path.join(localAppData, 'Google\\Chrome\\Application\\chrome.exe'),
+      path.join(programFiles, 'BraveSoftware\\Brave-Browser\\Application\\brave.exe'),
+      path.join(programFilesX86, 'BraveSoftware\\Brave-Browser\\Application\\brave.exe'),
+      path.join(localAppData, 'BraveSoftware\\Brave-Browser\\Application\\brave.exe'),
+      path.join(programFilesX86, 'Microsoft\\Edge\\Application\\msedge.exe'),
+      path.join(programFiles, 'Microsoft\\Edge\\Application\\msedge.exe'),
+    );
+  } else if (isMac) {
+    candidates.push(
+      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+      '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    );
+  } else {
+    candidates.push('/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/brave-browser', '/usr/bin/chromium', '/usr/bin/chromium-browser');
+  }
+  for (const c of candidates) {
+    try {
+      await fs.access(c);
+      return c;
+    } catch { /* try next */ }
+  }
+  throw new Error('No Chrome or Edge browser found. Install Google Chrome or Microsoft Edge first.');
+}
+
+function isGoogleCookieDomain(domain: string): boolean {
+  const d = (domain || '').replace(/^\./, '').toLowerCase();
+  return d === 'google.com' || d.endsWith('.google.com');
+}
+
+export type BrowserJar = Record<string, string>;
+
+/** Read the profile's current google.com cookies (no navigation needed). */
+async function readJar(browser: Browser): Promise<BrowserJar> {
+  const pages = await browser.pages();
+  const page = pages[0] || (await browser.newPage());
+  const cookies = await page.cookies('https://gemini.google.com', 'https://google.com', 'https://accounts.google.com');
+  const jar: BrowserJar = {};
+  for (const c of cookies) {
+    if (c.value && isGoogleCookieDomain(c.domain || '')) jar[c.name] = c.value;
+  }
+  return jar;
+}
+
+let refreshInFlight: Promise<BrowserJar | null> | null = null;
+
+/**
+ * Headless refresh: boot the profile, seed stored cookies when empty, visit
+ * the app so Google's own JS rotates state with a real fingerprint, return
+ * the live jar. Concurrent callers share one in-flight refresh.
+ */
+export async function refreshBrowserSession(seed?: { psid: string; psidts: string }): Promise<BrowserJar | null> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    let browser: Browser | null = null;
+    try {
+      const puppeteer = await loadPuppeteer();
+      const executablePath = await resolveBrowserExecutable();
+      await fs.mkdir(browserProfileDir(), { recursive: true });
+      browser = await puppeteer.launch({
+        headless: true,
+        executablePath,
+        userDataDir: browserProfileDir(),
+        ignoreDefaultArgs: ['--enable-automation'],
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--disable-blink-features=AutomationControlled'],
+      });
+      let jar = await readJar(browser);
+      if (!jar['__Secure-1PSID'] && seed?.psid && seed?.psidts) {
+        const pages = await browser.pages();
+        const page = pages[0] || (await browser.newPage());
+        await page.setCookie(
+          { name: '__Secure-1PSID', value: seed.psid, domain: '.google.com', path: '/' },
+          { name: '__Secure-1PSIDTS', value: seed.psidts, domain: '.google.com', path: '/' },
+        );
+      }
+      const pages = await browser.pages();
+      const page = pages[0] || (await browser.newPage());
+      try {
+        await page.goto('https://gemini.google.com/app', { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await new Promise(r => setTimeout(r, 5000));
+      } catch {
+        // Navigation hiccups still leave a readable jar.
+      }
+      jar = await readJar(browser);
+      return Object.keys(jar).length > 0 ? jar : null;
+    } catch (err) {
+      console.error('[vision] browser refresh failed:', err instanceof Error ? err.message : err);
+      return null;
+    } finally {
+      refreshInFlight = null;
+      try {
+        await browser?.close();
+      } catch { /* already closed */ }
+    }
+  })();
+  return refreshInFlight;
+}
+
+// ── Headed one-time sign-in ──
+
+type LoginState =
+  | { status: 'idle' }
+  | { status: 'waiting'; deadline: number }
+  | { status: 'ready'; jar: BrowserJar }
+  | { status: 'failed'; error: string };
+
+let loginState: LoginState = { status: 'idle' };
+let loginBrowser: Browser | null = null;
+
+async function closeLoginBrowser() {
+  try {
+    await loginBrowser?.close();
+  } catch { /* already closed */ }
+  loginBrowser = null;
+}
+
+/** Open a visible browser window for manual Google sign-in. */
+export async function startBrowserLogin(): Promise<void> {
+  if (loginBrowser) return;
+  loginState = { status: 'waiting', deadline: Date.now() + 8 * 60 * 1000 };
+  try {
+    const puppeteer = await loadPuppeteer();
+    const executablePath = await resolveBrowserExecutable();
+    await fs.mkdir(browserProfileDir(), { recursive: true });
+    loginBrowser = await puppeteer.launch({
+      headless: false,
+      executablePath,
+      userDataDir: browserProfileDir(),
+      // Drop the automation fingerprints or Google refuses sign-in outright
+      // ("This browser or app may not be secure").
+      ignoreDefaultArgs: ['--enable-automation'],
+      args: [
+        '--no-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-blink-features=AutomationControlled',
+        '--window-size=1280,900',
+      ],
+    });
+    const pages = await loginBrowser.pages();
+    const page = pages[0] || (await loginBrowser.newPage());
+    await page.goto('https://gemini.google.com/app', { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+    // Safety: never leave a stray window behind.
+    setTimeout(() => {
+      if (loginState.status === 'waiting') {
+        loginState = { status: 'failed', error: 'Sign-in window timed out.' };
+        closeLoginBrowser();
+      }
+    }, 8 * 60 * 1000 + 5000);
+  } catch (err) {
+    loginState = { status: 'failed', error: err instanceof Error ? err.message : String(err) };
+    await closeLoginBrowser();
+  }
+}
+
+/** Poll state; on detected sign-in the jar is attached (caller persists it). */
+export async function pollBrowserLogin(): Promise<LoginState> {
+  if (loginState.status !== 'waiting' || !loginBrowser) return loginState;
+  if (Date.now() > loginState.deadline) {
+    loginState = { status: 'failed', error: 'Sign-in window timed out.' };
+    await closeLoginBrowser();
+    return loginState;
+  }
+  try {
+    const jar = await readJar(loginBrowser);
+    // Both cookies are required — Google lands them a beat apart, and claiming
+    // on a partial jar fails. Stay in waiting until both are present.
+    if (jar['__Secure-1PSID'] && jar['__Secure-1PSIDTS']) {
+      loginState = { status: 'ready', jar };
+      await closeLoginBrowser();
+    }
+  } catch {
+    loginState = { status: 'failed', error: 'Browser closed before sign-in completed.' };
+    await closeLoginBrowser();
+  }
+  return loginState;
+}

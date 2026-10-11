@@ -1,0 +1,151 @@
+/**
+ * AI modification through targeted edits (see patch.ts).
+ *
+ *   1. EDIT    — the AI gets the full code + request and returns only edit
+ *                blocks; they are applied to the code here.
+ *   2. REPAIR  — blocks whose anchor didn't match (or a result that no longer
+ *                parses) are sent back with the exact reason and the closest
+ *                code, and the AI answers with corrected blocks.
+ *   3. FULL    — last resort: the classic full-component rewrite.
+ *
+ * The AI may also answer step 1 with a complete component (a full redesign):
+ * that is accepted as is.
+ */
+import { MODIFY_EDIT_FORMAT, MODIFY_PROMPT_SUFFIX, MODIFY_RULES, sanitizeGeneratedTsx } from '@/lib/prompts';
+import { syntaxError } from '@/lib/site/jsx';
+import { applyEdits, excerpt, formatBlock, parseEditReply, type FailedEdit } from '@/lib/site/patch';
+
+export type EditPhase = 'repairing' | 'rewriting';
+
+export interface AiEditOptions {
+  /** Current component code. */
+  code: string;
+  /** Everything describing the change (request, notes, contacts, images). */
+  request: string;
+  /** Sends one prompt to the selected AI source; returns the raw reply. */
+  ask: (prompt: string) => Promise<string>;
+  /** A new attempt starts (the live view should restart). */
+  onPhase?: (phase: EditPhase) => void;
+  signal?: AbortSignal;
+}
+
+export interface AiEditResult {
+  tsx: string;
+  mode: 'edits' | 'full';
+  /** Number of edit blocks applied (edits mode). */
+  blocks: number;
+}
+
+const REASON: Record<FailedEdit['reason'], string> = {
+  empty: 'SEARCH is empty — it must contain existing lines to anchor the change.',
+  'not-found': 'SEARCH does not match the component (the lines are not there exactly as written).',
+  ambiguous: 'SEARCH matches SEVERAL places — add neighbouring lines so it matches only one.',
+};
+
+function editPrompt(code: string, request: string): string {
+  return ['Here is the React component to modify:', code, '', request, MODIFY_RULES, MODIFY_EDIT_FORMAT].join('\n');
+}
+
+function fullPrompt(code: string, request: string): string {
+  return [
+    'Here is the React component to modify:', code, '', request, '',
+    'Return the COMPLETE modified React component (default export), no explanations.',
+    MODIFY_PROMPT_SUFFIX,
+  ].join('\n');
+}
+
+function repairPrompt(code: string, request: string, failed: FailedEdit[], parseError: string | null): string {
+  const parts = [
+    'Here is the React component in its CURRENT state (your other edits are already applied in it):',
+    code,
+    '',
+    'You are applying this change:',
+    request,
+    '',
+  ];
+  if (failed.length) {
+    parts.push('These edit blocks of yours could NOT be applied:');
+    for (const f of failed) {
+      parts.push(
+        '',
+        `Block ${f.index}: ${REASON[f.reason]}`,
+        formatBlock(f.block),
+        f.hint ? `${f.reason === 'ambiguous' ? 'It matches here' : 'Closest code in the component'} (line numbers are for reference only, never copy them):\n${f.hint}` : '',
+      );
+    }
+    parts.push('', 'Return corrected edit blocks for ONLY these changes. Do not repeat edits that are already applied.');
+  }
+  if (parseError) {
+    const line = Number(/\((\d+):\d+\)/.exec(parseError)?.[1] ?? /line (\d+)/i.exec(parseError)?.[1]);
+    parts.push(
+      '',
+      `After applying your edits, the component no longer compiles: ${parseError}`,
+      Number.isFinite(line) && line > 0 ? `Around line ${line} (numbers for reference only):\n${excerpt(code, line - 8, line + 8)}` : '',
+      'Return edit blocks against the component above that fix this error and complete the change.',
+    );
+  }
+  parts.push(MODIFY_EDIT_FORMAT);
+  return parts.filter(p => p !== '').join('\n');
+}
+
+const checkAbort = (signal?: AbortSignal) => {
+  if (signal?.aborted) throw new Error('Cancelled');
+};
+
+/** A full component reply, cleaned; throws when it isn't valid code. */
+function acceptFull(raw: string): string {
+  const tsx = sanitizeGeneratedTsx(raw);
+  if (!/export\s+default/.test(tsx)) throw new Error('The AI reply did not contain a component.');
+  return tsx;
+}
+
+export async function modifyWithEdits(opts: AiEditOptions): Promise<AiEditResult> {
+  const { code, request, ask, onPhase, signal } = opts;
+
+  // 1. Edit blocks.
+  const first = parseEditReply(await ask(editPrompt(code, request)));
+  checkAbort(signal);
+  if (first?.kind === 'full') {
+    console.log('[modify] AI returned a full component (redesign)');
+    return { tsx: acceptFull(first.code), mode: 'full', blocks: 0 };
+  }
+
+  if (first?.kind === 'edits') {
+    const r = applyEdits(code, first.blocks);
+    const parseErr = r.failed.length ? null : syntaxError(r.code);
+    console.log(`[modify] edits: ${r.applied}/${first.blocks.length} applied [${r.matches.join(', ')}]${r.failed.length ? `, failed: ${r.failed.map(f => `#${f.index} ${f.reason}`).join(', ')}` : ''}${parseErr ? `, syntax error: ${parseErr}` : ''}`);
+    let result: string | null = r.failed.length || parseErr ? null : r.code;
+    let total = r.applied;
+
+    // 2. One repair round for unmatched blocks or a broken result.
+    if (result === null) {
+      onPhase?.('repairing');
+      const reply = parseEditReply(await ask(repairPrompt(r.code, request, r.failed, parseErr)));
+      checkAbort(signal);
+      if (reply?.kind === 'full') {
+        try { return { tsx: acceptFull(reply.code), mode: 'full', blocks: 0 }; } catch { /* rewrite below */ }
+      } else if (reply?.kind === 'edits') {
+        const fix = applyEdits(r.code, reply.blocks);
+        const fixErr = fix.failed.length ? null : syntaxError(fix.code);
+        console.log(`[modify] repair: ${fix.applied}/${reply.blocks.length} applied${fix.failed.length ? `, ${fix.failed.length} failed` : ''}${fixErr ? `, syntax error: ${fixErr}` : ''}`);
+        if (!fix.failed.length && !fixErr) {
+          result = fix.code;
+          total += fix.applied;
+        }
+      }
+    }
+
+    if (result !== null) {
+      if (result === code) throw new Error('The AI returned no change. Rephrase the request and try again.');
+      return { tsx: sanitizeGeneratedTsx(result), mode: 'edits', blocks: total };
+    }
+  } else {
+    console.log('[modify] reply had neither edit blocks nor a component');
+  }
+
+  // 3. Full rewrite fallback.
+  checkAbort(signal);
+  onPhase?.('rewriting');
+  console.log('[modify] falling back to a full rewrite');
+  return { tsx: acceptFull(await ask(fullPrompt(code, request))), mode: 'full', blocks: 0 };
+}

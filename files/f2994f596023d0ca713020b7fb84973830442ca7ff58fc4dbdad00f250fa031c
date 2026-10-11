@@ -1,0 +1,114 @@
+'use client';
+
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Modal, ModalHeader, ModalBody, ModalFooter, btn } from './ui/Modal';
+
+interface Props {
+  open: boolean;
+  onClose: () => void;
+  campaign: any;
+}
+
+const COLUMNS: { key: string; i18nKey: string; get: (lead: any) => any }[] = [
+  { key: 'name', i18nKey: 'export.col.name', get: l => l.business?.name || '' },
+  { key: 'rating', i18nKey: 'export.col.rating', get: l => l.business?.rating ?? '' },
+  { key: 'reviews', i18nKey: 'export.col.reviews', get: l => l.business?.ratingCount ?? '' },
+  { key: 'address', i18nKey: 'export.col.address', get: l => l.business?.address || '' },
+  { key: 'phone', i18nKey: 'export.col.phone', get: l => l.business?.phone || '' },
+  { key: 'website', i18nKey: 'export.col.website', get: l => l.business?.website || '' },
+  { key: 'category', i18nKey: 'export.col.category', get: l => l.business?.category || '' },
+  { key: 'googleUrl', i18nKey: 'export.col.googleUrl', get: l => l.business?.googleUrl || '' },
+  { key: 'hours', i18nKey: 'export.col.hours', get: l => (Array.isArray(l.business?.hours) ? l.business.hours.join(' | ') : '') },
+  { key: 'status', i18nKey: 'export.col.status', get: l => l.status || '' },
+  { key: 'notes', i18nKey: 'export.col.notes', get: l => l.notes || '' },
+  { key: 'scrapedAt', i18nKey: 'export.col.scrapedAt', get: l => l.business?.scrapedAt || '' },
+  { key: 'placeId', i18nKey: 'export.col.placeId', get: l => l.business?.placeId || '' },
+  { key: 'latitude', i18nKey: 'export.col.latitude', get: l => l.business?.latitude ?? '' },
+  { key: 'longitude', i18nKey: 'export.col.longitude', get: l => l.business?.longitude ?? '' },
+  { key: 'enrichedEmail', i18nKey: 'export.col.enrichedEmail', get: l => l.business?.enrichedEmail || '' },
+  { key: 'enrichedInstagram', i18nKey: 'export.col.enrichedInstagram', get: l => l.business?.enrichedSocials?.instagram || '' },
+  { key: 'enrichedLinkedin', i18nKey: 'export.col.enrichedLinkedin', get: l => l.business?.enrichedSocials?.linkedin || '' },
+  { key: 'enrichedFacebook', i18nKey: 'export.col.enrichedFacebook', get: l => l.business?.enrichedSocials?.facebook || '' },
+  { key: 'enrichedTwitter', i18nKey: 'export.col.enrichedTwitter', get: l => l.business?.enrichedSocials?.twitter || '' },
+  { key: 'enrichedTiktok', i18nKey: 'export.col.enrichedTiktok', get: l => l.business?.enrichedSocials?.tiktok || '' },
+  { key: 'enrichedYoutube', i18nKey: 'export.col.enrichedYoutube', get: l => l.business?.enrichedSocials?.youtube || '' },
+  { key: 'photoUrls', i18nKey: 'export.col.photoUrls', get: l => (Array.isArray(l.images) ? l.images.filter((i:any)=>!i.deleted).map((i:any)=>i.url).join(' | ') : '') },
+  { key: 'photoAlts', i18nKey: 'export.col.photoAlts', get: l => (Array.isArray(l.images) ? l.images.filter((i:any)=>!i.deleted).map((i:any)=>i.alt).join(' | ') : '') },
+  { key: 'deploymentUrl', i18nKey: 'export.col.deploymentUrl', get: l => l.deployment?.url || l.deploymentHistory?.find((e:any)=>e.isMain)?.aliasUrl || '' },
+];
+
+export default function CampaignExportModal({ open, onClose, campaign }: Props) {
+  const { t } = useTranslation();
+  const [selected, setSelected] = useState<string[]>(COLUMNS.map(c => c.key));
+
+  const leads = (campaign?.leads || []).filter((l: any) => !l.deleted);
+
+  function toggle(key: string) {
+    setSelected(prev => (prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]));
+  }
+
+  function exportCsv() {
+    const columns = COLUMNS.filter(c => selected.includes(c.key));
+    const esc = (v: any) => {
+      const s = String(v ?? '');
+      return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const header = columns.map(c => t(c.i18nKey));
+    const rows = leads.map((lead: any) => columns.map(c => esc(c.get(lead))));
+    const csv = '\uFEFF' + [header, ...rows].map(r => r.map(esc).join(',')).join('\r\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(campaign?.keyword || 'campaign').replace(/[^a-z0-9]+/gi, '_')}_leads.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    onClose();
+  }
+
+  const name = campaign?.displayName || campaign?.keyword || '';
+  return (
+    <Modal open={open} onClose={onClose} size="lg" z="z-[200]">
+      <ModalHeader
+        icon="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+        title={t('export.title')}
+        description={<>{name && <span className="font-medium text-zinc-700 dark:text-zinc-200">{name} · </span>}{leads.length > 0 ? t('export.leads', { count: leads.length }) : t('export.noLeads')}</>}
+        onClose={onClose}
+      />
+      <ModalBody>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-4">{t('export.desc')}</p>
+        <div className="flex items-center justify-between mb-2.5">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            {t('export.columns')} <span className="ms-1 tabular-nums text-zinc-400">{selected.length}/{COLUMNS.length}</span>
+          </span>
+          <div className="flex gap-1">
+            <button onClick={() => setSelected(COLUMNS.map(c => c.key))} className={btn.ghost}>{t('export.selectAll')}</button>
+            <button onClick={() => setSelected([])} className={btn.ghost}>{t('export.selectNone')}</button>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+          {COLUMNS.map(col => {
+            const on = selected.includes(col.key);
+            return (
+              <label key={col.key} className={`flex items-center gap-2.5 px-3 h-10 rounded-xl border cursor-pointer select-none transition-colors ${on ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700'}`}>
+                <input type="checkbox" checked={on} onChange={() => toggle(col.key)} className="w-4 h-4 accent-emerald-600" />
+                <span className="text-sm text-zinc-700 dark:text-zinc-200 truncate">{t(col.i18nKey)}</span>
+              </label>
+            );
+          })}
+        </div>
+      </ModalBody>
+      <ModalFooter>
+        <button onClick={onClose} className={btn.secondary}>{t('export.cancel')}</button>
+        <button onClick={exportCsv} disabled={leads.length === 0 || selected.length === 0} className={btn.primary}>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+          {t('export.exportBtn')}
+        </button>
+      </ModalFooter>
+    </Modal>
+  );
+}

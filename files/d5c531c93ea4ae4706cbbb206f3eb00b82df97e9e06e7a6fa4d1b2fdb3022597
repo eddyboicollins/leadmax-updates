@@ -1,0 +1,36 @@
+import { NextRequest } from 'next/server';
+
+/**
+ * Preview-only YouTube wrapper. The studio preview runs in an isolated
+ * (opaque-origin) frame that sends no Referer, and YouTube refuses to play
+ * without one (error 153). This trusted page is served from the app's own
+ * origin and embeds the real player, so YouTube gets a normal referrer.
+ * Deployed sites embed YouTube directly and never use this.
+ */
+const ALLOWED_HOSTS = new Set(['www.youtube.com', 'youtube.com', 'www.youtube-nocookie.com', 'youtube-nocookie.com', 'm.youtube.com']);
+
+export async function GET(request: NextRequest) {
+  const raw = request.nextUrl.searchParams.get('src') || '';
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return new Response('Invalid video URL', { status: 400 });
+  }
+  if (url.protocol !== 'https:' || !ALLOWED_HOSTS.has(url.hostname) || !url.pathname.startsWith('/embed/')) {
+    return new Response('Only YouTube embeds are supported', { status: 400 });
+  }
+  const src = url.toString().replace(/"/g, '&quot;');
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8" /><meta name="referrer" content="strict-origin-when-cross-origin" />
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{border:0;width:100%;height:100%;display:block}</style>
+</head><body>
+<iframe src="${src}" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" allowfullscreen></iframe>
+</body></html>`;
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600',
+    },
+  });
+}

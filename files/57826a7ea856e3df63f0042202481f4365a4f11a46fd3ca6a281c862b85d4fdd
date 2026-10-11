@@ -1,0 +1,317 @@
+/**
+ * Predefined local business types offered by the campaign keyword field,
+ * as [English, French, Arabic]. The label in the UI language is what gets
+ * sent as the Google Maps search keyword; the user can still type any other
+ * keyword.
+ */
+export type BusinessLang = 'en' | 'fr' | 'ar';
+
+const TYPES: [string, string, string][] = [
+  // Food & drink
+  ['Café', 'Café', 'مقهى'],
+  ['Café restaurant', 'Café restaurant', 'مقهى ومطعم'],
+  ['Coffee shop', 'Coffee shop', 'كوفي شوب'],
+  ['Restaurant', 'Restaurant', 'مطعم'],
+  ['Fast food restaurant', 'Fast-food', 'مطعم وجبات سريعة'],
+  ['Pizzeria', 'Pizzeria', 'بيتزيريا'],
+  ['Burger restaurant', 'Restaurant de burgers', 'مطعم برغر'],
+  ['Sushi restaurant', 'Restaurant de sushi', 'مطعم سوشي'],
+  ['Seafood restaurant', 'Restaurant de fruits de mer', 'مطعم مأكولات بحرية'],
+  ['Steakhouse', 'Steakhouse', 'مطعم ستيك'],
+  ['Grill restaurant', 'Grill', 'مطعم مشاوي'],
+  ['Italian restaurant', 'Restaurant italien', 'مطعم إيطالي'],
+  ['French restaurant', 'Restaurant français', 'مطعم فرنسي'],
+  ['Lebanese restaurant', 'Restaurant libanais', 'مطعم لبناني'],
+  ['Moroccan restaurant', 'Restaurant marocain', 'مطعم مغربي'],
+  ['Tunisian restaurant', 'Restaurant tunisien', 'مطعم تونسي'],
+  ['Turkish restaurant', 'Restaurant turc', 'مطعم تركي'],
+  ['Indian restaurant', 'Restaurant indien', 'مطعم هندي'],
+  ['Chinese restaurant', 'Restaurant chinois', 'مطعم صيني'],
+  ['Japanese restaurant', 'Restaurant japonais', 'مطعم ياباني'],
+  ['Thai restaurant', 'Restaurant thaïlandais', 'مطعم تايلاندي'],
+  ['Mexican restaurant', 'Restaurant mexicain', 'مطعم مكسيكي'],
+  ['Vegan restaurant', 'Restaurant végétalien', 'مطعم نباتي'],
+  ['Brunch restaurant', 'Restaurant brunch', 'مطعم برانش'],
+  ['Kebab shop', 'Kebab', 'محل كباب'],
+  ['Sandwich shop', 'Sandwicherie', 'محل سندويشات'],
+  ['Crêperie', 'Crêperie', 'محل كريب'],
+  ['Bakery', 'Boulangerie', 'مخبز'],
+  ['Pastry shop', 'Pâtisserie', 'محل حلويات'],
+  ['Ice cream shop', 'Glacier', 'محل مثلجات'],
+  ['Juice bar', 'Bar à jus', 'محل عصائر'],
+  ['Tea house', 'Salon de thé', 'صالون شاي'],
+  ['Bar', 'Bar', 'بار'],
+  ['Pub', 'Pub', 'حانة'],
+  ['Wine bar', 'Bar à vin', 'بار نبيذ'],
+  ['Cocktail bar', 'Bar à cocktails', 'بار كوكتيل'],
+  ['Lounge', 'Lounge', 'لاونج'],
+  ['Nightclub', 'Boîte de nuit', 'ملهى ليلي'],
+  ['Shisha lounge', 'Bar à chicha', 'مقهى شيشة'],
+  ['Catering service', 'Traiteur', 'خدمة تموين'],
+  ['Food truck', 'Food truck', 'عربة طعام'],
+  ['Butcher shop', 'Boucherie', 'ملحمة'],
+  ['Fish market', 'Poissonnerie', 'محل أسماك'],
+  ['Grocery store', 'Épicerie', 'بقالة'],
+  ['Supermarket', 'Supermarché', 'سوبرماركت'],
+  ['Mini market', 'Supérette', 'ميني ماركت'],
+  ['Organic store', 'Magasin bio', 'متجر منتجات عضوية'],
+  ['Fruit and vegetable store', 'Primeur', 'محل خضر وغلال'],
+  ['Spice shop', 'Épicerie fine', 'محل توابل'],
+  ['Chocolate shop', 'Chocolaterie', 'محل شوكولاتة'],
+  ['Wine shop', 'Cave à vin', 'متجر نبيذ'],
+  ['Liquor store', 'Magasin d\'alcool', 'متجر مشروبات كحولية'],
+
+  // Health & medical
+  ['Dentist', 'Dentiste', 'طبيب أسنان'],
+  ['Orthodontist', 'Orthodontiste', 'طبيب تقويم أسنان'],
+  ['Doctor', 'Médecin', 'طبيب'],
+  ['General practitioner', 'Médecin généraliste', 'طبيب عام'],
+  ['Pediatrician', 'Pédiatre', 'طبيب أطفال'],
+  ['Dermatologist', 'Dermatologue', 'طبيب جلدية'],
+  ['Gynecologist', 'Gynécologue', 'طبيب نساء وتوليد'],
+  ['Cardiologist', 'Cardiologue', 'طبيب قلب'],
+  ['Ophthalmologist', 'Ophtalmologue', 'طبيب عيون'],
+  ['ENT specialist', 'ORL', 'طبيب أنف وأذن وحنجرة'],
+  ['Psychologist', 'Psychologue', 'أخصائي نفسي'],
+  ['Psychiatrist', 'Psychiatre', 'طبيب نفسي'],
+  ['Physiotherapist', 'Kinésithérapeute', 'أخصائي علاج طبيعي'],
+  ['Chiropractor', 'Chiropracteur', 'معالج يدوي'],
+  ['Osteopath', 'Ostéopathe', 'أخصائي تقويم العظام'],
+  ['Nutritionist', 'Nutritionniste', 'أخصائي تغذية'],
+  ['Speech therapist', 'Orthophoniste', 'أخصائي نطق'],
+  ['Radiology center', 'Centre de radiologie', 'مركز أشعة'],
+  ['Medical laboratory', 'Laboratoire d\'analyses médicales', 'مختبر تحاليل طبية'],
+  ['Medical clinic', 'Clinique', 'عيادة طبية'],
+  ['Polyclinic', 'Polyclinique', 'مصحة'],
+  ['Hospital', 'Hôpital', 'مستشفى'],
+  ['Pharmacy', 'Pharmacie', 'صيدلية'],
+  ['Optician', 'Opticien', 'محل نظارات'],
+  ['Hearing aid center', 'Audioprothésiste', 'مركز سماعات طبية'],
+  ['Veterinarian', 'Vétérinaire', 'طبيب بيطري'],
+  ['Home care service', 'Soins à domicile', 'رعاية صحية منزلية'],
+  ['Aesthetic clinic', 'Clinique esthétique', 'عيادة تجميل'],
+  ['Hair transplant clinic', 'Clinique de greffe de cheveux', 'عيادة زراعة الشعر'],
+  ['Plastic surgeon', 'Chirurgien esthétique', 'جراح تجميل'],
+
+  // Beauty & wellness
+  ['Beauty salon', 'Institut de beauté', 'صالون تجميل'],
+  ['Hair salon', 'Salon de coiffure', 'صالون حلاقة نسائي'],
+  ['Barbershop', 'Barbier', 'حلاق رجالي'],
+  ['Nail salon', 'Onglerie', 'صالون أظافر'],
+  ['Spa', 'Spa', 'سبا'],
+  ['Massage center', 'Centre de massage', 'مركز تدليك'],
+  ['Hammam', 'Hammam', 'حمام'],
+  ['Lash and brow studio', 'Bar à sourcils et cils', 'استوديو رموش وحواجب'],
+  ['Makeup artist', 'Maquilleuse', 'خبيرة مكياج'],
+  ['Tattoo studio', 'Salon de tatouage', 'استوديو وشم'],
+  ['Tanning salon', 'Centre de bronzage', 'صالون تسمير'],
+  ['Laser hair removal', 'Épilation laser', 'إزالة الشعر بالليزر'],
+  ['Gym', 'Salle de sport', 'صالة رياضية'],
+  ['Fitness center', 'Centre de fitness', 'مركز لياقة بدنية'],
+  ['CrossFit gym', 'Salle de CrossFit', 'صالة كروس فيت'],
+  ['Yoga studio', 'Studio de yoga', 'استوديو يوغا'],
+  ['Pilates studio', 'Studio de Pilates', 'استوديو بيلاتس'],
+  ['Martial arts school', 'École d\'arts martiaux', 'مدرسة فنون قتالية'],
+  ['Boxing gym', 'Salle de boxe', 'نادي ملاكمة'],
+  ['Dance school', 'École de danse', 'مدرسة رقص'],
+  ['Personal trainer', 'Coach sportif', 'مدرب شخصي'],
+  ['Swimming pool', 'Piscine', 'مسبح'],
+
+  // Automotive
+  ['Auto shop', 'Garage automobile', 'ورشة سيارات'],
+  ['Auto repair shop', 'Atelier de réparation automobile', 'ورشة إصلاح سيارات'],
+  ['Car mechanic', 'Mécanicien', 'ميكانيكي سيارات'],
+  ['Car body shop', 'Carrosserie', 'ورشة سمكرة'],
+  ['Car wash', 'Lavage auto', 'غسيل سيارات'],
+  ['Car detailing', 'Esthétique automobile', 'تلميع سيارات'],
+  ['Tire shop', 'Pneus', 'محل إطارات'],
+  ['Auto parts store', 'Pièces auto', 'محل قطع غيار سيارات'],
+  ['Car dealership', 'Concessionnaire automobile', 'وكالة سيارات'],
+  ['Used car dealer', 'Voitures d\'occasion', 'معرض سيارات مستعملة'],
+  ['Motorcycle dealer', 'Concessionnaire moto', 'وكالة دراجات نارية'],
+  ['Motorcycle repair shop', 'Garage moto', 'ورشة دراجات نارية'],
+  ['Car glass repair', 'Pare-brise', 'تصليح زجاج السيارات'],
+  ['Car electrician', 'Électricien auto', 'كهربائي سيارات'],
+  ['Towing service', 'Dépannage auto', 'خدمة سحب السيارات'],
+  ['Driving school', 'Auto-école', 'مدرسة تعليم السياقة'],
+  ['Gas station', 'Station-service', 'محطة وقود'],
+  ['Car rental agency', 'Agence de location de voitures', 'وكالة تأجير سيارات'],
+  ['Rent a car agency', 'Location de voitures', 'كراء سيارات'],
+
+  // Real estate & construction
+  ['Real estate agency', 'Agence immobilière', 'وكالة عقارية'],
+  ['Real estate broker agency', 'Courtier immobilier', 'وسيط عقاري'],
+  ['Real estate developer', 'Promoteur immobilier', 'مطور عقاري'],
+  ['Property management company', 'Gestion immobilière', 'شركة إدارة عقارات'],
+  ['Architect', 'Architecte', 'مهندس معماري'],
+  ['Interior designer', 'Architecte d\'intérieur', 'مصمم ديكور داخلي'],
+  ['Construction company', 'Entreprise de construction', 'شركة مقاولات'],
+  ['General contractor', 'Entrepreneur général', 'مقاول عام'],
+  ['Plumber', 'Plombier', 'سباك'],
+  ['Electrician', 'Électricien', 'كهربائي'],
+  ['Painter', 'Peintre en bâtiment', 'دهان'],
+  ['Carpenter', 'Menuisier', 'نجار'],
+  ['Roofer', 'Couvreur', 'مقاول أسقف'],
+  ['Tile contractor', 'Carreleur', 'مبلط'],
+  ['HVAC contractor', 'Chauffagiste', 'فني تدفئة وتكييف'],
+  ['Air conditioning service', 'Climatisation', 'صيانة مكيفات'],
+  ['Locksmith', 'Serrurier', 'صانع أقفال'],
+  ['Glazier', 'Vitrier', 'محل زجاج'],
+  ['Aluminum and PVC windows', 'Menuiserie aluminium et PVC', 'نجارة ألمنيوم'],
+  ['Landscaper', 'Paysagiste', 'منسق حدائق'],
+  ['Gardener', 'Jardinier', 'بستاني'],
+  ['Pool cleaning service', 'Entretien de piscine', 'صيانة مسابح'],
+  ['Pest control', 'Dératisation', 'مكافحة حشرات'],
+  ['Cleaning service', 'Entreprise de nettoyage', 'شركة تنظيف'],
+  ['Moving company', 'Déménagement', 'شركة نقل أثاث'],
+  ['Handyman', 'Homme à tout faire', 'عامل صيانة'],
+  ['Furniture store', 'Magasin de meubles', 'محل أثاث'],
+  ['Kitchen store', 'Cuisiniste', 'محل مطابخ'],
+  ['Hardware store', 'Quincaillerie', 'محل أدوات'],
+  ['Building materials supplier', 'Matériaux de construction', 'مواد بناء'],
+  ['Flooring store', 'Revêtement de sol', 'محل أرضيات'],
+  ['Lighting store', 'Luminaires', 'محل إنارة'],
+
+  // Travel & hospitality
+  ['Travel agency', 'Agence de voyages', 'وكالة أسفار'],
+  ['Hotel', 'Hôtel', 'فندق'],
+  ['Guest house', 'Maison d\'hôtes', 'دار ضيافة'],
+  ['Bed and breakfast', 'Chambre d\'hôtes', 'مبيت وإفطار'],
+  ['Hostel', 'Auberge de jeunesse', 'نزل شباب'],
+  ['Vacation rental', 'Location de vacances', 'إيجار عطلات'],
+  ['Tour operator', 'Tour-opérateur', 'منظم رحلات'],
+  ['Tour guide', 'Guide touristique', 'مرشد سياحي'],
+  ['Event venue', 'Salle de réception', 'قاعة مناسبات'],
+  ['Wedding venue', 'Salle des fêtes', 'قاعة أفراح'],
+  ['Wedding planner', 'Organisateur de mariage', 'منظم حفلات زفاف'],
+  ['Event planner', 'Organisateur d\'événements', 'منظم فعاليات'],
+  ['Airport shuttle', 'Navette aéroport', 'نقل المطار'],
+  ['Taxi service', 'Taxi', 'سيارة أجرة'],
+  ['Limousine service', 'Location de limousine', 'خدمة ليموزين'],
+  ['Boat rental', 'Location de bateaux', 'تأجير قوارب'],
+  ['Bike rental', 'Location de vélos', 'تأجير دراجات'],
+  ['Scooter rental', 'Location de scooters', 'تأجير سكوتر'],
+
+  // Professional services
+  ['Lawyer', 'Avocat', 'محامي'],
+  ['Law firm', 'Cabinet d\'avocats', 'مكتب محاماة'],
+  ['Notary', 'Notaire', 'موثق'],
+  ['Accountant', 'Comptable', 'محاسب'],
+  ['Accounting firm', 'Cabinet comptable', 'مكتب محاسبة'],
+  ['Tax advisor', 'Conseiller fiscal', 'مستشار جبائي'],
+  ['Insurance agency', 'Agence d\'assurance', 'وكالة تأمين'],
+  ['Bank', 'Banque', 'بنك'],
+  ['Financial advisor', 'Conseiller financier', 'مستشار مالي'],
+  ['Consulting firm', 'Cabinet de conseil', 'مكتب استشارات'],
+  ['Marketing agency', 'Agence marketing', 'وكالة تسويق'],
+  ['Digital agency', 'Agence digitale', 'وكالة رقمية'],
+  ['Web design agency', 'Agence web', 'وكالة تصميم مواقع'],
+  ['Advertising agency', 'Agence de publicité', 'وكالة إعلانات'],
+  ['Printing shop', 'Imprimerie', 'مطبعة'],
+  ['Translation agency', 'Agence de traduction', 'مكتب ترجمة'],
+  ['Recruitment agency', 'Agence de recrutement', 'وكالة توظيف'],
+  ['Coworking space', 'Espace de coworking', 'مساحة عمل مشتركة'],
+  ['Courier service', 'Service de coursier', 'خدمة توصيل'],
+  ['Security company', 'Société de sécurité', 'شركة حراسة'],
+  ['IT services', 'Services informatiques', 'خدمات تقنية المعلومات'],
+  ['Computer repair shop', 'Réparation informatique', 'تصليح حواسيب'],
+  ['Phone repair shop', 'Réparation de téléphones', 'تصليح هواتف'],
+  ['Photographer', 'Photographe', 'مصور'],
+  ['Photo studio', 'Studio photo', 'استوديو تصوير'],
+  ['Videographer', 'Vidéaste', 'مصور فيديو'],
+  ['Graphic designer', 'Graphiste', 'مصمم جرافيك'],
+
+  // Education & childcare
+  ['Language school', 'École de langues', 'مدرسة لغات'],
+  ['Tutoring center', 'Cours particuliers', 'مركز دروس خصوصية'],
+  ['Private school', 'École privée', 'مدرسة خاصة'],
+  ['Kindergarten', 'Jardin d\'enfants', 'روضة أطفال'],
+  ['Daycare', 'Crèche', 'حضانة'],
+  ['Music school', 'École de musique', 'مدرسة موسيقى'],
+  ['Art school', 'École d\'art', 'مدرسة فنون'],
+  ['Training center', 'Centre de formation', 'مركز تكوين'],
+  ['Coding bootcamp', 'École de programmation', 'مدرسة برمجة'],
+
+  // Retail
+  ['Clothing store', 'Magasin de vêtements', 'محل ملابس'],
+  ['Boutique', 'Boutique', 'بوتيك'],
+  ['Shoe store', 'Magasin de chaussures', 'محل أحذية'],
+  ['Jewelry store', 'Bijouterie', 'محل مجوهرات'],
+  ['Watch store', 'Horlogerie', 'محل ساعات'],
+  ['Perfume shop', 'Parfumerie', 'محل عطور'],
+  ['Cosmetics store', 'Magasin de cosmétiques', 'محل مستحضرات تجميل'],
+  ['Bridal shop', 'Boutique de robes de mariée', 'محل فساتين زفاف'],
+  ['Tailor', 'Tailleur', 'خياط'],
+  ['Dry cleaner', 'Pressing', 'مصبغة'],
+  ['Laundromat', 'Laverie', 'مغسلة'],
+  ['Florist', 'Fleuriste', 'محل زهور'],
+  ['Gift shop', 'Boutique de cadeaux', 'محل هدايا'],
+  ['Bookstore', 'Librairie', 'مكتبة'],
+  ['Stationery store', 'Papeterie', 'محل أدوات مكتبية'],
+  ['Toy store', 'Magasin de jouets', 'محل ألعاب'],
+  ['Electronics store', 'Magasin d\'électronique', 'محل إلكترونيات'],
+  ['Mobile phone store', 'Magasin de téléphonie', 'محل هواتف'],
+  ['Computer store', 'Magasin d\'informatique', 'محل حواسيب'],
+  ['Appliance store', 'Électroménager', 'محل أجهزة منزلية'],
+  ['Sporting goods store', 'Magasin de sport', 'محل أدوات رياضية'],
+  ['Bike shop', 'Magasin de vélos', 'محل دراجات'],
+  ['Pet store', 'Animalerie', 'متجر حيوانات أليفة'],
+  ['Pet groomer', 'Toilettage pour animaux', 'تجميل حيوانات أليفة'],
+  ['Home decor store', 'Magasin de décoration', 'محل ديكور'],
+  ['Antique shop', 'Antiquaire', 'محل تحف'],
+  ['Second-hand store', 'Friperie', 'محل ملابس مستعملة'],
+  ['Mattress store', 'Magasin de matelas', 'محل مفروشات'],
+  ['Carpet store', 'Magasin de tapis', 'محل سجاد'],
+  ['Garden center', 'Jardinerie', 'مشتل'],
+
+  // Other local services
+  ['Funeral home', 'Pompes funèbres', 'دار جنائز'],
+  ['Event rental', 'Location de matériel événementiel', 'تأجير معدات الحفلات'],
+  ['Party supplies store', 'Articles de fête', 'محل مستلزمات الحفلات'],
+  ['Shoe repair', 'Cordonnerie', 'إسكافي'],
+  ['Watch repair', 'Réparation de montres', 'تصليح ساعات'],
+  ['Storage facility', 'Garde-meubles', 'مستودع تخزين'],
+  ['Escape room', 'Escape game', 'غرفة الهروب'],
+  ['Bowling alley', 'Bowling', 'بولينغ'],
+  ['Cinema', 'Cinéma', 'سينما'],
+  ['Game center', 'Salle de jeux', 'قاعة ألعاب'],
+  ['Kids play area', 'Aire de jeux pour enfants', 'فضاء ألعاب أطفال'],
+  ['Golf club', 'Club de golf', 'نادي غولف'],
+  ['Tennis club', 'Club de tennis', 'نادي تنس'],
+  ['Equestrian center', 'Centre équestre', 'نادي فروسية'],
+];
+
+const LANG_INDEX: Record<BusinessLang, number> = { en: 0, fr: 1, ar: 2 };
+
+/** 'fr-FR' → 'fr'; anything unknown falls back to English. */
+export function businessLang(lang: string | undefined): BusinessLang {
+  const l = (lang || '').toLowerCase();
+  return l.startsWith('fr') ? 'fr' : l.startsWith('ar') ? 'ar' : 'en';
+}
+
+/** Lowercase, accents stripped — "cafe" matches "Café". */
+export function foldText(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+
+/**
+ * Labels (in `lang`) of the types matching the query: starting with it first,
+ * then a word starting with it, then anywhere. Matches the label in `lang` and
+ * the English name, so English typing still works in any UI language.
+ */
+export function matchBusinessTypes(query: string, lang: BusinessLang): string[] {
+  const idx = LANG_INDEX[lang];
+  const labels = [...new Set(TYPES.map(t => t[idx]))];
+  const q = foldText(query);
+  if (!q) return labels;
+  const rank = new Map<string, number>();
+  for (const t of TYPES) {
+    const label = t[idx];
+    for (const name of new Set([label, t[0]])) {
+      const f = foldText(name);
+      const r = f.startsWith(q) ? 0 : f.includes(' ' + q) ? 1 : f.includes(q) ? 2 : -1;
+      if (r >= 0 && (rank.get(label) ?? 3) > r) rank.set(label, r);
+    }
+  }
+  return labels.filter(l => rank.has(l)).sort((a, b) => rank.get(a)! - rank.get(b)!);
+}

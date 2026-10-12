@@ -6,10 +6,14 @@
  * per request, oversized prompts sent as same-chat turns, `onChunk` deltas of
  * the code being written, cancellable through an AbortSignal.
  *
- * Unlike the Gemini proxy (which reads Google's network stream), the reply is
- * read from the page itself: ChatGPT's wire format changes often, the
- * rendered conversation much less. Both layouts ChatGPT currently serves are
- * supported: the classic one (contenteditable composer,
+ * The reply is read from the network when ChatGPT serves its ndjson
+ * conversation stream (`/conversation/updates`): its `markdown` deltas are the
+ * raw reply. The page is NOT reliable for long code: next to each delta the
+ * stream carries a live-preview widget program holding the whole code block so
+ * far, so the stream grows quadratically (tens of MB for one landing page), the
+ * page stops rendering after ~20s and later shows "Unable to connect". When no
+ * such stream is seen (older layouts), the rendered conversation is read
+ * instead: the classic layout (contenteditable composer,
  * [data-message-author-role]) and the newer one (textarea composer,
  * li[data-message-role]).
  *
@@ -67,26 +71,36 @@ interface Shared {
   page: Page | null;
   launching: Promise<Page> | null;
   queue: Promise<unknown>;
+  /** Network view of the latest reply stream (null until tapped on `page`). */
+  net: NetReply | null;
 }
 
 function shared(): Shared {
   const g = globalThis as unknown as { __leadmaxChatgptProxy?: Shared };
   if (!g.__leadmaxChatgptProxy) {
-    g.__leadmaxChatgptProxy = { browser: null, page: null, launching: null, queue: Promise.resolve() };
+    g.__leadmaxChatgptProxy = { browser: null, page: null, launching: null, queue: Promise.resolve(), net: null };
   }
   return g.__leadmaxChatgptProxy;
 }
 
 async function ensureBrowser(): Promise<Page> {
   const s = shared();
-  if (s.page && s.browser?.connected && !s.page.isClosed()) return s.page;
+  if (s.page && s.browser?.connected && !s.page.isClosed()) {
+    if (!s.net) s.net = await tapReplyStream(s.page).catch(() => null);
+    return s.page;
+  }
   s.page = null;
+  s.net = null;
   if (!s.launching) {
     s.launching = (async () => {
       try {
         const { browser, page } = await launch();
         s.browser = browser;
         s.page = page;
+        s.net = await tapReplyStream(page).catch((err) => {
+          console.warn('[chatgpt-proxy] network tap unavailable, reading the page instead:', err instanceof Error ? err.message : err);
+          return null;
+        });
         return page;
       } finally {
         shared().launching = null;
@@ -147,6 +161,130 @@ async function launch(): Promise<{ browser: Browser; page: Page }> {
     await page.setUserAgent(ua.replace('HeadlessChrome', 'Chrome'));
   } catch { /* keep default UA */ }
   return { browser, page };
+}
+
+// ── Network reply stream ───────────────────────────────────────────────────
+
+interface NetReply {
+  /** Bumped when a new reply stream starts. */
+  seq: number;
+  /** Raw markdown of the streamed assistant message. */
+  text: string;
+  messageId: string | null;
+  done: boolean;
+  failed: string | null;
+}
+
+/**
+ * Follow ChatGPT's ndjson conversation stream over CDP. Lines look like
+ * {"type":"content","messageId","mode":"replace"|"append","markdown",…},
+ * {"type":"control","detail":{"kind":"terminal-received","terminalKind",…}}
+ * and a final {"type":"end"}.
+ */
+async function tapReplyStream(p: Page): Promise<NetReply> {
+  const reply: NetReply = { seq: 0, text: '', messageId: null, done: false, failed: null };
+  const cdp = await p.createCDPSession();
+  await cdp.send('Network.enable');
+  let current: string | null = null;
+  // Chunks that arrive before streamResourceContent answers: fed after its buffered data.
+  let pending: string[] | null = null;
+  let partial = '';
+
+  const onLine = (line: string) => {
+    if (!line.trim()) return;
+    let msg: any;
+    try { msg = JSON.parse(line); } catch { return; }
+    if (msg?.type === 'content' && typeof msg.markdown === 'string') {
+      if (msg.messageId && msg.messageId !== reply.messageId) {
+        reply.messageId = msg.messageId;
+        reply.text = '';
+      }
+      reply.text = msg.mode === 'append' ? reply.text + msg.markdown : msg.markdown;
+    } else if (msg?.type === 'control' && msg.detail?.kind === 'terminal-received') {
+      const kind = String(msg.detail.terminalKind || '');
+      if (/fail|error|abort|cancel/i.test(kind)) reply.failed = msg.detail.failureReason || kind;
+      else reply.done = true;
+    } else if (msg?.type === 'end' && !reply.failed) {
+      reply.done = true;
+    }
+  };
+  const feed = (chunk: string) => {
+    partial += chunk;
+    let nl: number;
+    while ((nl = partial.indexOf('\n')) >= 0) {
+      onLine(partial.slice(0, nl));
+      partial = partial.slice(nl + 1);
+    }
+  };
+  const decode = (b64: string) => Buffer.from(b64, 'base64').toString('utf8');
+
+  cdp.on('Network.responseReceived', (e: any) => {
+    const mime = String(e.response?.mimeType || '');
+    if (!/\/conversation\//.test(e.response?.url || '') || !/ndjson/i.test(mime)) return;
+    const id: string = e.requestId;
+    current = id;
+    pending = [];
+    partial = '';
+    Object.assign(reply, { seq: reply.seq + 1, text: '', messageId: null, done: false, failed: null });
+    cdp.send('Network.streamResourceContent', { requestId: id }).then((r: any) => {
+      if (current !== id) return;
+      const early = pending || [];
+      pending = null;
+      feed(decode(r.bufferedData || ''));
+      early.forEach(feed);
+    }).catch(() => {
+      if (current === id) { pending = null; reply.failed = 'stream unreadable'; }
+    });
+  });
+  cdp.on('Network.dataReceived', (e: any) => {
+    if (e.requestId !== current || !e.data) return;
+    const chunk = decode(e.data);
+    if (pending) pending.push(chunk);
+    else feed(chunk);
+  });
+  cdp.on('Network.loadingFinished', (e: any) => {
+    if (e.requestId !== current || pending) return;
+    feed('\n');
+    if (!reply.failed) reply.done = true;
+  });
+  cdp.on('Network.loadingFailed', (e: any) => {
+    if (e.requestId === current && !reply.done) reply.failed = e.errorText || 'connection lost';
+  });
+  return reply;
+}
+
+/**
+ * The stream's markdown has its own markup: raw HTML wrapped in <escape>…</escape>
+ * and code as <CodeBlock language="html" …>…</CodeBlock>. Unwrap the first, turn
+ * the second into ``` fences.
+ */
+function normalizeMarkdown(md: string): string {
+  return md
+    .replace(/<\/?escape>/g, '')
+    .replace(/^([ \t]*)<CodeBlock\b[^>\n]*>[ \t]*\n?/gm, '$1```\n')
+    .replace(/\n?[ \t]*<\/CodeBlock>[ \t]*$/gm, '\n```');
+}
+
+/** Largest fenced code block of a markdown reply; an unclosed one (still streaming) counts. */
+function codeFromMarkdown(md: string): string {
+  md = normalizeMarkdown(md);
+  let best = '';
+  let fence: string | null = null;
+  let body: string[] = [];
+  const keep = () => { const b = body.join('\n'); if (b.length > best.length) best = b; };
+  for (const line of md.split('\n')) {
+    const m = line.match(/^[ \t]*(`{3,}|~{3,})/);
+    if (!fence) {
+      if (m) { fence = m[1]; body = []; }
+    } else if (m && line.trim() === fence) {
+      keep();
+      fence = null;
+    } else {
+      body.push(line);
+    }
+  }
+  if (fence) keep();
+  return best;
 }
 
 // ── Page driving ───────────────────────────────────────────────────────────
@@ -290,9 +428,9 @@ async function readReply(p: Page): Promise<ReplyState> {
       walk(last);
       text = parts.join('').replace(/^\s*ChatGPT said:\s*/i, '').replace(/\n{3,}/g, '\n\n').trim();
     }
-    const errEl = last?.querySelector('.text-token-text-error, [class*="text-red"]');
+    const errEl = last?.querySelector('.text-token-text-error, [class*="text-red"], [data-conversation-recovery-status="failed"]');
     const pageText = document.body.innerText || '';
-    const errMatch = pageText.match(/(you've reached (?:our|the) limit[^.\n]*|something went wrong[^.\n]*|too many requests[^.\n]*|the message you submitted was too long[^.\n]*|message is too long[^.\n]*)/i);
+    const errMatch = pageText.match(/(you've reached (?:our|the) limit[^.\n]*|something went wrong[^.\n]*|too many requests[^.\n]*|the message you submitted was too long[^.\n]*|message is too long[^.\n]*|unable to connect[^.\n]*)/i);
     return {
       count: replies.length,
       generating,
@@ -322,6 +460,8 @@ async function sendAndWait(
   signal: AbortSignal | undefined,
   onCode?: (code: string) => void,
 ): Promise<ReplyState> {
+  const net = shared().net;
+  const netBefore = net?.seq ?? 0;
   const before = (await readReply(p)).count;
   await fillComposer(p, text);
   await sleep(300);
@@ -335,6 +475,34 @@ async function sendAndWait(
   while (true) {
     if (signal?.aborted) { await clickStop(p); throw abortError(); }
     await sleep(POLL_MS);
+    if (net && net.seq > netBefore) {
+      // Network stream: the raw reply, whatever the page manages to render.
+      // Wait for the first full line: it tells whether the reply opens a code block.
+      if (net.text !== lastText && net.text.includes('\n')) {
+        lastText = net.text;
+        lastGrowth = Date.now();
+        // Unfenced reply (no fence note is sent on this path): the text is the code.
+        const code = codeFromMarkdown(net.text) || (/^\s*(?:[`~]{3}|<CodeBlock\b)/.test(net.text) ? '' : normalizeMarkdown(net.text));
+        if (code) onCode?.(code);
+      }
+      if (net.failed) {
+        await clickStop(p);
+        if (net.text.length > 100_000) {
+          throw new Error(`ChatGPT cut the reply off at its length limit (~${Math.round(net.text.length / 1000)}K chars). Ask for a shorter page or switch the AI source.`);
+        }
+        throw new Error(`ChatGPT's reply broke off (${net.failed}) after ${net.text.length} chars. Try again or switch the AI source.`);
+      }
+      if (net.done) {
+        return { count: before + 1, generating: false, text: normalizeMarkdown(net.text).trim(), code: codeFromMarkdown(net.text), error: null, canContinue: false };
+      }
+      const now = Date.now();
+      if (now - start > TURN_TIMEOUT_MS) throw new Error(`ChatGPT did not finish within ${Math.round(TURN_TIMEOUT_MS / 1000)}s. Try again or switch the AI source.`);
+      if (now - lastGrowth > STALL_TIMEOUT_MS) {
+        await clickStop(p);
+        throw new Error(`ChatGPT stopped responding mid-reply (no output for ${Math.round(STALL_TIMEOUT_MS / 1000)}s). Try again or split the request.`);
+      }
+      continue;
+    }
     state = await readReply(p);
     const mine = state.count > before;
     if (mine && state.text !== lastText) {
@@ -391,7 +559,8 @@ async function runRequest(
     if (signal?.aborted) throw abortError();
     const isLast = i === pieces.length - 1;
     const text = (pieces.length > 1 ? pieces[i] + (isLast ? GO_SUFFIX : holdSuffix(i, pieces.length)) : pieces[i])
-      + (isLast ? FENCE_NOTE : '');
+      // The network stream carries raw markdown: fences are only needed when reading the page.
+      + (isLast && !shared().net ? FENCE_NOTE : '');
     if (pieces.length > 1) {
       console.log(`[chatgpt-proxy] turn ${i + 1}/${pieces.length}`);
       onStatus?.({ type: 'turn', turn: i + 1, total: pieces.length });

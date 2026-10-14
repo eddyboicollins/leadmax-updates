@@ -287,7 +287,8 @@ export default function Home() {
       setManualName('');
       setManualRows([{ mapsUrl: '' }]);
       queryClient.invalidateQueries({ queryKey: ['campaigns'] });
-      router.push(`/campaign/${created}`);
+      // A new scraped campaign starts finding clients right away (see ?scrape=1 on the campaign page).
+      router.push(ownClients ? `/campaign/${created}` : `/campaign/${created}?scrape=1`);
     }
     setLoading(false);
   }

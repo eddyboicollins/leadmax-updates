@@ -648,6 +648,19 @@ export default function CampaignPage() {
     return () => clearTimeout(t);
   }, [focusParam]);
 
+  // Just created from the home page (?scrape=1): start the scrape immediately,
+  // once, then drop the param so a reload doesn't scrape again.
+  const autoScrape = searchParams.get('scrape') === '1';
+  const autoScrapeDone = useRef(false);
+  useEffect(() => {
+    if (!autoScrape || !campaign || autoScrapeDone.current) return;
+    autoScrapeDone.current = true;
+    router.replace(`/campaign/${id}`);
+    if (campaign.source === 'manual' || campaign.leads.length > 0 || scrape.running) return;
+    startScrape();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoScrape, campaign]);
+
   useEffect(() => {
     if (!highlightedLead) return;
     let cancelled = false;

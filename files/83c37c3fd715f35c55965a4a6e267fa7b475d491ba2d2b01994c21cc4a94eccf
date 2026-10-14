@@ -1,0 +1,174 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import Link from 'next/link';
+import { Modal, ModalHeader, ModalBody, ModalFooter, btn } from '@/components/ui/Modal';
+import type { V0Handover } from '@/lib/types';
+
+/**
+ * "Hand over to client": sends the lead's site to v0 with a prompt that turns
+ * it into a full-stack site (admin for all content, leads inbox, Neon DB).
+ * With a v0 API key the chat is created and started for the user; without
+ * one the prompt (code included) is copied and v0 opens for a paste.
+ */
+
+const V0_NEW_CHAT = 'https://v0.app/';
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }
+}
+
+type Phase = 'loading' | 'ready' | 'creating' | 'copied' | 'error';
+
+export default function HandoverModal({ open, campaignId, leadId, leadName, onClose, onHandedOver }: {
+  open: boolean;
+  campaignId: string;
+  leadId: string;
+  leadName: string;
+  onClose: () => void;
+  /** A new v0 chat was created (lets the page refresh the lead). */
+  onHandedOver?: () => void;
+}) {
+  const { t } = useTranslation();
+  const [phase, setPhase] = useState<Phase>('loading');
+  const [hasKey, setHasKey] = useState(false);
+  const [prompt, setPrompt] = useState('');
+  const [handover, setHandover] = useState<V0Handover | null>(null);
+  const [error, setError] = useState('');
+  const api = `/api/campaigns/${campaignId}/leads/${leadId}/handover`;
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    setPhase('loading'); setError(''); setHandover(null);
+    fetch(api)
+      .then(async r => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Failed');
+        if (!alive) return;
+        setHasKey(!!data.hasV0Key);
+        setPrompt(data.prompt || '');
+        setHandover(data.handover || null);
+        if (data.found) onHandedOver?.();
+        setPhase('ready');
+      })
+      .catch(err => { if (alive) { setError(err instanceof Error ? err.message : String(err)); setPhase('error'); } });
+    return () => { alive = false; };
+  }, [open, api]);
+
+  async function createChat(force = false) {
+    setPhase('creating'); setError('');
+    try {
+      const r = await fetch(api, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ force }) });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || 'Failed');
+      setHandover(data.handover);
+      setPhase('ready');
+      if (!data.existing) onHandedOver?.();
+      window.open(data.handover.url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setPhase('error');
+    }
+  }
+
+  async function copyAndOpen() {
+    const ok = await copyText(prompt);
+    if (!ok) { setError(t('campaign.handoverCopyFailed')); setPhase('error'); return; }
+    setPhase('copied');
+    window.open(V0_NEW_CHAT, '_blank', 'noopener,noreferrer');
+  }
+
+  const busy = phase === 'loading' || phase === 'creating';
+  const builds = ['handoverBuild1', 'handoverBuild2', 'handoverBuild3', 'handoverBuild4'];
+  const next = ['handoverNext1', 'handoverNext2', 'handoverNext3', 'handoverNext4'];
+
+  return (
+    <Modal open={open} onClose={onClose} dismissible={phase !== 'creating'} size="md" z="z-[110]">
+      <ModalHeader
+        icon="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
+        title={t('campaign.handoverTitle')}
+        description={t('campaign.handoverDesc', { name: leadName })}
+        onClose={phase !== 'creating' ? onClose : undefined}
+      />
+      <ModalBody className="space-y-5 text-[13px] text-zinc-700 dark:text-zinc-300">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">{t('campaign.handoverBuildsTitle')}</p>
+          <ul className="space-y-1.5">
+            {builds.map(k => (
+              <li key={k} className="flex gap-2">
+                <span className="mt-[3px] w-3.5 h-3.5 shrink-0 text-emerald-500">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                </span>
+                {t(`campaign.${k}`)}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">{t('campaign.handoverNextTitle')}</p>
+          <ol className="space-y-1.5 list-decimal ps-5 marker:text-zinc-400">
+            {next.map(k => <li key={k}>{t(`campaign.${k}`)}</li>)}
+          </ol>
+        </div>
+
+        {handover && phase !== 'creating' && (
+          <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/[0.07] px-3.5 py-2.5 text-emerald-800 dark:text-emerald-300">
+            {t('campaign.handoverAlready', { date: new Date(handover.createdAt).toLocaleDateString() })}{' '}
+            <a href={handover.url} target="_blank" rel="noopener noreferrer" className="font-medium underline">{t('campaign.handoverOpenChat')} ↗</a>
+          </p>
+        )}
+        {phase === 'ready' && !hasKey && !handover && (
+          <p className="rounded-xl border border-zinc-200 dark:border-zinc-700/60 bg-zinc-50 dark:bg-zinc-800/40 px-3.5 py-2.5 text-[12px] text-zinc-600 dark:text-zinc-400">
+            {t('campaign.handoverNoKey')}{' '}
+            <Link href="/settings?focus=v0Key" className="font-medium text-emerald-600 dark:text-emerald-400 hover:underline">{t('campaign.handoverAddKey')}</Link>
+          </p>
+        )}
+        {phase === 'copied' && (
+          <p className="rounded-xl border border-emerald-500/30 bg-emerald-500/[0.07] px-3.5 py-2.5 text-emerald-800 dark:text-emerald-300">
+            {t('campaign.handoverCopied')}{' '}
+            <a href={V0_NEW_CHAT} target="_blank" rel="noopener noreferrer" className="font-medium underline">{t('campaign.handoverOpenV0')} ↗</a>
+          </p>
+        )}
+        {phase === 'error' && (
+          <p className="rounded-xl border border-red-500/30 bg-red-500/[0.07] px-3.5 py-2.5 text-red-700 dark:text-red-300 break-words">{error}</p>
+        )}
+      </ModalBody>
+      <ModalFooter>
+        {handover && hasKey && (
+          <button onClick={() => createChat(true)} disabled={busy} className={`${btn.ghost} me-auto`} title={t('campaign.handoverAgainHint')}>
+            {t('campaign.handoverAgain')}
+          </button>
+        )}
+        <button onClick={onClose} disabled={phase === 'creating'} className={btn.secondary}>{t('campaign.close')}</button>
+        {handover && phase !== 'creating' ? (
+          <a href={handover.url} target="_blank" rel="noopener noreferrer" className={btn.primary}>{t('campaign.handoverOpenChat')} ↗</a>
+        ) : hasKey ? (
+          <button onClick={() => createChat()} disabled={busy || !prompt} className={btn.primary}>
+            {phase === 'creating' && <span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />}
+            {phase === 'creating' ? t('campaign.handoverCreating') : t('campaign.handoverOpenInV0')}
+          </button>
+        ) : (
+          <button onClick={copyAndOpen} disabled={busy || !prompt} className={btn.primary}>
+            {t('campaign.handoverCopyOpen')}
+          </button>
+        )}
+      </ModalFooter>
+    </Modal>
+  );
+}

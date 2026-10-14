@@ -1,0 +1,62 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
+import { useSettings } from '@/lib/query/useCampaign';
+import { normalizeAiSource } from '@/lib/gemini';
+
+interface LimitStatus {
+  jobIntervalMs?: number;
+  nextJobAt?: number;
+  queued?: number;
+}
+
+/**
+ * Under the studio chat while DeepSeek is the AI source: its rate limit
+ * (one job per minute, enforced server-side in lib/deepseekProxy.ts) and when
+ * the next job can start.
+ */
+export default function DeepSeekLimitNote() {
+  const { t } = useTranslation();
+  const { data: settings } = useSettings();
+  const active = normalizeAiSource(settings?.aiSource) === 'deepseek';
+  const [now, setNow] = useState(() => Date.now());
+
+  const { data: status } = useQuery<LimitStatus>({
+    queryKey: ['deepseek-status'],
+    queryFn: async () => (await fetch('/api/deepseek')).json(),
+    enabled: active,
+    refetchInterval: active ? 5000 : false,
+  });
+
+  const nextJobAt = status?.nextJobAt ?? 0;
+  const waiting = nextJobAt > now;
+  useEffect(() => {
+    if (!active || !waiting) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [active, waiting]);
+
+  if (!active) return null;
+  // `now` may be stale for up to a tick after the poll moves nextJobAt: never show more than one interval.
+  const seconds = Math.min(Math.ceil((nextJobAt - now) / 1000), Math.ceil((status?.jobIntervalMs ?? 60_000) / 1000));
+  const queued = status?.queued ?? 0;
+
+  return (
+    <p className="mt-1.5 flex items-center gap-1.5 flex-wrap text-[11px] text-zinc-500 dark:text-zinc-400">
+      <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="9" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 2" /></svg>
+      <span>{t('campaign.studioDeepseekLimit')}</span>
+      <span className="text-zinc-400 dark:text-zinc-500">·</span>
+      <span className={waiting ? 'text-amber-600 dark:text-amber-400 font-medium tabular-nums' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>
+        {waiting ? t('campaign.studioDeepseekNextIn', { seconds }) : t('campaign.studioDeepseekReady')}
+      </span>
+      {queued > 0 && (
+        <>
+          <span className="text-zinc-400 dark:text-zinc-500">·</span>
+          <span>{t('campaign.studioDeepseekQueued', { count: queued })}</span>
+        </>
+      )}
+    </p>
+  );
+}

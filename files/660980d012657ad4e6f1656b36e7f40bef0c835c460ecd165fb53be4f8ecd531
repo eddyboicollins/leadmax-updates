@@ -1,0 +1,188 @@
+/**
+ * Focused code context for comment-only modifications.
+ *
+ * Sending the whole component for a one-element change forces long prompts
+ * (several web-proxy turns, slow typing, more tokens). When the request is
+ * made only of studio notes pinned to elements, the AI gets just the parts of
+ * the component those notes involve:
+ *
+ *   - each note's page block (its section, or the closest ancestor element
+ *     small enough when the section is huge),
+ *   - the data arrays that block renders with `.map(` (cards, lists),
+ *   - the imports and the component's hook declarations,
+ *   - for "+" insertions: the end of the block above, the start of the block
+ *     below and the navbar (a new section gets a nav link).
+ *
+ * Several notes merge their ranges; when the result would still be most of
+ * the file, null is returned and the full component is sent as usual. Edit
+ * blocks are applied to the FULL code, so a SEARCH that turns out ambiguous
+ * there goes through the normal repair round (which sends the full code).
+ */
+import { allElements, tokenize, type JsxElementRange } from '@/lib/site/jsx';
+import type { StudioNote } from '@/lib/site/notes';
+
+/** A note's block larger than this falls back to a smaller ancestor. */
+const BLOCK_MAX = 8000;
+/** Data arrays larger than this are left out (the block is still sent). */
+const ARRAY_MAX = 6000;
+/** Above this share of the full file, focusing isn't worth it. */
+const MAX_SHARE = 0.6;
+/** Lines kept around an insertion point inside the neighbouring blocks. */
+const INSERT_EDGE_LINES = 12;
+/** Ranges closer than this (in lines) are merged. */
+const MERGE_GAP = 3;
+
+const BLOCK_TAGS = new Set(['section', 'nav', 'header', 'footer', 'main', 'aside']);
+
+export interface FocusedContext {
+  /** The excerpt shown to the AI, with "not shown" markers between parts. */
+  text: string;
+  totalLines: number;
+  shownLines: number;
+}
+
+const isBlock = (el: JsxElementRange) => BLOCK_TAGS.has(el.open.name) || el.open.attrs.some(a => a.name === 'id');
+const size = (el: JsxElementRange) => el.end - el.open.start;
+
+/** The range to show for an element: its page block, or the biggest ancestor under BLOCK_MAX. */
+function blockFor(els: JsxElementRange[], loc: number): [number, number] | null {
+  const self = els.find(e => e.open.start === loc);
+  if (!self) return null;
+  const ancestors = els
+    .filter(e => e.open.start <= loc && e.end >= self.end)
+    .sort((a, b) => size(a) - size(b));
+  const block = ancestors.find(e => isBlock(e) && size(e) <= BLOCK_MAX);
+  if (block) return [block.open.start, block.end];
+  const fitting = ancestors.filter(e => size(e) <= BLOCK_MAX);
+  const pick = fitting[fitting.length - 1] || self;
+  return [pick.open.start, pick.end];
+}
+
+/** Offset of the bracket closing the one opened at `i`, skipping strings/templates/comments. */
+function closeBracket(code: string, i: number): number {
+  let depth = 0;
+  for (let k = i; k < code.length; k++) {
+    const c = code[k];
+    if (c === '"' || c === "'" || c === '`') {
+      for (k++; k < code.length && code[k] !== c; k++) if (code[k] === '\\') k++;
+      continue;
+    }
+    if (c === '/' && code[k + 1] === '/') { k = code.indexOf('\n', k); if (k < 0) return -1; continue; }
+    if (c === '/' && code[k + 1] === '*') { k = code.indexOf('*/', k + 2) + 1; if (k <= 0) return -1; continue; }
+    if (c === '[' || c === '{' || c === '(') depth++;
+    else if (c === ']' || c === '}' || c === ')') {
+      depth--;
+      if (depth === 0) return k;
+    }
+  }
+  return -1;
+}
+
+/** Declarations of the arrays a code range renders with `name.map(`. */
+function mappedArrays(code: string, from: number, to: number): [number, number][] {
+  const out: [number, number][] = [];
+  const names = new Set<string>();
+  for (const m of code.slice(from, to).matchAll(/([A-Za-z_$][\w$]*)\s*\.\s*map\s*\(/g)) names.add(m[1]);
+  for (const name of names) {
+    const decl = new RegExp(`(?:const|let|var)\\s+${name.replace(/\$/g, '\\$')}\\s*=\\s*`).exec(code);
+    if (!decl) continue;
+    const open = decl.index + decl[0].length;
+    if (code[open] !== '[' && code[open] !== '{') continue;
+    const close = closeBracket(code, open);
+    if (close < 0 || close - decl.index > ARRAY_MAX) continue;
+    if (decl.index >= from && close <= to) continue; // already inside the block
+    out.push([decl.index, close + 1]);
+  }
+  return out;
+}
+
+const lineOf = (starts: number[], offset: number): number => {
+  let lo = 0, hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid] <= offset) lo = mid; else hi = mid - 1;
+  }
+  return lo;
+};
+
+/**
+ * Focused excerpt for comment-only notes on the version being edited, or null
+ * when the full component should be sent (note on another version, element
+ * not found, or the excerpt would be most of the file).
+ */
+export function focusedContext(code: string, notes: StudioNote[], versionId: string): FocusedContext | null {
+  if (!notes.length || notes.some(n => n.versionId !== versionId)) return null;
+  let els: JsxElementRange[];
+  try {
+    els = allElements(code, tokenize(code));
+  } catch {
+    return null;
+  }
+
+  const lines = code.split('\n');
+  const starts: number[] = [];
+  for (let i = 0, pos = 0; i < lines.length; i++) { starts.push(pos); pos += lines[i].length + 1; }
+  const ranges: [number, number][] = []; // 0-based inclusive line ranges
+  const addOffsets = (a: number, b: number) => ranges.push([lineOf(starts, a), lineOf(starts, Math.max(a, b - 1))]);
+
+  // Imports + component signature + hook declarations (what new code may need).
+  lines.forEach((l, i) => {
+    if (/^\s*(['"]use client['"]|import\s)/.test(l) || /export\s+default\s+function|^\s*(const|let)\s+\[[^\]]*\]\s*=\s*use[A-Z]\w*\(|^\s*(const|let)\s+\w+\s*=\s*use(Ref|Memo|Callback)\(/.test(l)) {
+      ranges.push([i, i]);
+    }
+  });
+
+  let needsNav = false;
+  for (const n of notes) {
+    if (n.insert) {
+      const after = els.find(e => e.open.start === n.insert!.after.loc);
+      if (!after) return null;
+      const endLine = lineOf(starts, after.end - 1);
+      ranges.push([Math.max(lineOf(starts, after.open.start), endLine - INSERT_EDGE_LINES), endLine]);
+      if (n.insert.before) {
+        const before = els.find(e => e.open.start === n.insert!.before!.loc);
+        if (!before) return null;
+        const startLine = lineOf(starts, before.open.start);
+        ranges.push([startLine, Math.min(lineOf(starts, before.end - 1), startLine + INSERT_EDGE_LINES)]);
+      }
+      needsNav = true;
+      continue;
+    }
+    const block = blockFor(els, n.loc);
+    if (!block) return null;
+    addOffsets(block[0], block[1]);
+    for (const [a, b] of mappedArrays(code, block[0], block[1])) addOffsets(a, b);
+  }
+  if (needsNav) {
+    const nav = els
+      .filter(e => e.open.name === 'nav' || e.open.attrs.some(a => a.name === 'id') && /\b(nav|navbar|header)\b/i.test(code.slice(e.open.start, e.open.end)))
+      .sort((a, b) => a.open.start - b.open.start)[0];
+    if (nav && size(nav) <= BLOCK_MAX) {
+      addOffsets(nav.open.start, nav.end);
+      for (const [a, b] of mappedArrays(code, nav.open.start, nav.end)) addOffsets(a, b);
+    }
+  }
+
+  // Merge overlapping / nearby ranges.
+  ranges.sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [];
+  for (const r of ranges) {
+    const last = merged[merged.length - 1];
+    if (last && r[0] <= last[1] + MERGE_GAP + 1) last[1] = Math.max(last[1], r[1]);
+    else merged.push([r[0], r[1]]);
+  }
+
+  const parts: string[] = [];
+  let shown = 0;
+  let prevEnd = -1;
+  for (const [a, b] of merged) {
+    if (a > prevEnd + 1) parts.push(`⋯ [lines ${prevEnd + 2}–${a} not shown — unchanged] ⋯`);
+    parts.push(lines.slice(a, b + 1).join('\n'));
+    shown += b - a + 1;
+    prevEnd = b;
+  }
+  if (prevEnd < lines.length - 1) parts.push(`⋯ [lines ${prevEnd + 2}–${lines.length} not shown — unchanged] ⋯`);
+  const text = parts.join('\n');
+  if (text.length > code.length * MAX_SHARE) return null;
+  return { text, totalLines: lines.length, shownLines: shown };
+}

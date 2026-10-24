@@ -1,0 +1,79 @@
+import { NextResponse } from 'next/server';
+import fs from 'node:fs';
+import path from 'node:path';
+
+export const dynamic = 'force-dynamic';
+
+// Same channel as electron/update-config.js (the server inherits its env).
+const OWNER = process.env.LEADMAX_UPDATE_OWNER || 'eddyboicollins';
+const REPO = process.env.LEADMAX_UPDATE_REPO || 'leadmax-updates';
+const BRANCH = process.env.LEADMAX_UPDATE_BRANCH || 'release';
+
+interface Manifest {
+  version?: string;
+  updatedAt?: string;
+  files?: Record<string, string>;
+}
+
+/**
+ * The desktop app runs this server from <userData>/app and keeps the
+ * installed build's manifest at <userData>/local-manifest.json.
+ * Missing → not the desktop app (dev server, web).
+ */
+function readLocalManifest(): Manifest | null {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(process.cwd(), '..', 'local-manifest.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+async function fetchRemoteManifest(): Promise<Manifest | null> {
+  const urls = [
+    `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/manifest.json`,
+    `https://cdn.jsdelivr.net/gh/${OWNER}/${REPO}@${BRANCH}/manifest.json`,
+  ];
+  let lastErr: unknown = null;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(20000) });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return (await res.json()) as Manifest;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('Could not reach the update server');
+}
+
+/**
+ * Manual update check (Settings). Only checks: installing goes through the
+ * desktop app (window.leadmax.applyUpdate), which downloads and restarts.
+ */
+export async function GET() {
+  const local = readLocalManifest();
+  if (!local) return NextResponse.json({ desktop: false });
+  try {
+    const remote = await fetchRemoteManifest();
+    if (!remote) return NextResponse.json({ desktop: true, current: local.version ?? null, available: false, files: 0 });
+    const localFiles = local.files || {};
+    const remoteFiles = remote.files || {};
+    let files = 0;
+    for (const [rel, sha] of Object.entries(remoteFiles)) if (localFiles[rel] !== sha) files++;
+    for (const rel of Object.keys(localFiles)) if (!(rel in remoteFiles)) files++;
+    return NextResponse.json({
+      desktop: true,
+      current: local.version ?? null,
+      latest: remote.version ?? null,
+      publishedAt: remote.updatedAt ?? null,
+      available: files > 0,
+      files,
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { desktop: true, current: local.version ?? null, error: err instanceof Error ? err.message : String(err) },
+      { status: 502 },
+    );
+  }
+}

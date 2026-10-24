@@ -1,0 +1,97 @@
+'use client';
+
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
+
+interface UpdateCheck {
+  desktop: boolean;
+  current?: string | null;
+  latest?: string | null;
+  publishedAt?: string | null;
+  available?: boolean;
+  files?: number;
+  error?: string;
+}
+
+/** The desktop app's bridge (electron/preload.js); absent in a browser. */
+function applyUpdate(): (() => void) | null {
+  const api = (window as unknown as { leadmax?: { applyUpdate?: () => void } }).leadmax;
+  return typeof api?.applyUpdate === 'function' ? api.applyUpdate : null;
+}
+
+/**
+ * Settings → Updates: check on demand (the app also checks at launch).
+ * Installing hands over to the desktop app, whose banner shows the download
+ * and reloads the app when done.
+ */
+export default function AppUpdateCheck() {
+  const { t } = useTranslation();
+  const [installing, setInstalling] = useState(false);
+  const { data, isFetching, refetch, dataUpdatedAt } = useQuery<UpdateCheck>({
+    queryKey: ['app-update-check'],
+    queryFn: async () => (await fetch('/api/update', { cache: 'no-store' })).json(),
+    enabled: false,
+    retry: false,
+  });
+
+  const install = () => {
+    const apply = applyUpdate();
+    if (!apply) return;
+    setInstalling(true);
+    apply();
+  };
+
+  const notDesktop = data?.desktop === false;
+  const btn = 'px-4 py-2 text-sm font-medium rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.98]';
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={isFetching || installing}
+          className={`${btn} inline-flex items-center gap-2 text-zinc-700 dark:text-zinc-200 bg-gray-100 dark:bg-zinc-700/60 hover:bg-gray-200 dark:hover:bg-zinc-700`}
+        >
+          {isFetching
+            ? <span className="animate-spin w-3.5 h-3.5 rounded-full border-2 border-emerald-500 border-t-transparent" />
+            : <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>}
+          {isFetching ? t('update.checking') : t('update.checkNow')}
+        </button>
+        {data?.available && !notDesktop && (
+          <button
+            type="button"
+            onClick={install}
+            disabled={installing || !applyUpdate()}
+            className={`${btn} text-white bg-emerald-600 hover:bg-emerald-500 shadow-sm shadow-emerald-600/20`}
+          >
+            {installing ? t('update.installing') : t('update.download')}
+          </button>
+        )}
+      </div>
+
+      {data && !isFetching && (
+        <p className={`text-xs ${data.error ? 'text-red-600 dark:text-red-400' : data.available ? 'text-emerald-600 dark:text-emerald-400' : 'text-zinc-500 dark:text-zinc-400'}`}>
+          {notDesktop
+            ? t('update.desktopOnly')
+            : data.error
+              ? `${t('update.error')}: ${data.error}`
+              : data.available
+                ? t('update.availableFiles', { count: data.files ?? 0, version: data.latest ?? '?' })
+                : t('update.upToDate')}
+          {!notDesktop && dataUpdatedAt > 0 && (
+            <span className="text-zinc-400 dark:text-zinc-500"> · {t('update.checkedAt', { time: new Date(dataUpdatedAt).toLocaleTimeString() })}</span>
+          )}
+        </p>
+      )}
+
+      {data?.current && (
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+          {t('update.currentVersion', { version: data.current })}
+        </p>
+      )}
+      {installing && <p className="text-[11px] text-zinc-500 dark:text-zinc-400">{t('update.installingHint')}</p>}
+    </div>
+  );
+}

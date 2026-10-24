@@ -102,7 +102,9 @@ function pickByCard(code: string, tokens: Tok[], candidates: TextTok[], cardText
 /** Property names an expression reads: `item.image` → image, `p.photos.main` → photos, main. */
 function memberProps(expr: string | null): string[] {
   if (!expr) return [];
-  return [...new Set([...expr.matchAll(/\.\s*([A-Za-z_$][\w$]*)/g)].map(m => m[1]))];
+  // Strings aside: ".filebase.io" in a URL isn't a property read.
+  const code = expr.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, '""');
+  return [...new Set([...code.matchAll(/\.\s*([A-Za-z_$][\w$]*)/g)].map(m => m[1]))];
 }
 
 const KEY_BEFORE = /(?:([A-Za-z_$][\w$]*)|"([^"\n]*)"|'([^'\n]*)')\s*:\s*$/;
@@ -214,15 +216,17 @@ function resolveAttr(code: string, tokens: Tok[], el: JsxElementRange | null, ed
 
   // 1) The attribute written right on the clicked element.
   const attr = el?.open.attrs.find(a => a.name === edit.attr);
+  //    In a condition (slideshow ternary, an earlier swap): the one branch showing it.
   if (attr) {
-    const own = lits.filter(t => t.start >= attr.start && t.end <= attr.end);
-    if (own.length === 1 && own[0].value === edit.oldValue) return [splice(own[0])];
+    const own = lits.filter(t => t.start >= attr.start && t.end <= attr.end && t.value === edit.oldValue);
+    if (own.length === 1) return [splice(own[0])];
   }
   // 2) Shown from a data entry (src={item.image}): the clicked card's entry.
   const entry = cardEntryField(code, tokens, el, [edit.attr], edit.cardTexts, v => (edit.attr === 'src' ? looksLikeUrl(v) : v.trim() !== ''));
   if (entry) return entry.value === edit.newValue ? [] : [splice(entry)];
   // 3) The value comes from data (e.g. an array of cards): exact literal(s).
-  const exact = lits.filter(t => t.value === edit.oldValue);
+  //    Literals in the clicked tag itself (an earlier swap's condition) aren't data: step 5.
+  const exact = lits.filter(t => t.value === edit.oldValue && !(el && within(t, el.open.start, el.open.end)));
   if (exact.length) {
     const { toks, everywhere } = pickTargets(code, tokens, exact, edit);
     return toks.map(t => splice(t, everywhere));
@@ -251,10 +255,65 @@ function attrInsertPoint(el: JsxElementRange): number {
 }
 
 /**
+ * The expression reads per-item data (`photo(item.image)`, `p.cover`): the
+ * element is a list template, even if only one copy shows the clicked value.
+ */
+const readsItemData = (expr: string | null) => memberProps(expr).length > 0;
+
+const MAP_PARAM_RE = /\.map\(\s*(?:\(\s*)?([A-Za-z_$][\w$]*)/g;
+
+/**
+ * List template (`items.map(item => <img …/>)`): a condition true only for the
+ * clicked card's data entry, e.g. `item.id === 3`. The card is found by its
+ * texts (like comment mode), never by the photo it shows — copies may all
+ * show the same photo. Null when the entry can't be pinned down safely.
+ */
+function itemCondition(code: string, tokens: Tok[], el: JsxElementRange, cardTexts?: string[]): string | null {
+  if (!cardTexts?.length) return null;
+  // The nearest `.map(param` before the element whose param the element's map body reads.
+  let param: string | null = null;
+  let mapAt = -1;
+  for (const m of code.slice(Math.max(0, el.open.start - 4000), el.open.start).matchAll(MAP_PARAM_RE)) {
+    param = m[1];
+    mapAt = Math.max(0, el.open.start - 4000) + m.index;
+  }
+  if (!param) return null;
+  const body = code.slice(mapAt, el.open.end);
+  const reads = (prop: string) => new RegExp(`\\b${param.replace(/\$/g, '\\$')}\\s*\\.\\s*${prop.replace(/\$/g, '\\$')}\\b`).test(body);
+  // The data entry holding the card's texts.
+  const wanted = new Set(cardTexts.map(cardKey).filter(t => t.length >= 2));
+  const texts = textTokens(code, tokens).filter(t => t.kind !== 'jsxText' && t.end <= mapAt && wanted.has(cardKey(t.value)));
+  // The entry (object literal) holding the most of them; a tie isn't decisive.
+  const byObj = new Map<number, { obj: { start: number; end: number }; toks: TextTok[] }>();
+  for (const t of texts) {
+    const o = enclosingObjectRange(tokens, t.idx);
+    if (!o) continue;
+    const g = byObj.get(o.start) ?? { obj: o, toks: [] };
+    g.toks.push(t);
+    byObj.set(o.start, g);
+  }
+  const ranked = [...byObj.values()].sort((a, b) => b.toks.length - a.toks.length);
+  if (!ranked.length || (ranked[1] && ranked[1].toks.length === ranked[0].toks.length)) return null;
+  const { obj, toks } = ranked[0];
+  const entry = code.slice(obj.start, obj.end);
+  const id = entry.match(/[{,]\s*id\s*:\s*("[^"\n]*"|'[^'\n]*'|-?\d+)\s*[,}]/);
+  if (id && reads('id')) return `${param}.id === ${id[1]}`;
+  // No id: one of the matched text fields, when the template reads it.
+  for (const best of toks) {
+    const prop = propKeyOf(code, best);
+    if (!prop || !/^[A-Za-z_$][\w$]*$/.test(prop) || !reads(prop)) continue;
+    // Must be unique: another entry with the same text would match too.
+    const same = texts.filter(t => t.value === best.value && propKeyOf(code, t) === prop);
+    if (same.length === 1) return `${param}.${prop} === ${JSON.stringify(best.value)}`;
+  }
+  return null;
+}
+
+/**
  * The value isn't a literal anywhere: change the clicked element's attribute.
  * One copy on screen → the attribute becomes the new value. Several copies
- * (list rendering) → value-based condition, so only the copy that showed the
- * old value changes. Layout/size classes are never touched.
+ * or a list template → value-based condition, so only the copy that showed
+ * the old value changes. Layout/size classes are never touched.
  */
 function rewriteAttr(
   code: string,
@@ -270,10 +329,13 @@ function rewriteAttr(
   if (!el) throw new VisualEditError(`${label} could not be located in the code. Ask the AI instead.`);
   const attr = el.open.attrs.find(a => a.name === name);
   const expr = attrExpr(code, tokens, el, name);
-  const repeated = (hint.instances ?? 1) > 1;
-  const value = expr && repeated
-    ? `{(${expr}) === ${JSON.stringify(oldValue)} ? ${JSON.stringify(newValue)} : (${expr})}`
-    : `{${JSON.stringify(newValue)}}`;
+  const item = expr ? itemCondition(code, tokens, el, hint.cardTexts) : null;
+  const repeated = (hint.instances ?? 1) > 1 || readsItemData(expr);
+  const value = expr && item
+    ? `{${item} ? ${JSON.stringify(newValue)} : (${expr})}`
+    : expr && repeated
+      ? `{(${expr}) === ${JSON.stringify(oldValue)} ? ${JSON.stringify(newValue)} : (${expr})}`
+      : `{${JSON.stringify(newValue)}}`;
   if (attr) return { start: attr.start, end: attr.end, text: `${name}=${value}`, summary };
   const at = attrInsertPoint(el);
   return { start: at, end: at, text: ` ${name}=${value}`, summary };
@@ -290,9 +352,10 @@ function rewriteBackground(code: string, tokens: Tok[], el: JsxElementRange | nu
   const styleAttr = el.open.attrs.find(a => a.name === 'style');
   const styleExpr = attrExpr(code, tokens, el, 'style');
   const sources = [styleExpr, attrExpr(code, tokens, el, 'className')].filter((x): x is string => !!x);
-  const cond = (hint.instances ?? 1) > 1 && sources.length
-    ? `[${sources.map(x => `(${x})`).join(', ')}].some(v => JSON.stringify(v ?? '').includes(${JSON.stringify(oldUrl)}))`
-    : null;
+  const cond = itemCondition(code, tokens, el, hint.cardTexts)
+    ?? (((hint.instances ?? 1) > 1 || sources.some(readsItemData)) && sources.length
+      ? `[${sources.map(x => `(${x})`).join(', ')}].some(v => JSON.stringify(v ?? '').includes(${JSON.stringify(oldUrl)}))`
+      : null);
   const summary = 'Background image replaced';
   if (styleAttr && styleExpr) {
     const text = cond
@@ -312,7 +375,10 @@ function resolveUrlInside(code: string, tokens: Tok[], el: JsxElementRange | nul
   if (containing.length === 0) return null;
   // Prefer the literal written on the clicked element itself.
   const own = el ? containing.filter(t => within(t, el.open.start, el.open.end)) : [];
-  const { toks, everywhere } = own.length === 1 ? { toks: own, everywhere: false } : pickTargets(code, tokens, containing, hint);
+  // Several in the clicked tag: an earlier swap's condition, rewritten as a whole.
+  if (own.length > 1) return null;
+  const elsewhere = containing.filter(t => !own.includes(t));
+  const { toks, everywhere } = own.length === 1 ? { toks: own, everywhere: false } : pickTargets(code, tokens, elsewhere, hint);
   return toks.map(tok => {
     const raw = code.slice(tok.start, tok.end);
     return { start: tok.start, end: tok.end, text: raw.split(oldUrl).join(newUrl), summary, everywhere };

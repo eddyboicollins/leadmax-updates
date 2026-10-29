@@ -1,0 +1,11 @@
+var R=require("../../../../../../../chunks/[turbopack]_runtime.js")("server/app/api/campaigns/[id]/leads/[leadId]/handover/route.js")
+R.c("server/chunks/[root-of-the-server]__0duo62g._.js")
+R.c("server/chunks/src_lib_store_ts_0bogt-u._.js")
+R.c("server/chunks/node_modules_next_dist_esm_build_templates_app-route_05cqbd2.js")
+R.c("server/chunks/src_lib_prompts_ts_0y0egq3._.js")
+R.c("server/chunks/[root-of-the-server]__0op9af~._.js")
+R.c("server/chunks/_0r~66o9._.js")
+R.c("server/chunks/node_modules_next_04~_e52._.js")
+R.c("server/chunks/0zjb_server_app_api_campaigns_[id]_leads_[leadId]_handover_route_actions_0_-d14m.js")
+R.m(267246)
+module.exports=R.m(267246).exports

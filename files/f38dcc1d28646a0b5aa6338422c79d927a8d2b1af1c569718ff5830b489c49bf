@@ -1,0 +1,491 @@
+/**
+ * AI Proxy — Gemini web, without a browser (server-only).
+ *
+ * Same approach as the PHP LeadMax (app/Services/GeminiWeb.php): instead of
+ * driving gemini.google.com in Puppeteer and listening to the page's
+ * StreamGenerate request, we send that same StreamGenerate request ourselves
+ * and read the chunked reply as it arrives. Works signed out — the tokens the
+ * call needs (build label, session id) are read from the Gemini app page.
+ *
+ * NOTE: undocumented Google wire format — can break silently on a Gemini
+ * frontend change. The official API remains the reliable path; this proxy is
+ * the free alternative you can pick per Settings → AI Source.
+ *
+ * Two proxy-specific behaviors callers should know about:
+ *  - CHUNKING: Gemini's web input truncates long input (~32k chars). Prompts
+ *    longer than CHUNK_LIMIT are sent as consecutive turns of the same chat
+ *    (earlier turns carry a "reply OK and wait" note); only the final turn's
+ *    reply is returned.
+ *  - STALL TIMEOUT: slowness is fine — only a stream that sends no byte for
+ *    STALL_TIMEOUT_MS is treated as dead. Transport errors throw immediately
+ *    with a truthful message; they are NOT retried here (see askGeminiAndValidate).
+ */
+/* eslint-disable @typescript-eslint/no-explicit-any -- Gemini's positional JSON arrays */
+
+import path from 'path';
+import type { ProxyStatus } from '@/lib/gemini';
+import { httpRequest } from '@/lib/googleHttp';
+
+const APP_URL = 'https://gemini.google.com/app';
+const STREAM_URL = 'https://gemini.google.com/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate';
+// Absolute ceiling for one turn's stream.
+const STREAM_TIMEOUT_MS = Number(process.env.PROXY_STREAM_TIMEOUT_MS || 600_000);
+// No byte for this long: Gemini stalled (it can think for a minute before answering).
+const STALL_TIMEOUT_MS = Number(process.env.PROXY_STALL_TIMEOUT_MS || 180_000);
+// Gemini's web prompt box truncates pasted input (~32k chars observed), so
+// longer prompts are split into same-chat turns of at most this size.
+const CHUNK_LIMIT = Number(process.env.PROXY_CHUNK_LIMIT || 28_000);
+/** The build label / session id stay valid for a while; re-read the app page after this. */
+const SESSION_TTL_MS = 30 * 60_000;
+/** Pause between two turns of the same request, like a person would [min, max] ms. */
+const TURN_GAP_MS = [1500, 4000] as const;
+
+export function dataDir(): string {
+  if (process.env.PORTABLE_EXECUTABLE_DIR) {
+    return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'data');
+  }
+  return path.join(process.cwd(), 'data');
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ── Payload scanning ──────────────────────────────────────────────────────
+
+function* findStringLiterals(text: string): Generator<string> {
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] !== '"') {
+      i++;
+      continue;
+    }
+    const start = i + 1;
+    let j = start;
+    let escaped = false;
+    while (j < text.length) {
+      const c = text[j];
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') break;
+      j++;
+    }
+    if (j >= text.length) break; // unterminated (likely mid-stream)
+    yield text.slice(start, j);
+    i = j + 1;
+  }
+}
+
+const CODE_SIGNAL_RE =
+  /```(react|tsx|jsx|javascript|js|ts)|import\s+React|function App\s*\(|export default function|export\s+default\s+\w+|<{7} SEARCH/;
+
+const MAX_NESTING_DEPTH = 30;
+
+function walkLiterals(
+  text: string,
+  onDecoded: (decoded: string, depth: number) => void,
+): void {
+  function walk(str: string, depth: number) {
+    if (depth > MAX_NESTING_DEPTH) return;
+    for (const literal of findStringLiterals(str)) {
+      if (literal.length < 50) continue;
+      let decoded: string;
+      try {
+        decoded = JSON.parse('"' + literal + '"');
+      } catch {
+        continue;
+      }
+      onDecoded(decoded, depth);
+      const trimmed = decoded.trim();
+      if ((trimmed.startsWith('[') || trimmed.startsWith('{')) && decoded.length > 100) {
+        walk(decoded, depth + 1);
+      }
+    }
+  }
+  walk(text, 0);
+}
+
+/**
+ * Longest code-shaped string in the payload. When Gemini puts the code in a
+ * Canvas panel the chat text only holds an intro line, but the code still
+ * travels in the same StreamGenerate payload.
+ */
+export function findBestCodeCandidate(text: string): string | null {
+  let best: string | null = null;
+  walkLiterals(text, (decoded, depth) => {
+    // Edit-block replies (targeted modify) can be much shorter than a component.
+    if (depth >= 1 && (decoded.length > 200 || /<{7} SEARCH/.test(decoded)) && CODE_SIGNAL_RE.test(decoded)) {
+      if (!best || decoded.length > best.length) best = decoded;
+    }
+  });
+  return best;
+}
+
+/**
+ * Longest plausible *prose/JSON* string — fallback when the reply isn't at its
+ * usual position. Skips strings that look like code fences.
+ */
+export function findBestTextCandidate(text: string): string | null {
+  let best: string | null = null;
+  walkLiterals(text, (decoded, depth) => {
+    if (depth < 1 || decoded.length < 80) return;
+    if (CODE_SIGNAL_RE.test(decoded)) return;
+    const trimmed = decoded.trim();
+    // Must look like language or JSON, not wire metadata / URLs / blobs.
+    if (!/[ \n]/.test(trimmed)) return;
+    if (!best || decoded.length > best.length) best = decoded;
+  });
+  return best;
+}
+
+export function stripCodeFence(text: string): string {
+  return text
+    .replace(/^```(react|tsx|jsx|javascript|js|ts|json)?\n/, '')
+    .replace(/\n```\s*$/, '');
+}
+
+/** Split a long prompt at newline boundaries (hard-splitting overlong lines). */
+export function splitPrompt(prompt: string, limit: number): string[] {
+  if (prompt.length <= limit) return [prompt];
+  const chunks: string[] = [];
+  let cur = '';
+  const push = () => {
+    if (cur) chunks.push(cur);
+    cur = '';
+  };
+  for (const line of prompt.split('\n')) {
+    if (line.length > limit) {
+      push();
+      for (let i = 0; i < line.length; i += limit) chunks.push(line.slice(i, i + limit));
+      continue;
+    }
+    if ((cur ? cur.length + 1 : 0) + line.length > limit) push();
+    cur = cur ? cur + '\n' + line : line;
+  }
+  push();
+  return chunks.filter(Boolean);
+}
+
+const holdSuffix = (i: number, n: number): string =>
+  `\n\n[Note: this request continues in part ${i + 1} of ${n} — reply with exactly "OK" and nothing else.]`;
+const GO_SUFFIX = `\n\n[Note: this is the final part. Now fulfill the complete request above.]`;
+
+// ── Gemini session + serialized turn queue ───────────────────────────────
+// Shared via globalThis so Next.js dev HMR reuses one session and one queue.
+
+interface GeminiSession {
+  at: number;
+  /** Build label (cfb2h). */
+  bl: string;
+  /** Session id (FdrFJe). */
+  sid: string;
+  /** XSRF token (SNlM0e) — only present when signed in. */
+  token: string | null;
+  cookies: string;
+}
+
+interface ProxyShared {
+  session: GeminiSession | null;
+  queue: Promise<unknown>;
+  lastTurnAt: number;
+}
+
+function shared(): ProxyShared {
+  const g = globalThis as unknown as { __leadmaxGeminiHttp?: ProxyShared };
+  if (!g.__leadmaxGeminiHttp) {
+    g.__leadmaxGeminiHttp = { session: null, queue: Promise.resolve(), lastTurnAt: 0 };
+  }
+  return g.__leadmaxGeminiHttp;
+}
+
+const BLOCK_PHRASES = ['unusual traffic', "verify you're human", 'verify you are human', 'our systems have detected unusual', 'automated queries'];
+
+function detectBlock(text: string): string | null {
+  const lower = text.toLowerCase();
+  return BLOCK_PHRASES.find((x) => lower.includes(x)) || null;
+}
+
+const aborted = () => Object.assign(new Error('Cancelled'), { name: 'AbortError' });
+
+/** Tokens the StreamGenerate call needs, read from the Gemini app page. */
+async function session(fresh = false, signal?: AbortSignal): Promise<GeminiSession> {
+  const s = shared();
+  if (!fresh && s.session && Date.now() - s.session.at < SESSION_TTL_MS) return s.session;
+
+  const res = await httpRequest(`${APP_URL}?hl=en`, { timeoutMs: 40_000, signal });
+  const html = res.text();
+  if (res.status === 429) throw new Error('Gemini rate-limited this connection (HTTP 429). Wait a few minutes and retry.');
+  if (res.status !== 200) throw new Error(`Could not open Gemini (HTTP ${res.status}).`);
+  const block = detectBlock(html);
+  if (block) {
+    throw new Error(`Google served a bot-challenge page (matched "${block}"). Wait a while and retry, or switch AI Source to Official API.`);
+  }
+  const bl = html.match(/"cfb2h":"([^"]+)"/)?.[1];
+  if (!bl) throw new Error('Gemini page did not load as expected. Google may have changed its frontend — switch AI Source to Official API.');
+  s.session = {
+    at: Date.now(),
+    bl,
+    sid: html.match(/"FdrFJe":"([^"]+)"/)?.[1] || '',
+    token: html.match(/"SNlM0e":"([^"]+)"/)?.[1] || null,
+    cookies: res.cookies.join('; '),
+  };
+  console.log(`[proxy] gemini session ready (build ${bl}${fresh ? ', refreshed' : ''})`);
+  return s.session;
+}
+
+/** Conversation ids: [conversation, response, choice] — empty for a new chat. */
+type ChatIds = [string, string, string];
+
+class HttpStatusError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
+
+/**
+ * One turn. `onCodeGrown` receives the whole code reply so far (fence intact,
+ * so it only ever grows) each time it gets longer.
+ */
+async function turn(
+  prompt: string,
+  ids: ChatIds,
+  s: GeminiSession,
+  onCodeGrown: ((fullBest: string) => void) | undefined,
+  signal: AbortSignal | undefined,
+): Promise<{ result: string; ids: ChatIds }> {
+  const label = onCodeGrown ? 'final' : 'hold';
+  const inner = [
+    [prompt, 0, null, null, null, null, 0],
+    ['en'],
+    [ids[0], ids[1], ids[2], null, null, null, null, null, null, ''],
+    '', '',
+  ];
+  const form = new URLSearchParams({ 'f.req': JSON.stringify([null, JSON.stringify(inner)]) });
+  if (s.token) form.set('at', s.token);
+  const url = STREAM_URL + '?' + new URLSearchParams({
+    bl: s.bl, 'f.sid': s.sid, hl: 'en', _reqid: String(100000 + Math.floor(Math.random() * 900000)), rt: 'c',
+  });
+
+  const start = Date.now();
+  let buf = '';
+  let raw = '';
+  let reply = '';
+  let code = '';
+  let newIds = ids;
+  let errCode: unknown = null;
+  let frames = 0;
+  console.log(`[proxy] turn(${label}): sending ${prompt.length} chars${ids[0] ? ' (same chat)' : ''}`);
+
+  // "length\n[json]\n" frames; each JSON frame sits on one line. Every frame
+  // carries the whole reply so far, so the longest one wins.
+  const onFrame = (line: string) => {
+    let frame: any;
+    try {
+      frame = JSON.parse(line);
+    } catch {
+      return;
+    }
+    for (const entry of Array.isArray(frame) ? frame : []) {
+      if (!Array.isArray(entry) || entry[0] !== 'wrb.fr') continue;
+      if (typeof entry[2] !== 'string') {
+        errCode ??= entry[5]?.[0] ?? null;
+        continue;
+      }
+      frames++;
+      if (frames === 1) console.log(`[proxy] turn(${label}): first reply frame after ${Date.now() - start}ms`);
+      let payload: any;
+      try {
+        payload = JSON.parse(entry[2]);
+      } catch {
+        continue;
+      }
+      if (payload?.[1]?.[0]) newIds = [payload[1][0], payload[1][1] || '', payload[4]?.[0]?.[0] || newIds[2]];
+      const text = payload?.[4]?.[0]?.[1]?.[0];
+      if (typeof text === 'string' && text.length > reply.length) reply = text;
+      if (onCodeGrown) {
+        const c = findBestCodeCandidate(line);
+        if (c && c.length > code.length) {
+          code = c;
+          onCodeGrown(code);
+        }
+      }
+    }
+  };
+
+  const res = await httpRequest(url, {
+    method: 'POST',
+    body: form.toString(),
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+      Origin: 'https://gemini.google.com',
+      Referer: 'https://gemini.google.com/',
+      'X-Same-Domain': '1',
+      ...(s.cookies ? { Cookie: s.cookies } : {}),
+    },
+    timeoutMs: STREAM_TIMEOUT_MS,
+    idleTimeoutMs: STALL_TIMEOUT_MS,
+    signal,
+    onText: (chunk) => {
+      raw += chunk;
+      buf += chunk;
+      let nl: number;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl);
+        buf = buf.slice(nl + 1);
+        if (line.startsWith('[')) onFrame(line);
+      }
+    },
+  }).catch((err: Error) => {
+    if (err.name === 'AbortError') throw err;
+    if (/no response for/.test(err.message)) {
+      throw new Error(
+        `Gemini stopped responding (no output for ${Math.round(STALL_TIMEOUT_MS / 1000)}s). This usually happens with very long replies — try again, split the request into smaller steps, or use the Official API for big changes.`,
+      );
+    }
+    throw new Error(`Could not reach Gemini: ${err.message}`);
+  });
+  if (buf.startsWith('[')) onFrame(buf);
+
+  console.log(`[proxy] turn(${label}): HTTP ${res.status}, ${raw.length} bytes, ${frames} frames, reply ${reply.length} chars, code ${code.length} chars, ${Math.round((Date.now() - start) / 1000)}s${errCode != null ? `, gemini error ${errCode}` : ''}`);
+  if (res.status === 429) throw new HttpStatusError('Gemini rate-limited this connection (HTTP 429). Wait a few minutes and retry.', 429);
+  if (res.status !== 200) throw new HttpStatusError(`Gemini request failed (HTTP ${res.status}).`, res.status);
+
+  let result = '';
+  if (code) result = stripCodeFence(code);
+  else if (reply.trim()) result = stripCodeFence(reply).trim();
+  else {
+    const fallback = findBestTextCandidate(raw);
+    if (fallback) {
+      console.log('[proxy] reply not at the usual position — used the fallback extractor');
+      result = stripCodeFence(fallback).trim();
+    }
+  }
+  if (!result) {
+    const block = detectBlock(raw);
+    if (block) throw new Error(`Google served a bot-challenge (matched "${block}"). Wait a while and retry, or switch AI Source to Official API.`);
+    throw new Error(
+      `Gemini returned no answer${errCode != null ? ` (error code ${errCode})` : ''}. ` +
+        'Gemini may have changed its web format or is limiting this connection — try again later or switch AI Source to Official API.',
+    );
+  }
+  return { result, ids: newIds };
+}
+
+/** Turns sent back to back (prompt parts) don't come at machine speed. */
+async function pauseBetweenTurns(signal?: AbortSignal): Promise<void> {
+  const last = shared().lastTurnAt;
+  if (!last) return;
+  const until = last + TURN_GAP_MS[0] + Math.random() * (TURN_GAP_MS[1] - TURN_GAP_MS[0]);
+  while (Date.now() < until) {
+    if (signal?.aborted) throw aborted();
+    await sleep(Math.min(250, until - Date.now()));
+  }
+}
+
+async function runTurns(
+  prompt: string,
+  onChunk?: (text: string) => void,
+  onStatus?: (event: ProxyStatus) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  onStatus?.({ type: 'uploading' });
+  let s = await session(false, signal);
+
+  // Each request starts a FRESH chat (no context from the previous request).
+  // Oversized prompts go out as consecutive turns of that chat; only the
+  // final turn's reply is the answer.
+  const pieces = splitPrompt(prompt, CHUNK_LIMIT);
+  if (pieces.length > 1) console.log(`[proxy] prompt is ${prompt.length} chars, sending as ${pieces.length} same-chat turns`);
+
+  let ids: ChatIds = ['', '', ''];
+  let answer = '';
+  for (let i = 0; i < pieces.length; i++) {
+    if (signal?.aborted) throw aborted();
+    const isLast = i === pieces.length - 1;
+    const text = pieces.length > 1 ? pieces[i] + (isLast ? GO_SUFFIX : holdSuffix(i, pieces.length)) : pieces[i];
+    if (pieces.length > 1) onStatus?.({ type: 'turn', turn: i + 1, total: pieces.length });
+
+    let emittedUpTo = 0;
+    const onCodeGrown = isLast
+      ? (fullBest: string) => {
+          if (emittedUpTo === 0) onStatus?.({ type: 'streaming' });
+          const delta = fullBest.slice(emittedUpTo);
+          emittedUpTo = fullBest.length;
+          if (!delta) return;
+          try {
+            onChunk?.(delta);
+          } catch {
+            /* chunk consumer failed — ignore */
+          }
+        }
+      : undefined;
+
+    await pauseBetweenTurns(signal);
+    let res: { result: string; ids: ChatIds };
+    try {
+      res = await turn(text, ids, s, onCodeGrown, signal);
+    } catch (err) {
+      // Expired build label / session: read the app page again and retry once (nothing was streamed).
+      if (!(err instanceof HttpStatusError) || ![400, 401, 403].includes(err.status) || emittedUpTo > 0) throw err;
+      console.log(`[proxy] HTTP ${err.status} — refreshing the Gemini session and retrying the turn`);
+      s = await session(true, signal);
+      res = await turn(text, ids, s, onCodeGrown, signal);
+    } finally {
+      shared().lastTurnAt = Date.now();
+    }
+    ids = res.ids;
+    answer = res.result;
+  }
+  return answer;
+}
+
+/**
+ * Ask Gemini web (free proxy path). Calls are serialized so one connection
+ * never fires parallel chats at Gemini. `onChunk` receives incremental deltas
+ * of a code reply (same contract as askGemini); `onStatus` receives progress
+ * (e.g. "Part 2 of 3").
+ */
+export async function askProxy(
+  prompt: string,
+  onChunk?: (text: string) => void,
+  onStatus?: (event: ProxyStatus) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (typeof window !== 'undefined') {
+    throw new Error('askProxy is server-only.');
+  }
+  if (!prompt || !prompt.trim()) throw new Error('Empty prompt.');
+  const s = shared();
+  const task = s.queue.then(() => {
+    // Cancelled while waiting in the queue: never sent to Gemini.
+    if (signal?.aborted) throw aborted();
+    return runTurns(prompt, onChunk, onStatus, signal);
+  });
+  // Keep the chain alive even if this turn rejects.
+  s.queue = task.catch(() => {});
+  if (!signal) return task;
+  return new Promise<string>((resolve, reject) => {
+    const onAbort = () => reject(aborted());
+    if (signal.aborted) { onAbort(); return; }
+    signal.addEventListener('abort', onAbort, { once: true });
+    task.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
+
+/** Every request already opens a fresh chat; this also drops the cached session tokens. */
+export async function resetProxyChat(): Promise<void> {
+  shared().session = null;
+}
+
+export function getProxyStatus(): {
+  running: boolean;
+  headless: boolean;
+  profileDir: string;
+} {
+  // No browser any more: "running" means a Gemini session is cached.
+  return { running: !!shared().session, headless: true, profileDir: '' };
+}
+
+export async function closeProxy(): Promise<void> {
+  shared().session = null;
+}

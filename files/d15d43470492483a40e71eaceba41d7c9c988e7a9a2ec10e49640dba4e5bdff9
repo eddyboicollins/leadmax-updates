@@ -1,0 +1,108 @@
+/**
+ * "I have my own clients": scrape each user-provided Google Maps link directly
+ * (no AI, no browser). Uses the same place parsing as the main scraper, so
+ * rating, review count, phone, website, hours, coordinates, reviews and photos
+ * come out identical — just driven by a list of links instead of a search.
+ */
+import type { BusinessData } from './types';
+import { scrapeLog } from './scrapeLog';
+import { CONSENT_COOKIE, httpGet } from './googleHttp';
+import { fetchPlacePreview, fetchSearchPage, placeToLead } from './scraper';
+
+export interface PlaceEntry {
+  mapsUrl: string;
+}
+
+export interface PlaceResult {
+  name: string;
+  ok: boolean;
+  business?: BusinessData;
+  error?: string;
+}
+
+/** Accept "maps.app.goo.gl/…", "goo.gl/maps/…", bare domains pasted without https://. */
+function normalizeLink(raw: string): string | null {
+  const s = raw.trim();
+  if (!s) return null;
+  const url = /^https?:\/\//i.test(s) ? s : `https://${s.replace(/^\/+/, '')}`;
+  try {
+    const u = new URL(url);
+    return /(^|\.)google\.[a-z.]+$|(^|\.)goo\.gl$|^maps\.app\.goo\.gl$/i.test(u.hostname) ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Force English so hours/day names parse the same as the main scraper. */
+function withEnglish(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.set('hl', 'en');
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** Text a search/list link searches for ("/maps/search/pizza+paris", "?q=…"). */
+function searchQuery(url: string): string {
+  try {
+    const u = new URL(url);
+    const m = u.pathname.match(/\/maps\/(?:search|place)\/([^/@]+)/);
+    return decodeURIComponent((m?.[1] || u.searchParams.get('q') || u.searchParams.get('query') || '').replace(/\+/g, ' ')).trim();
+  } catch {
+    return '';
+  }
+}
+
+async function scrapeOne(entry: PlaceEntry): Promise<BusinessData> {
+  const link = normalizeLink(entry.mapsUrl);
+  if (!link) throw new Error('This is not a Google Maps link');
+
+  // Short links answer with an HTTP redirect to the full Maps URL.
+  let url = link;
+  if (/goo\.gl$/i.test(new URL(link).hostname)) {
+    url = (await httpGet(link, { headers: { Cookie: CONSENT_COOKIE }, timeoutMs: 20_000 })).finalUrl;
+  }
+
+  // A place link carries its feature id (!1s0x…:0x…): open that place.
+  const ftid = url.match(/!1s(0x[0-9a-f]+:0x[0-9a-f]+)/i)?.[1];
+  if (ftid) {
+    const preview = await fetchPlacePreview(`https://www.google.com/maps/place/data=!4m2!3m1!1s${ftid}?hl=en`);
+    if (preview) return placeToLead(preview, preview);
+  } else if (!/\/maps\/search\//.test(url)) {
+    // Place pages by name or ?cid=…: the page itself links its place data.
+    const preview = await fetchPlacePreview(withEnglish(url));
+    if (preview) return placeToLead(preview, preview);
+  }
+
+  // A search/list link (or a place page we couldn't read): search its text, take the first place.
+  const query = searchQuery(url);
+  if (!query) throw new Error('Could not find this business on Google Maps');
+  const [first] = await fetchSearchPage(query, 0);
+  if (!first) throw new Error('Could not find this business on Google Maps');
+  return placeToLead(first);
+}
+
+/** Scrape every link, in order. Failures are per-entry. */
+export async function scrapePlaceLinks(
+  entries: PlaceEntry[],
+  onLog?: (msg: string) => void,
+): Promise<PlaceResult[]> {
+  const log = (m: string) => { onLog?.(m); scrapeLog('[places]', m); };
+  const results: PlaceResult[] = [];
+  for (const entry of entries) {
+    const label = entry.mapsUrl;
+    try {
+      log(`Opening "${label}"`);
+      const business = await scrapeOne(entry);
+      log(`${business.name}: ${business.rating}★ (${business.ratingCount} reviews), ${business.scrapedImages?.length || 0} photos`);
+      results.push({ name: business.name, ok: true, business });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      log(`"${label}" failed: ${message}`);
+      results.push({ name: label, ok: false, error: `Could not fetch details for "${label}": ${message}` });
+    }
+  }
+  return results;
+}

@@ -1,0 +1,406 @@
+/**
+ * Google Maps scraping without a browser — same approach as the PHP LeadMax
+ * (app/Services/MapsScraper.php): the internal requests the Maps web app makes.
+ *
+ *  - search?tbm=map  → 20 places per request (name, rating, phone, website,
+ *                      address, hours, coordinates, cover photos)
+ *  - /maps/preview/place → one place's reviews and photo gallery (the request
+ *                      the place page preloads; its link is read from that page)
+ *
+ * NOTE: undocumented Google format — parsePlace() breaks if Google changes it.
+ */
+import path from 'path';
+import fs from 'fs';
+import { v4 as uuidv4 } from 'uuid';
+import type { BusinessData, ScrapedImage } from './types';
+import { cleanAddress } from './address';
+import { SCRAPED_DIR } from './store';
+import { scrapeLog } from './scrapeLog';
+import { CONSENT_COOKIE, googleBlockSignal, httpGet } from './googleHttp';
+
+const PAGE_SIZE = 20;
+/** Google stops serving a query after ~120 places. */
+const MAX_PAGES = 12;
+/** Places whose reviews/photos are fetched at the same time. */
+const DETAIL_CONCURRENCY = 3;
+const MAX_PHOTOS = 10;
+/** Business photos on Google's CDN (excludes reviewer avatars under /a/ and /-…/). */
+const PHOTO_URL_RE = /https:\/\/lh\d\.googleusercontent\.com\/(?:p|gps-cs-s|gps-proxy|grass-cs)\/[A-Za-z0-9_-]+/g;
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- Google's positional JSON arrays */
+type Place = any[];
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const googleHeaders = (lang = 'en') => ({ 'Accept-Language': `${lang},en;q=0.8`, Cookie: CONSENT_COOKIE });
+
+export class GoogleBlockedError extends Error {
+  constructor(signal: string) {
+    super(`Google Maps is limiting requests from this connection (${signal}). Wait a few minutes and try again.`);
+    this.name = 'GoogleBlockedError';
+  }
+}
+
+function g(a: unknown, ...path: number[]): any {
+  let cur: any = a;
+  for (const k of path) {
+    if (!Array.isArray(cur) || cur.length <= k) return undefined;
+    cur = cur[k];
+  }
+  return cur;
+}
+
+function parseJsonBody(body: string): any {
+  try {
+    return JSON.parse(body.replace(/^\)\]\}'\s*/, ''));
+  } catch {
+    return null;
+  }
+}
+
+// ── Search ───────────────────────────────────────────────────────────────
+
+const ADMIN_PART_RE = /governorate|gouvernorat|region|r[ée]gion|province|county|state|municipality|district|prefecture|wilaya|oblast|emirate of/i;
+
+/**
+ * Search text for a keyword + picked location. The location picker gives full
+ * geocoder addresses ("Jeddah, Governorate of Jeddah, Makkah Region, 23124,
+ * Saudi Arabia"); with all that, Google answers with the place itself instead
+ * of businesses there, so keep the place and its country ("Jeddah, Saudi Arabia").
+ */
+export function searchQueryFor(keyword: string, location: string): string {
+  const parts = location.split(',').map(s => s.trim()).filter(Boolean);
+  let short = parts;
+  if (parts.length > 2) {
+    const kept = parts.filter((p, i) => i === 0 || i === parts.length - 1 || (!/^\d[\d\s-]*$/.test(p) && !ADMIN_PART_RE.test(p)));
+    short = kept.length > 3 ? [kept[0], kept[1], kept[kept.length - 1]] : kept;
+  }
+  return `${keyword.trim()} ${short.join(', ')}`.trim();
+}
+
+export function searchUrl(query: string, offset: number, lang = 'en'): string {
+  // Zoomed-out viewport centered at 0,0 so the text query decides the location.
+  // The trailing !20m13 block asks for each place's cover photos (place field 72).
+  const pb = '!4m8!1m3!1d50000000!2d0!3d0!3m2!1i1024!2i768!4f13.1!7i' + PAGE_SIZE + '!8i' + offset
+    + '!10b1!12m22!1m3!18b1!30b1!34e1!2m3!5m1!6e2!20e3!4b0!10b1!12b1!13b1!16b1!17m1!3e1'
+    + '!20m3!5e2!6b1!14b1!46m1!1b0!96b1!19m4!2m3!1i360!2i120!4i8'
+    + '!20m13!2m2!1i203!2i100!3m2!2i4!5b1!6m6!1m2!1i86!2i86!1m2!1i408!2i240';
+  return 'https://www.google.com/search?' + new URLSearchParams({ tbm: 'map', authuser: '0', hl: lang, q: query })
+    + '&pb=' + encodeURIComponent(pb);
+}
+
+/** One page of search results (raw place arrays). Throws GoogleBlockedError on a captcha/429. */
+export async function fetchSearchPage(query: string, offset: number): Promise<Place[]> {
+  const t = Date.now();
+  const res = await httpGet(searchUrl(query, offset), { headers: googleHeaders(), timeoutMs: 30_000 });
+  const body = res.text();
+  scrapeLog('[maps] search page', JSON.stringify({ offset, http: res.status, ms: Date.now() - t, bytes: body.length }));
+  const data = res.status === 200 ? parseJsonBody(body) : null;
+  if (!Array.isArray(data)) {
+    const signal = googleBlockSignal(res.status, body);
+    if (signal) throw new GoogleBlockedError(signal);
+    scrapeLog('[maps] unexpected search response', body.slice(0, 300));
+    throw new Error(`Unexpected response from Google Maps (HTTP ${res.status}).`);
+  }
+  const list = g(data, 0, 1);
+  return (Array.isArray(list) ? list : []).map(e => g(e, 14)).filter((p): p is Place => Array.isArray(p) && !!p[11]);
+}
+
+// ── Place details (reviews + photo gallery) ──────────────────────────────
+
+function placePageUrl(ftid: string): string {
+  return `https://www.google.com/maps/place/data=!4m2!3m1!1s${ftid}?hl=en`;
+}
+
+/**
+ * Full place array from /maps/preview/place, starting from a place page URL.
+ * Same layout as a search entry, plus reviews ([175]) and the photo gallery.
+ */
+export async function fetchPlacePreview(pageUrl: string): Promise<Place | null> {
+  const page = await httpGet(pageUrl, { headers: googleHeaders(), timeoutMs: 30_000 });
+  const html = page.text();
+  const m = html.match(/(\/maps\/preview\/place\?[^"'\s<>]+)/);
+  if (!m) {
+    const signal = googleBlockSignal(page.status, html);
+    if (signal) throw new GoogleBlockedError(signal);
+    scrapeLog('[maps] place page has no preview link', JSON.stringify({ http: page.status, url: pageUrl }));
+    return null;
+  }
+  const url = 'https://www.google.com' + m[1].replace(/&amp;/g, '&').replace(/\\u0026/g, '&');
+  const res = await httpGet(url, { headers: googleHeaders(), timeoutMs: 30_000 });
+  const body = res.text();
+  if (res.status !== 200) {
+    const signal = googleBlockSignal(res.status, body);
+    if (signal) throw new GoogleBlockedError(signal);
+    return null;
+  }
+  const place = g(parseJsonBody(body), 6);
+  return Array.isArray(place) && place[11] ? place : null;
+}
+
+function parseReviews(place: Place): BusinessData['reviews'] {
+  const list = g(place, 175, 9, 0, 0);
+  const reviews: BusinessData['reviews'] = [];
+  for (const item of Array.isArray(list) ? list : []) {
+    const r = g(item, 0);
+    const text = g(r, 2, 15, 0, 0);
+    if (typeof text !== 'string' || !text.trim()) continue;
+    reviews.push({
+      author: String(g(r, 1, 4, 5, 0) || ''),
+      text: text.trim(),
+      rating: Number(g(r, 2, 0, 0)) || 0,
+      date: String(g(r, 1, 6) || ''),
+      avatar: typeof g(r, 1, 4, 5, 1) === 'string' ? g(r, 1, 4, 5, 1) : undefined,
+    });
+  }
+  return reviews.sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 8);
+}
+
+/** Photo base URLs of this place only, cover photos first. */
+function photoBases(place: Place): string[] {
+  const seen = new Set<string>();
+  // Covers, then the gallery categories, then everything else in the place (visitor/review photos).
+  for (const part of [g(place, 72), g(place, 51), g(place, 37), place]) {
+    for (const url of JSON.stringify(part ?? null).match(PHOTO_URL_RE) || []) seen.add(url);
+  }
+  return [...seen];
+}
+
+function detectImageExt(buf: Buffer): string {
+  if (buf.length > 2 && buf[0] === 0xff && buf[1] === 0xd8) return 'jpg';
+  if (buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'png';
+  if (buf.length > 12 && buf.toString('ascii', 8, 12) === 'WEBP') return 'webp';
+  return 'jpg';
+}
+
+/** Download photos now and serve them locally: Google photo URLs expire and rate-limit hotlinks. */
+async function persistPhotos(bases: string[]): Promise<ScrapedImage[]> {
+  await fs.promises.mkdir(SCRAPED_DIR, { recursive: true }).catch(() => {});
+  const kept: ScrapedImage[] = [];
+  await Promise.all(bases.slice(0, MAX_PHOTOS).map(async (base, i) => {
+    try {
+      const res = await httpGet(`${base}=w1600-k-no`, { timeoutMs: 20_000, attempts: 2 });
+      if (res.status !== 200 || res.body.length < 1000) return;
+      const id = uuidv4();
+      const file = `${id}.${detectImageExt(res.body)}`;
+      await fs.promises.writeFile(path.join(SCRAPED_DIR, file), res.body);
+      kept[i] = { id, url: '/api/scraped-images/' + file };
+    } catch { /* skip photo */ }
+  }));
+  return kept.filter(Boolean);
+}
+
+// ── Place array → lead ───────────────────────────────────────────────────
+
+function parseHours(place: Place): string[] {
+  const days = g(place, 203, 0);
+  if (!Array.isArray(days)) return [];
+  const byDay = new Map<string, string>();
+  for (const d of days) {
+    const day = g(d, 0);
+    const ranges = (g(d, 3) || []).map((r: any) => g(r, 0)).filter((s: any) => typeof s === 'string');
+    if (typeof day === 'string' && ranges.length) byDay.set(day, ranges.join(', '));
+  }
+  // Google lists today first; leads store Monday → Sunday.
+  return DAYS.filter(d => byDay.has(d)).map(d => `${d} ${byDay.get(d)}`);
+}
+
+function parsePhone(place: Place): string {
+  let phone = '';
+  for (const variant of g(place, 178, 0, 1) || []) {
+    if (Array.isArray(variant) && variant[1] === 2) phone = variant[0];
+  }
+  phone = phone || g(place, 178, 0, 3) || g(place, 178, 0, 0) || '';
+  return String(phone).replace(/[^\d+]/g, '');
+}
+
+function parseWebsite(place: Place): string {
+  let site = g(place, 7, 0);
+  if (typeof site !== 'string') return '';
+  if (site.startsWith('/url?')) {
+    site = new URLSearchParams(site.slice(5)).get('q') || '';
+  }
+  return /^https?:\/\//i.test(site) ? site : '';
+}
+
+export function mapsUrl(name: string, placeId: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}&query_place_id=${encodeURIComponent(placeId)}`;
+}
+
+/** Lead fields from a search entry or preview place (reviews/photos come from the preview). */
+function toBusiness(place: Place, details: Place | null, scrapedImages: ScrapedImage[]): BusinessData {
+  const name = String(place[11]);
+  const placeId = String(g(place, 78) || g(place, 10) || '');
+  return {
+    id: uuidv4(),
+    name,
+    rating: Number(g(place, 4, 7)) || 0,
+    ratingCount: Number(g(place, 4, 8)) || 0,
+    address: cleanAddress(g(place, 39) || g(place, 18) || (g(place, 2) || []).filter(Boolean).join(', ')),
+    phone: parsePhone(place),
+    website: parseWebsite(place),
+    category: String(g(place, 13, 0) || ''),
+    reviews: details ? parseReviews(details) : [],
+    latitude: Number(g(place, 9, 2)) || 0,
+    longitude: Number(g(place, 9, 3)) || 0,
+    placeId,
+    googleUrl: mapsUrl(name, placeId),
+    hours: parseHours(details || place),
+    scrapedImages,
+    scrapedAt: new Date().toISOString(),
+  };
+}
+
+/** Search entry → full lead: fetches reviews and photos (falls back to the search data alone). */
+export async function placeToLead(place: Place, preview?: Place | null): Promise<BusinessData> {
+  let details: Place | null = preview ?? null;
+  const ftid = g(place, 10);
+  if (preview === undefined && typeof ftid === 'string') {
+    try {
+      details = await fetchPlacePreview(placePageUrl(ftid));
+    } catch (err) {
+      if (err instanceof GoogleBlockedError) throw err;
+      scrapeLog('[maps] preview failed', place[11], err instanceof Error ? err.message : String(err));
+    }
+  }
+  const scrapedImages = await persistPhotos(photoBases(details || place));
+  return toBusiness(place, details, scrapedImages);
+}
+
+// ── Campaign scrape ──────────────────────────────────────────────────────
+
+export async function scrapeGoogleMaps(
+  query: string,
+  onLog?: (msg: string) => void,
+  onLead?: (data: BusinessData) => void | Promise<void>,
+  onTotal?: (total: number) => void,
+  options?: {
+    onProgress?: (processed: number, total: number, current?: BusinessData | null) => void;
+    /** Stops the scrape (client cancelled or went away): no further requests to Google. */
+    signal?: AbortSignal;
+  },
+): Promise<BusinessData[]> {
+  const onProgress = options?.onProgress;
+  const signal = options?.signal;
+  const log = (msg: string) => onLog?.(msg);
+  scrapeLog('===== SCRAPE SESSION START =====', JSON.stringify({ query, at: new Date().toISOString() }));
+
+  try {
+    // --- PHASE 1: every search page (20 places each) ---
+    log(`Searching Google Maps: "${query}"`);
+    const places: Place[] = [];
+    const seen = new Set<string>();
+    for (let pageNo = 0; pageNo < MAX_PAGES && !signal?.aborted; pageNo++) {
+      let batch: Place[];
+      try {
+        batch = await fetchSearchPage(query, pageNo * PAGE_SIZE);
+      } catch (err) {
+        // Pushed back after the first page: keep what we already have.
+        if (pageNo === 0) throw err;
+        log(`Stopped loading more results: ${err instanceof Error ? err.message : String(err)}`);
+        break;
+      }
+      let added = 0;
+      for (const p of batch) {
+        const key = String(g(p, 78) || g(p, 10) || p[11]);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        places.push(p);
+        added++;
+      }
+      log(`Loaded ${places.length} results...`);
+      if (batch.length < PAGE_SIZE - 2 || added === 0) break;
+      await sleep(300 + Math.random() * 500);
+    }
+
+    if (signal?.aborted) {
+      scrapeLog('===== SCRAPE SESSION END (cancelled) =====');
+      return [];
+    }
+    log(`Found ${places.length} total results.`);
+    scrapeLog('[scrape] phase1 total results =', places.length);
+    onTotal?.(places.length);
+    if (places.length === 0) throw new Error('No listings found on Google Maps. Try a different keyword/location.');
+
+    // --- PHASE 2: reviews + photos of each place, a few at a time ---
+    log(`Processing ${places.length} listings...`);
+    const results: BusinessData[] = [];
+    const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    let processed = 0;
+    let next = 0;
+    let blocked: Error | null = null;
+
+    const worker = async () => {
+      while (next < places.length && !blocked && !signal?.aborted) {
+        const i = next++;
+        const place = places[i];
+        const name = String(place[11]);
+        log(`[${i + 1}] ${name}`);
+        onProgress?.(processed, places.length, {
+          name,
+          rating: Number(g(place, 4, 7)) || 0,
+          ratingCount: Number(g(place, 4, 8)) || 0,
+        } as BusinessData);
+
+        let lead: BusinessData;
+        try {
+          lead = await placeToLead(place);
+        } catch (err) {
+          if (err instanceof GoogleBlockedError) {
+            // Keep the rest of the list with search data only (no extra requests to Google).
+            log('Google is limiting detail requests — saving the remaining places without reviews/photos.');
+            blocked = err;
+          }
+          lead = toBusiness(place, null, []);
+        }
+
+        const isDuplicate = results.some(r =>
+          (r.placeId && r.placeId === lead.placeId) ||
+          (r.phone && r.phone === lead.phone) ||
+          normName(r.name) === normName(lead.name));
+        if (!isDuplicate) {
+          results.push(lead);
+          await onLead?.(lead);
+          log(`${lead.rating || '?'}★ ${lead.website ? 'has website' : 'no website'} ${lead.phone ? 'has phone' : 'no phone'} — ${lead.name}`);
+          scrapeLog('[scrape] FOUND lead', JSON.stringify({
+            name: lead.name, rating: lead.rating, ratingCount: lead.ratingCount, phone: lead.phone,
+            website: lead.website, address: lead.address, placeId: lead.placeId, category: lead.category,
+            reviews: lead.reviews.length, photos: lead.scrapedImages?.length || 0,
+          }));
+        } else {
+          scrapeLog('[scrape] SKIP duplicate', JSON.stringify({ name: lead.name, placeId: lead.placeId, phone: lead.phone }));
+        }
+        processed++;
+        onProgress?.(processed, places.length, lead);
+      }
+    };
+    await Promise.all(Array.from({ length: DETAIL_CONCURRENCY }, worker));
+
+    if (signal?.aborted) {
+      scrapeLog('[scrape] stopped: client cancelled or disconnected, processed =', processed);
+      scrapeLog('===== SCRAPE SESSION END (cancelled) =====');
+      return results;
+    }
+
+    // Blocked mid-way: the places not reached yet still become leads (search data only).
+    if (blocked) {
+      for (let i = next; i < places.length; i++) {
+        const lead = toBusiness(places[i], null, []);
+        if (results.some(r => r.placeId && r.placeId === lead.placeId)) continue;
+        results.push(lead);
+        await onLead?.(lead);
+        onProgress?.(++processed, places.length, lead);
+      }
+    }
+
+    log(`Done. ${results.length} leads found.`);
+    scrapeLog('[scrape] phase2 done, leads returned =', results.length);
+    scrapeLog('===== SCRAPE SESSION END (success) =====');
+    return results;
+  } catch (err: unknown) {
+    scrapeLog('[scrape] ERROR in scrapeGoogleMaps', err instanceof Error ? (err.stack || err.message) : String(err));
+    scrapeLog('===== SCRAPE SESSION END (error) =====');
+    throw err;
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
